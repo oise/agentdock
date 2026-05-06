@@ -8,15 +8,23 @@ export function isExploringChunk(chunk: ContentChunk): boolean {
     if (!cmd) return true;
 
     const IMPACTFUL_KEYWORDS = [
-      'rm', 'mv', 'cp', 'mkdir', 'touch', 'chmod', 'chown',
+      'rm', 'mv', 'cp', 'mkdir', 'touch', 'chmod', 'chown', 'run',
       'del', 'erase', 'rd', 'rmdir', 'move', 'copy', 'ren', 'rename',
-      'new-item', 'remove-item', 'move-item', 'copy-item',
-      'curl', 'wget', 'scp', 'rsync', 'ssh', 'ftp', 'npm', 'yarn',
-      'add', 'commit', 'push', 'revert', 'restore'
+      'new-item', 'remove-item', 'move-item', 'copy-item', 'update',
+      'curl', 'wget', 'scp', 'rsync', 'ssh', 'ftp', 'uninstall', 'publish',
+      'add', 'commit', 'push', 'revert', 'restore', 'build', 'install'
     ];
 
-    const tokens = cmd.split(/[\s"'/\\;|=&]+/);
-    return !IMPACTFUL_KEYWORDS.some(kw => tokens.includes(kw));
+    const isImpactful = cmd.split(/&&|\|\||[|;]/).some(segment => {
+      const head: string[] = [];
+      for (const token of segment.trim().split(/\s+/)) {
+        if (!token || token.startsWith('-')) continue;
+        head.push(token);
+        if (head.length >= 3) break;
+      }
+      return IMPACTFUL_KEYWORDS.some(kw => head.includes(kw));
+    });
+    return !isImpactful;
   }
   return false;
 }

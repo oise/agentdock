@@ -58,7 +58,7 @@ object IdeTheme {
                     uiKey == "List.hoverBackground" &&
                     (isTransparent(originalColor) || areColorsSimilar(originalColor, baseBackground))
                 ) {
-                    adjustBrightness(baseBackground, 1.20)
+                    adjustBrightness(baseBackground, 1.30)
                 } else {
                     originalColor
                 }

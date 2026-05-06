@@ -5,7 +5,6 @@ import com.intellij.ui.jcef.JBCefBrowser
 import com.intellij.ui.jcef.JBCefJSQuery
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.serialization.json.JsonObject
 import agentdock.utils.escapeForJsString
 import java.util.concurrent.ConcurrentHashMap
 
@@ -74,8 +73,6 @@ class AcpBridge(
     internal val replaySeqByChatId = ConcurrentHashMap<String, Int>()
     internal val livePromptCaptures = ConcurrentHashMap<String, LivePromptCapture>()
     internal val historyReplayCaptures = ConcurrentHashMap<String, HistoryReplayCapture>()
-    internal val readToolCallPaths = ConcurrentHashMap<String, String>()
-    internal val searchToolCallInputs = ConcurrentHashMap<String, JsonObject>()
     internal val suppressReplayForChatIds: MutableSet<String> = ConcurrentHashMap.newKeySet<String>()
 
     internal val cli = AcpBridgeCli(service.project) { action -> runOnEdt(action) }

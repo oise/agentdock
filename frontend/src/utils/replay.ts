@@ -17,11 +17,11 @@ import {
 import { appendToolOutput, buildToolCallEntry, extractResultTexts, extractToolCallDiffEntries, replaceToolOutput, safeParseJson } from './toolCallUtils';
 
 const IMPACTFUL_KEYWORDS = [
-  'rm', 'mv', 'cp', 'mkdir', 'touch', 'chmod', 'chown',
+  'rm', 'mv', 'cp', 'mkdir', 'touch', 'chmod', 'chown', 'run',
   'del', 'erase', 'rd', 'rmdir', 'move', 'copy', 'ren', 'rename',
-  'new-item', 'remove-item', 'move-item', 'copy-item',
-  'curl', 'wget', 'scp', 'rsync', 'ssh', 'ftp', 'npm', 'yarn',
-  'add', 'commit', 'push', 'revert', 'restore'
+  'new-item', 'remove-item', 'move-item', 'copy-item', 'update',
+  'curl', 'wget', 'scp', 'rsync', 'ssh', 'ftp', 'uninstall', 'publish',
+  'add', 'commit', 'push', 'revert', 'restore', 'build', 'install'
 ];
 
 const REPLAY_IGNORED_USER_COMMAND_TAGS = [
@@ -42,9 +42,16 @@ function isExploringTool(kind?: string, title?: string): boolean {
   if (kind === 'execute') {
     const cmd = (title || '').toLowerCase().trim();
     if (!cmd) return true;
-    const tokens = cmd.split(/[\s"'/\\;|=&]+/);
-    const isHighPriority = IMPACTFUL_KEYWORDS.some((keyword) => tokens.includes(keyword));
-    return !isHighPriority;
+    const isImpactful = cmd.split(/&&|\|\||[|;]/).some(segment => {
+      const head: string[] = [];
+      for (const token of segment.trim().split(/\s+/)) {
+        if (!token || token.startsWith('-')) continue;
+        head.push(token);
+        if (head.length >= 3) break;
+      }
+      return IMPACTFUL_KEYWORDS.some(kw => head.includes(kw));
+    });
+    return !isImpactful;
   }
   return false;
 }

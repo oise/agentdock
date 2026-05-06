@@ -50,11 +50,11 @@ function getProgressiveDelta(delta: number): number {
   let multiplier = 1.5;
 
   if (absDelta > 30) {
-    multiplier = 1.5 + (absDelta - 30) * 0.75
+    multiplier = 1.5 + (absDelta - 30) * 0.1
   }
 
   // Increased cap for maximum speed
-  const finalMultiplier = Math.min(multiplier, 6.0);
+  const finalMultiplier = Math.min(multiplier, 4.0);
   
   return delta * finalMultiplier;
 }

@@ -312,7 +312,7 @@ internal fun AcpBridge.buildStoredToolCallUpdateChunk(toolCallId: String, rawJso
 
 internal fun AcpBridge.storedToolRawJson(rawJson: String): String {
     val parsed = runCatching { Json.parseToJsonElement(rawJson).jsonObject }.getOrNull()
-    val compacted = parsed?.let { compactToolRawJson(it) } ?: return rawJson
+    val compacted = parsed?.let(::compactToolRawJson) ?: return rawJson
     val compactedRawJson = compacted.toString()
     return if (shouldPreserveToolRawJson(compacted)) {
         HistoryDiffCompactor.compactStoredToolRawJson(compactedRawJson, Json)
@@ -321,13 +321,9 @@ internal fun AcpBridge.storedToolRawJson(rawJson: String): String {
     }
 }
 
-internal fun compactToolRawJsonForDisplay(
-    rawJson: String,
-    forceReadPath: String? = null,
-    forceSearchInput: JsonObject? = null
-): String {
+internal fun compactToolRawJsonForDisplay(rawJson: String): String {
     val parsed = runCatching { Json.parseToJsonElement(rawJson).jsonObject }.getOrNull()
-    return parsed?.let { compactToolRawJson(it, forceReadPath, forceSearchInput) }?.toString() ?: rawJson
+    return parsed?.let(::compactToolRawJson)?.toString() ?: rawJson
 }
 
 private fun shouldPreserveToolRawJson(parsed: JsonObject?): Boolean {
@@ -344,12 +340,7 @@ private fun shouldPreserveToolRawJson(parsed: JsonObject?): Boolean {
     return false
 }
 
-private fun compactToolRawJson(
-    parsed: JsonObject,
-    forceReadPath: String? = null,
-    forceSearchInput: JsonObject? = null
-): JsonObject {
-    normalizeToolRawJson(parsed, forceReadPath, forceSearchInput)?.let { return it }
+private fun compactToolRawJson(parsed: JsonObject): JsonObject {
     if (parsed["kind"]?.jsonPrimitive?.contentOrNull == "edit") return parsed
     val oversizedText = findOversizedToolOutputText(parsed) ?: return parsed
 

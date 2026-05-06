@@ -5,7 +5,7 @@ import { AssistantMessage } from './AssistantMessage';
 import { ChatLoadingIndicator } from './ChatLoadingIndicator';
 import { Button } from '../ui/Button';
 
-const BOTTOM_PIN_THRESHOLD_PX = 8;
+const BOTTOM_PIN_THRESHOLD_PX = 4;
 const READ_ACK_THRESHOLD_PX = 48;
 const EARLIER_PROMPTS_BATCH_SIZE = 20;
 

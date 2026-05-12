@@ -235,7 +235,8 @@ class AcpQuotaService : Disposable {
                     }
                 }
             }
-            QuotaDetail(adapter.id, adapter.name, mainPercent, details)
+            if (details.isEmpty()) null
+            else QuotaDetail(adapter.id, adapter.name, mainPercent, details)
         } catch (e: Exception) {
             log.warn("Failed to parse usage payload for ${adapter.id}", e)
             null

@@ -6,6 +6,7 @@ import agentdock.history.ConversationPromptReplayEntry
 import agentdock.history.ConversationReplayData
 import agentdock.history.ConversationSessionReplayEntry
 import agentdock.history.AgentDockHistoryService
+import agentdock.history.HistoryReplayStore
 
 internal fun AcpBridge.startHistoryReplayCapture(
     chatId: String,
@@ -37,8 +38,8 @@ internal fun AcpBridge.discardHistoryReplayCapture(chatId: String) {
     historyReplayCaptures.remove(chatId)
 }
 
-internal fun AcpBridge.flushHistoryReplayCapture(chatId: String) {
-    val capture = historyReplayCaptures.remove(chatId) ?: return
+internal fun AcpBridge.flushHistoryReplayCapture(chatId: String): ConversationReplayData? {
+    val capture = historyReplayCaptures.remove(chatId) ?: return null
     val sessions = capture.sessions
         .filter { it.prompts.isNotEmpty() }
         .map { session ->
@@ -54,12 +55,14 @@ internal fun AcpBridge.flushHistoryReplayCapture(chatId: String) {
                 }
             )
         }
-    if (sessions.isEmpty()) return
+    if (sessions.isEmpty()) return null
+    val data = HistoryReplayStore.normalizeReplayData(ConversationReplayData(sessions = sessions))
     AgentDockHistoryService.saveConversationReplay(
         projectPath = capture.projectPath,
         conversationId = capture.conversationId,
-        data = ConversationReplayData(sessions = sessions)
+        data = data
     )
+    return data
 }
 
 internal fun AcpBridge.recordReplayUserBlock(chatId: String, sessionId: String, adapterName: String, content: ContentBlock) {

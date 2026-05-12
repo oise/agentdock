@@ -8,7 +8,7 @@ export function isExploringChunk(chunk: ContentChunk): boolean {
     if (!cmd) return true;
 
     const IMPACTFUL_KEYWORDS = [
-      'rm', 'mv', 'cp', 'mkdir', 'touch', 'chmod', 'chown', 'run',
+      'rm', 'mv', 'cp', 'mkdir', 'touch', 'chmod', 'chown', 'run', 'compile',
       'del', 'erase', 'rd', 'rmdir', 'move', 'copy', 'ren', 'rename',
       'new-item', 'remove-item', 'move-item', 'copy-item', 'update',
       'curl', 'wget', 'scp', 'rsync', 'ssh', 'ftp', 'uninstall', 'publish',

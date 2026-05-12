@@ -1,6 +1,7 @@
 package agentdock.acp
 
 import agentdock.history.AgentDockHistoryService
+import agentdock.history.ConversationReplayData
 import com.intellij.ui.jcef.JBCefJSQuery
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -128,12 +129,9 @@ internal fun AcpBridge.installConversationHistoryQueries() {
                                     )
                                 }
                             }
-                            flushHistoryReplayCapture(chatId)
+                            val capturedConversation = flushHistoryReplayCapture(chatId)
                             pushAdapters()
-                            val refreshedConversation = AgentDockHistoryService.loadConversationReplay(projectPath, conversationId)
-                            if (refreshedConversation != null) {
-                                pushConversationReplayLoaded(chatId, refreshedConversation)
-                            }
+                            pushConversationReplayLoaded(chatId, capturedConversation ?: ConversationReplayData())
 
                             val lastSession = sessionsChain.last()
                             pushStatus(chatId, service.status(chatId).name.lowercase())

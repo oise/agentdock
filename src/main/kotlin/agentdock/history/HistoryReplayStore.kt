@@ -10,7 +10,7 @@ import java.io.File
 import java.nio.file.Files
 
 internal object HistoryReplayStore {
-    private const val CONVERSATION_REPLAY_STALE_TOLERANCE_MS = 60_000L
+    private const val CONVERSATION_REPLAY_STALE_TOLERANCE_MS = 10_000L
 
     fun readConversationData(file: File): ConversationReplayData? {
         if (!file.exists() || !file.isFile) return null

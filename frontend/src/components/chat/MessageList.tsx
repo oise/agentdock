@@ -5,7 +5,7 @@ import { AssistantMessage } from './AssistantMessage';
 import { ChatLoadingIndicator } from './ChatLoadingIndicator';
 import { Button } from '../ui/Button';
 
-const BOTTOM_PIN_THRESHOLD_PX = 4;
+const BOTTOM_PIN_THRESHOLD_PX = 10;
 const READ_ACK_THRESHOLD_PX = 48;
 const EARLIER_PROMPTS_BATCH_SIZE = 20;
 
@@ -71,6 +71,7 @@ function MessageList({
   const prevIsSendingForScroll = useRef(isSending);
   const prevIsSendingForCollapse = useRef(isSending);
   const initialMessagesScrolledRef = useRef(false);
+  const touchStartYRef = useRef<number | null>(null);
 
   const [revealedPromptCount, setRevealedPromptCount] = useState(0);
 
@@ -196,6 +197,45 @@ function MessageList({
     publishViewportState(el);
   };
 
+  const handleUserIntentScrollUp = () => {
+    // Instantly break the "pinned to bottom" lock before the slow DOM 'scroll' event fires.
+    // This prevents the race condition where new incoming text forces a scroll down
+    // while the user is actively trying to scroll up.
+    if (lastAtBottomRef.current) {
+      lastAtBottomRef.current = false;
+      atBottomChangeRef.current?.(false);
+    }
+  };
+
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (e.deltaY < 0) {
+      handleUserIntentScrollUp();
+    }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    touchStartYRef.current = e.touches[0].clientY;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (touchStartYRef.current === null) return;
+    const currentY = e.touches[0].clientY;
+    // Moving finger down (currentY > touchStartYRef.current) scrolls the content UP
+    if (currentY > touchStartYRef.current) {
+      handleUserIntentScrollUp();
+    }
+  };
+
+  const handleTouchEnd = () => {
+    touchStartYRef.current = null;
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (['ArrowUp', 'PageUp', 'Home'].includes(e.key)) {
+      handleUserIntentScrollUp();
+    }
+  };
+
   const handleExpand = () => {
     const el = containerRef.current;
     if (!el) {
@@ -289,6 +329,11 @@ function MessageList({
       <div
         ref={containerRef}
         onScroll={handleScroll}
+        onWheel={handleWheel}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onKeyDown={handleKeyDown}
         className="flex-1 min-h-0 overflow-y-auto px-6 py-6 space-y-6 opacity-100 transition-opacity duration-300"
       >
       <div className="mx-auto w-full max-w-[1200px] flex flex-col">

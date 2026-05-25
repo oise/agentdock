@@ -25,10 +25,6 @@ export const OtherToolBlock: React.FC<Props> = ({ block }) => {
   const { isPending, isError } = parseToolStatus(block.entry.status);
   const { isExpanded, toggle } = useAutoCollapse();
   const json = safeParseJson(block.entry.rawJson);
-  if (json?.rawInput?.todos) {
-    return (<></>);
-  }
-
   const skillName = typeof json?.rawInput?.skill === 'string' ? json.rawInput.skill.trim() : '';
   const skillArgs = json?.rawInput?.args;
   const title = skillName

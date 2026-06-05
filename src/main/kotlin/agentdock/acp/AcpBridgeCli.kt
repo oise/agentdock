@@ -1,8 +1,5 @@
 package agentdock.acp
 
-import com.intellij.ide.plugins.PluginManager
-import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.extensions.PluginId
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -72,9 +69,7 @@ internal class AcpBridgeCli(
     private fun resolveTerminalWorkingDir(fallback: String): String =
         project.basePath?.takeIf { it.isNotBlank() } ?: fallback
 
-    fun isIdeTerminalAvailable(): Boolean {
-        return loadIdeTerminalManagerClass() != null
-    }
+    fun isIdeTerminalAvailable(): Boolean = project.ideTerminalBridge() != null
 
     private fun buildCliCommand(
         adapterId: String,
@@ -82,41 +77,19 @@ internal class AcpBridgeCli(
         shellFlavor: TerminalShellFlavor
     ): Pair<AcpAdapterConfig.AdapterInfo, String>? {
         val (adapterInfo, commandParts) = buildAdapterCliCommandParts(adapterId, extraArgs) ?: return null
-        val target = AcpAdapterPaths.getExecutionTarget()
         val interactiveParts = commandParts.map { normalizeInteractiveShellPart(it, shellFlavor) }
         val command = toShellCommand(interactiveParts, shellFlavor)
         return adapterInfo to command
     }
 
     private fun openInIdeTerminal(workingDir: String, title: String, command: String): Boolean {
-        val managerClass = loadIdeTerminalManagerClass() ?: return false
+        val bridge = project.ideTerminalBridge() ?: return false
         return runCatching {
             runOnEdt {
-                val getInstance = managerClass.getMethod("getInstance", com.intellij.openapi.project.Project::class.java)
-                val terminalManager = getInstance.invoke(null, project) ?: return@runOnEdt
-                val createShellWidget = managerClass.getMethod(
-                    "createShellWidget",
-                    String::class.java,
-                    String::class.java,
-                    Boolean::class.javaPrimitiveType,
-                    Boolean::class.javaPrimitiveType
-                )
-                createShellWidget.isAccessible = true
-                val widget = createShellWidget.invoke(terminalManager, workingDir, title, true, true) ?: return@runOnEdt
-                val sendCommand = widget.javaClass.methods.firstOrNull { method ->
-                    method.name == "sendCommandToExecute" &&
-                        method.parameterCount == 1 &&
-                        method.parameterTypes[0] == String::class.java
-                } ?: return@runOnEdt
-                sendCommand.isAccessible = true
-                sendCommand.invoke(widget, command)
+                bridge.openInTerminal(workingDir, title, command)
             }
             true
         }.getOrElse { false }
-    }
-
-    private fun loadIdeTerminalManagerClass(): Class<*>? {
-        return loadTerminalClass("org.jetbrains.plugins.terminal.TerminalToolWindowManager")
     }
 
     private fun detectIdeTerminalShellFlavor(): TerminalShellFlavor {
@@ -130,56 +103,8 @@ internal class AcpBridgeCli(
         }
     }
 
-    private fun resolveIdeTerminalShellPath(): String? {
-        return resolveShellPathFromProvider("org.jetbrains.plugins.terminal.TerminalProjectOptionsProvider", project)
-            ?: resolveShellPathFromProvider("org.jetbrains.plugins.terminal.TerminalOptionsProvider", null)
-    }
-
-    private fun resolveShellPathFromProvider(className: String, projectArg: Project?): String? {
-        val providerClass = loadTerminalClass(className) ?: return null
-        val args = projectArg?.let { arrayOf<Any>(it) } ?: emptyArray()
-        val instance = runCatching {
-            providerClass.methods.firstOrNull { method ->
-                method.name == "getInstance" &&
-                    ((projectArg != null && method.parameterCount == 1 && method.parameterTypes[0] == Project::class.java) ||
-                        (projectArg == null && method.parameterCount == 0))
-            }?.invoke(null, *args)
-        }.getOrNull() ?: return null
-
-        return runCatching {
-            instance.javaClass.methods.firstOrNull { method ->
-                method.name == "getShellPath" && method.parameterCount == 0
-            }?.invoke(instance) as? String
-        }.getOrNull()
-    }
-
-    private fun loadTerminalClass(className: String): Class<*>? {
-        terminalClassLoaders().forEach { classLoader ->
-            val loaded = runCatching { Class.forName(className, false, classLoader) }.getOrNull()
-            if (loaded != null) return loaded
-        }
-        return null
-    }
-
-    private fun terminalClassLoaders(): List<ClassLoader> {
-        val terminalPluginId = PluginId.getId("org.jetbrains.plugins.terminal")
-        val pluginDescriptor = PluginManager.getInstance().findEnabledPlugin(terminalPluginId)
-        val pluginClassLoader = runCatching {
-            pluginDescriptor
-                ?.javaClass
-                ?.methods
-                ?.firstOrNull { it.name == "getPluginClassLoader" && it.parameterCount == 0 }
-                ?.invoke(pluginDescriptor) as? ClassLoader
-        }.getOrNull()
-
-        return listOfNotNull(
-            pluginClassLoader,
-            javaClass.classLoader,
-            project.javaClass.classLoader,
-            ApplicationManager::class.java.classLoader,
-            Thread.currentThread().contextClassLoader
-        ).distinct()
-    }
+    private fun resolveIdeTerminalShellPath(): String? =
+        project.ideTerminalBridge()?.resolveShellPath()
 }
 
 internal enum class TerminalShellFlavor {
@@ -271,4 +196,3 @@ internal fun normalizeInteractiveShellPart(value: String, shellFlavor: TerminalS
         else -> value
     }
 }
-

@@ -20,6 +20,7 @@ dependencies {
     intellijPlatform {
         intellijIdeaCommunity("2025.1")
         jetbrainsRuntime()
+        bundledPlugin("org.jetbrains.plugins.terminal")
     }
     implementation("com.agentclientprotocol:acp:0.18.0") {
         exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib")

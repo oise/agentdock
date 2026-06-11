@@ -157,7 +157,9 @@ private fun AcpBridge.buildAdapterPayload(
             currentModelId = null,
             availableModels = emptyList(),
             currentModeId = null,
-            availableModes = emptyList()
+            availableModes = emptyList(),
+            currentReasoningEffortId = null,
+            availableReasoningEfforts = emptyList()
         )
     val resolvedCurrentModelId = savedPreference?.modelId
         ?.takeIf { preferred ->
@@ -169,9 +171,16 @@ private fun AcpBridge.buildAdapterPayload(
             rawRuntimeMetadata.availableModes.isEmpty() || rawRuntimeMetadata.availableModes.any { it.id == preferred }
         }
         ?: rawRuntimeMetadata.currentModeId
+    val resolvedCurrentReasoningEffortId = savedPreference?.reasoningEffortId
+        ?.takeIf { preferred ->
+            rawRuntimeMetadata.availableReasoningEfforts.isNotEmpty() &&
+                rawRuntimeMetadata.availableReasoningEfforts.any { it.id == preferred }
+        }
+        ?: rawRuntimeMetadata.currentReasoningEffortId
     val runtimeMetadata = rawRuntimeMetadata.copy(
         currentModelId = resolvedCurrentModelId,
-        currentModeId = resolvedCurrentModeId
+        currentModeId = resolvedCurrentModeId,
+        currentReasoningEffortId = resolvedCurrentReasoningEffortId
     )
 
     return AdapterPayload(
@@ -186,6 +195,10 @@ private fun AcpBridge.buildAdapterPayload(
         currentModeId = runtimeMetadata.currentModeId ?: "",
         availableModes = runtimeMetadata.availableModes.map {
             AdapterModePayload(it.id, it.name, it.description.orEmpty())
+        },
+        currentReasoningEffortId = runtimeMetadata.currentReasoningEffortId ?: "",
+        availableReasoningEfforts = runtimeMetadata.availableReasoningEfforts.map {
+            AdapterReasoningEffortPayload(it.id, it.name, it.description.orEmpty())
         },
         downloaded = downloaded,
         downloadedKnown = downloadedKnown,

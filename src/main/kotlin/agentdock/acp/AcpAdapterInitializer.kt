@@ -2,9 +2,6 @@ package agentdock.acp
 
 import com.agentclientprotocol.client.Client
 import com.agentclientprotocol.client.ClientInfo
-import com.agentclientprotocol.client.ClientOperationsFactory
-import com.agentclientprotocol.common.ClientSessionOperations
-import com.agentclientprotocol.common.SessionCreationParameters
 import com.agentclientprotocol.model.*
 import com.agentclientprotocol.protocol.Protocol
 import com.agentclientprotocol.rpc.JsonRpcNotification
@@ -377,7 +374,9 @@ internal suspend fun AcpClientService.initializeSharedProcessAtStartup(
                 AcpClientService.AdapterInitializationStatus.Initializing,
                 detail = "Fetching models and modes..."
             )
-            val metadataResult = fetchAdapterRuntimeMetadata(c, adapterInfo)
+            val protocol = sharedProc.protocol
+                ?: throw IllegalStateException("ACP protocol was not initialized for adapter '${adapterInfo.id}'")
+            val metadataResult = fetchAdapterRuntimeMetadata(protocol, adapterInfo)
             adapterRuntimeMetadataMap[requestedAdapterName] = metadataResult.metadata
             AgentDockHistoryService.registerEphemeralSession(project.basePath, requestedAdapterName, metadataResult.sessionId)
         } catch (_: kotlinx.serialization.SerializationException) {
@@ -407,53 +406,31 @@ private fun normalizeAdapterStartupException(error: Exception, startupOutput: Li
 
 @OptIn(com.agentclientprotocol.annotations.UnstableApi::class)
 internal suspend fun AcpClientService.fetchAdapterRuntimeMetadata(
-    client: Client,
+    protocol: Protocol,
     adapterInfo: AcpAdapterConfig.AdapterInfo
 ): AdapterRuntimeMetadataFetchResult {
     val cwd = resolveSessionCwd(project.basePath ?: System.getProperty("user.dir"))
-    val params = SessionCreationParameters(cwd = cwd, mcpServers = emptyList())
-    val factory = object : ClientOperationsFactory {
-        override suspend fun createClientOperations(
-            sessionId: SessionId,
-            sessionResponse: AcpCreatedSessionResponse
-        ): ClientSessionOperations {
-            return createSharedSessionOperations(sessionId.value, adapterInfo.id)
-        }
+    val result = protocol.newSessionRaw(cwd)
+    val sessionId = result["sessionId"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+    if (sessionId.isEmpty()) {
+        throw IllegalStateException("ACP session/new response did not include sessionId")
     }
-
-    val session = client.newSession(params, factory)
-    val models = if (session.modelsSupported) {
-        session.availableModels.map { model ->
-            AcpAdapterConfig.ModelInfo(
-                modelId = model.modelId.value,
-                name = model.name,
-                description = model.description
-            )
-        }
-    } else {
-        emptyList()
-    }
-    val modes = if (session.modesSupported) {
-        session.availableModes.map { mode ->
-            AcpAdapterConfig.ModeInfo(
-                id = mode.id.value,
-                name = mode.name,
-                description = mode.description
-            )
-        }
-    } else {
-        emptyList()
-    }
+    val configMetadata = runtimeMetadataFromSessionResponseJson(result, adapterInfo)
 
     return AdapterRuntimeMetadataFetchResult(
         metadata = applyAdapterRuntimePreferences(
             adapterInfo = adapterInfo,
-            currentModelId = if (session.modelsSupported) session.currentModel.value.value else null,
-            availableModels = models,
-            currentModeId = if (session.modesSupported) session.currentMode.value.value else null,
-            availableModes = modes
+            currentModelId = configMetadata.currentModelId,
+            availableModels = configMetadata.availableModels,
+            modelConfigId = configMetadata.modelConfigId,
+            currentModeId = configMetadata.currentModeId,
+            availableModes = configMetadata.availableModes,
+            modeConfigId = configMetadata.modeConfigId,
+            currentReasoningEffortId = configMetadata.currentReasoningEffortId,
+            availableReasoningEfforts = configMetadata.availableReasoningEfforts,
+            reasoningEffortConfigId = configMetadata.reasoningEffortConfigId
         ),
-        sessionId = session.sessionId.value
+        sessionId = sessionId
     )
 }
 
@@ -461,8 +438,13 @@ internal fun AcpClientService.applyAdapterRuntimePreferences(
     adapterInfo: AcpAdapterConfig.AdapterInfo,
     currentModelId: String?,
     availableModels: List<AcpAdapterConfig.ModelInfo>,
+    modelConfigId: String?,
     currentModeId: String?,
-    availableModes: List<AcpAdapterConfig.ModeInfo>
+    availableModes: List<AcpAdapterConfig.ModeInfo>,
+    modeConfigId: String?,
+    currentReasoningEffortId: String? = null,
+    availableReasoningEfforts: List<AcpAdapterConfig.ModeInfo> = emptyList(),
+    reasoningEffortConfigId: String? = null
 ): AcpClientService.AdapterRuntimeMetadata {
     val filteredModels = availableModels.filterNot { model ->
         adapterInfo.disabledModels.any { disabled -> disabled.isNotBlank() && model.modelId.contains(disabled) }
@@ -481,12 +463,21 @@ internal fun AcpClientService.applyAdapterRuntimePreferences(
         ?.takeIf { preferred -> filteredModes.any { it.id == preferred } }
         ?: currentModeId?.takeIf { current -> filteredModes.any { it.id == current } }
         ?: filteredModes.firstOrNull()?.id
+    val preferredReasoningEffortId = savedPreference?.reasoningEffortId
+        ?.takeIf { preferred -> availableReasoningEfforts.any { it.id == preferred } }
+        ?: currentReasoningEffortId?.takeIf { current -> availableReasoningEfforts.any { it.id == current } }
+        ?: availableReasoningEfforts.firstOrNull()?.id
 
     return AcpClientService.AdapterRuntimeMetadata(
         currentModelId = preferredModelId,
         availableModels = filteredModels,
+        modelConfigId = modelConfigId,
         currentModeId = preferredModeId,
-        availableModes = filteredModes
+        availableModes = filteredModes,
+        modeConfigId = modeConfigId,
+        currentReasoningEffortId = preferredReasoningEffortId,
+        availableReasoningEfforts = availableReasoningEfforts,
+        reasoningEffortConfigId = reasoningEffortConfigId
     )
 }
 
@@ -539,9 +530,16 @@ internal fun AcpClientService.ensureAsyncSessionUpdates(sharedProc: AcpClientSer
                 extractAvailableCommands(notification.params)?.let { commands ->
                     updateAvailableCommands(sharedProc.adapterName, commands)
                 }
-                val completed = CompletableDeferred<Unit>()
-                queue.send(QueuedSessionUpdate.Notification(notification, completed))
-                completed.await()
+                updateRuntimeMetadataFromConfigOptionsNotification(sharedProc.adapterName, notification.params)
+                val sessionId = extractSessionUpdateSessionId(notification.params)
+                val isSdkOwnedSession = sessionId == null ||
+                    liveOwnerBySessionId.containsKey(sessionId) ||
+                    replayOwnerBySessionId.containsKey(sessionId)
+                if (isSdkOwnedSession) {
+                    val completed = CompletableDeferred<Unit>()
+                    queue.send(QueuedSessionUpdate.Notification(notification, completed))
+                    completed.await()
+                }
             }
             handlers.value = handlers.value.put(methodName, wrapped)
             sharedProc.sessionUpdateWrapped = true
@@ -555,6 +553,34 @@ internal fun AcpClientService.ensureAsyncSessionUpdates(sharedProc: AcpClientSer
             sharedProc.sessionUpdateWrapped = false
         }
     }
+}
+
+private fun AcpClientService.updateRuntimeMetadataFromConfigOptionsNotification(
+    adapterName: String,
+    params: kotlinx.serialization.json.JsonElement?
+) {
+    val (sessionId, configOptions) = extractConfigOptionsUpdate(params) ?: return
+    val adapterInfo = AcpAdapterPaths.getAdapterInfo(adapterName)
+    val rawMetadata = runtimeMetadataFromConfigOptionsJson(configOptions, adapterInfo)
+    val metadata = applyAdapterRuntimePreferences(
+        adapterInfo = adapterInfo,
+        currentModelId = rawMetadata.currentModelId,
+        availableModels = rawMetadata.availableModels,
+        modelConfigId = rawMetadata.modelConfigId,
+        currentModeId = rawMetadata.currentModeId,
+        availableModes = rawMetadata.availableModes,
+        modeConfigId = rawMetadata.modeConfigId,
+        currentReasoningEffortId = rawMetadata.currentReasoningEffortId,
+        availableReasoningEfforts = rawMetadata.availableReasoningEfforts,
+        reasoningEffortConfigId = rawMetadata.reasoningEffortConfigId
+    )
+    adapterRuntimeMetadataMap[adapterName] = metadata
+    val targetContext = synchronized(liveOwnerBySessionId) {
+        liveOwnerBySessionId[sessionId]?.let { ownerChatId -> sessions[ownerChatId] }
+    }
+    targetContext?.activeModelIdRef?.set(metadata.currentModelId)
+    targetContext?.activeModeIdRef?.set(metadata.currentModeId)
+    targetContext?.activeReasoningEffortIdRef?.set(metadata.currentReasoningEffortId)
 }
 
 internal fun AcpClientService.extractAvailableCommands(params: kotlinx.serialization.json.JsonElement?): List<AvailableCommandPayload>? {

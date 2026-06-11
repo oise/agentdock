@@ -9,7 +9,8 @@ import java.io.File
 @Serializable
 data class AcpAgentPreference(
     val modelId: String = "",
-    val modeId: String = ""
+    val modeId: String = "",
+    val reasoningEffortId: String = ""
 )
 
 @Serializable
@@ -51,7 +52,9 @@ object AcpAgentPreferencesStore {
 
     fun preferenceFor(adapterId: String): AcpAgentPreference? {
         if (adapterId.isBlank()) return null
-        return load().agents[adapterId]?.takeIf { it.modelId.isNotBlank() || it.modeId.isNotBlank() }
+        return load().agents[adapterId]?.takeIf {
+            it.modelId.isNotBlank() || it.modeId.isNotBlank() || it.reasoningEffortId.isNotBlank()
+        }
     }
 
     fun rememberAgent(adapterId: String) {
@@ -86,6 +89,19 @@ object AcpAgentPreferencesStore {
         }
     }
 
+    fun rememberReasoningEffort(adapterId: String, reasoningEffortId: String) {
+        val trimmedAdapterId = adapterId.trim()
+        val trimmedReasoningEffortId = reasoningEffortId.trim()
+        if (trimmedAdapterId.isEmpty() || trimmedReasoningEffortId.isEmpty()) return
+        updateState { current ->
+            val existing = current.agents[trimmedAdapterId] ?: AcpAgentPreference()
+            current.copy(
+                lastAgentId = current.lastAgentId,
+                agents = current.agents + (trimmedAdapterId to existing.copy(reasoningEffortId = trimmedReasoningEffortId))
+            )
+        }
+    }
+
     private fun updateState(transform: (AcpAgentPreferencesState) -> AcpAgentPreferencesState): AcpAgentPreferencesState =
         synchronized(lock) {
             val file = stateFile()
@@ -107,9 +123,14 @@ object AcpAgentPreferencesStore {
             } else {
                 val normalizedPref = AcpAgentPreference(
                     modelId = pref.modelId.trim(),
-                    modeId = pref.modeId.trim()
+                    modeId = pref.modeId.trim(),
+                    reasoningEffortId = pref.reasoningEffortId.trim()
                 )
-                if (normalizedPref.modelId.isEmpty() && normalizedPref.modeId.isEmpty()) {
+                if (
+                    normalizedPref.modelId.isEmpty() &&
+                    normalizedPref.modeId.isEmpty() &&
+                    normalizedPref.reasoningEffortId.isEmpty()
+                ) {
                     null
                 } else {
                     trimmedAdapterId to normalizedPref

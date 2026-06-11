@@ -23,6 +23,7 @@ import {
   PinnedAgentSnapshot,
   buildAgentOptions,
   buildModeOptions,
+  buildReasoningEffortOptions,
   resolveSelectedAgent,
   toPinnedAgentSnapshot,
 } from './chatSession/agentSelection';
@@ -65,6 +66,7 @@ export function useChatSession(
   const startedAgentIdRef = useRef<string>('');
   const startedModelIdRef = useRef<string>('');
   const startedModeIdRef = useRef<string>('');
+  const startedReasoningEffortIdRef = useRef<string>('');
   const historyLoadRequestedRef = useRef<string | null>(null);
   const statusRef = useRef<string>('not started');
   const startTimeRef = useRef<number | null>(null);
@@ -132,11 +134,14 @@ export function useChatSession(
   const effectiveSelectedAgent = resolvedSelectedAgent;
   const {
     availableModes,
+    availableReasoningEfforts,
     selectedModelId,
     selectedModeId,
+    selectedReasoningEffortId,
     modelIdForStart,
     handleModelChange,
     handleModeChange,
+    handleReasoningEffortChange,
   } = useAgentRuntimeOptions({
     availableAgents,
     effectiveSelectedAgent,
@@ -147,6 +152,7 @@ export function useChatSession(
     startedAgentIdRef,
     startedModelIdRef,
     startedModeIdRef,
+    startedReasoningEffortIdRef,
   });
 
   const adapterDisplayName = resolvedSelectedAgent?.name || '';
@@ -157,6 +163,10 @@ export function useChatSession(
   const modeOptions = useMemo(
     () => buildModeOptions(availableModes, selectedModeId),
     [availableModes, selectedModeId]
+  );
+  const reasoningEffortOptions = useMemo(
+    () => buildReasoningEffortOptions(availableReasoningEfforts, selectedReasoningEffortId),
+    [availableReasoningEfforts, selectedReasoningEffortId]
   );
 
   const failActivePromptLocally = useCallback((message: string) => {
@@ -250,6 +260,7 @@ export function useChatSession(
     startedAgentIdRef.current = '';
     startedModelIdRef.current = '';
     startedModeIdRef.current = '';
+    startedReasoningEffortIdRef.current = '';
   }, [selectedAgentId]);
 
   useEffect(() => {
@@ -278,6 +289,7 @@ export function useChatSession(
       // Keep that as the baseline so we only call __setMode() when the user
       // selected a different mode than the startup-selected mode.
       startedModeIdRef.current = selectedAgent?.currentModeId || '';
+      startedReasoningEffortIdRef.current = selectedAgent?.currentReasoningEffortId || '';
 
       clearBufferedChunks();
       statusRef.current = 'initializing';
@@ -340,6 +352,7 @@ export function useChatSession(
         startedAgentIdRef.current = '';
         startedModelIdRef.current = '';
         startedModeIdRef.current = '';
+        startedReasoningEffortIdRef.current = '';
         setIsSending(false);
       } else {
         setStatus(s);
@@ -442,6 +455,7 @@ export function useChatSession(
     startedAgentIdRef.current = historySession.adapterName;
     startedModelIdRef.current = historySession.modelId || '';
     startedModeIdRef.current = historySession.modeId || '';
+    startedReasoningEffortIdRef.current = '';
 
     if (historyLoadTimerRef.current !== null) {
       window.clearTimeout(historyLoadTimerRef.current);
@@ -622,6 +636,9 @@ export function useChatSession(
     selectedModeId,
     modeOptions,
     handleModeChange,
+    selectedReasoningEffortId,
+    reasoningEffortOptions,
+    handleReasoningEffortChange,
     permissionRequest,
     handleSend,
     handleStop,

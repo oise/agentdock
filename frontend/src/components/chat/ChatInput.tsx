@@ -26,6 +26,9 @@ export default function ChatInput(props: ChatInputProps) {
     modeOptions,
     selectedModeId,
     onModeChange,
+    reasoningEffortOptions,
+    selectedReasoningEffortId,
+    onReasoningEffortChange,
     hasSelectedAgent,
     attachments,
     onAttachmentsChange,
@@ -119,6 +122,8 @@ export default function ChatInput(props: ChatInputProps) {
             selectedModelId={selectedModelId}
             selectedModeId={selectedModeId}
             modeOptions={modeOptions}
+            selectedReasoningEffortId={selectedReasoningEffortId}
+            reasoningEffortOptions={reasoningEffortOptions}
             isSending={isSending}
             hasSelectedAgent={hasSelectedAgent}
             status={status}
@@ -138,6 +143,7 @@ export default function ChatInput(props: ChatInputProps) {
             onAgentChange={onAgentChange}
             onModelChange={onModelChange}
             onModeChange={onModeChange}
+            onReasoningEffortChange={onReasoningEffortChange}
             onSend={onSend}
             onStop={onStop}
           />

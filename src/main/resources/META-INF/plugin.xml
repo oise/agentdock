@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>agentdock</id>
     <name>Agent Dock</name>
-    <version>1.2.2</version>
+    <version>1.2.3</version>
     <vendor url="https://github.com/edgarsr/agentdock">EdgarsR</vendor>
 
     <description><![CDATA[
@@ -48,8 +48,9 @@
 
     <change-notes><![CDATA[
         <ul>
-            <li>Replaced internal PluginManager API with the public Terminal plugin API for IDE terminal CLI commands.</li>
-            <li>Fixed OpenCode launch and CLI on macOS and Linux by using the correct <code>opencode.exe</code> binary path.</li>
+            <li>Fixed ACP runtime option discovery by supporting configOptions for models, modes, and reasoning effort.</li>
+            <li>Added a separate reasoning effort selector for ACP agents that expose it independently from model selection.</li>
+            <li>Removed deprecated JetBrains Terminal API usage from IDE terminal command launch handling.</li>
         </ul>
     ]]></change-notes>
 

@@ -96,6 +96,12 @@ export interface ModeOption {
   description?: string;
 }
 
+export interface ReasoningEffortOption {
+  id: string;
+  name: string;
+  description?: string;
+}
+
 export interface AvailableCommand {
   name: string;
   description: string;
@@ -111,6 +117,8 @@ export interface AgentOption {
   availableModels?: ModelOption[];
   currentModeId?: string;
   availableModes?: ModeOption[];
+  currentReasoningEffortId?: string;
+  availableReasoningEfforts?: ReasoningEffortOption[];
   downloaded?: boolean;
   downloadedKnown?: boolean;
   downloadPath?: string;
@@ -462,6 +470,7 @@ declare global {
     __startAgent?: (conversationId: string, adapterId?: string, modelId?: string, requestId?: string) => void;
     __setModel?: (conversationId: string, adapterId: string, modelId: string) => void;
     __setMode?: (conversationId: string, adapterId: string, modeId: string) => void;
+    __setReasoningEffort?: (conversationId: string, adapterId: string, reasoningEffortId: string) => void;
     __sendPrompt?: (
       conversationId: string,
       message: string,

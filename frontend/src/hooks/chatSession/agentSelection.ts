@@ -8,6 +8,8 @@ export type PinnedAgentSnapshot = {
   availableModels?: AgentOption['availableModels'];
   currentModeId?: string;
   availableModes?: AgentOption['availableModes'];
+  currentReasoningEffortId?: string;
+  availableReasoningEfforts?: AgentOption['availableReasoningEfforts'];
 };
 
 export function toPinnedAgentSnapshot(agent: AgentOption): PinnedAgentSnapshot {
@@ -19,6 +21,8 @@ export function toPinnedAgentSnapshot(agent: AgentOption): PinnedAgentSnapshot {
     availableModels: agent.availableModels,
     currentModeId: agent.currentModeId,
     availableModes: agent.availableModes,
+    currentReasoningEffortId: agent.currentReasoningEffortId,
+    availableReasoningEfforts: agent.availableReasoningEfforts,
   };
 }
 
@@ -37,6 +41,8 @@ export function resolveSelectedAgent(
     availableModels: pinnedSnapshot.availableModels,
     currentModeId: pinnedSnapshot.currentModeId,
     availableModes: pinnedSnapshot.availableModes,
+    currentReasoningEffortId: pinnedSnapshot.currentReasoningEffortId,
+    availableReasoningEfforts: pinnedSnapshot.availableReasoningEfforts,
   } as AgentOption;
 }
 
@@ -93,6 +99,25 @@ export function buildModeOptions(availableModes: ModeOption[], selectedModeId: s
   return [{
     id: selectedModeId,
     label: selectedModeId,
+    description: undefined,
+  }];
+}
+
+export function buildReasoningEffortOptions(
+  availableReasoningEfforts: AgentOption['availableReasoningEfforts'] = [],
+  selectedReasoningEffortId: string
+): DropdownOption[] {
+  const options = availableReasoningEfforts.map((effort) => ({
+    id: effort.id,
+    label: effort.name,
+    description: effort.description,
+  }));
+
+  if (options.length > 0) return options;
+  if (!selectedReasoningEffortId) return [];
+  return [{
+    id: selectedReasoningEffortId,
+    label: selectedReasoningEffortId,
     description: undefined,
   }];
 }

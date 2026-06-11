@@ -138,6 +138,22 @@ internal fun AcpBridge.installConversationQueries() {
         }
     }
 
+    setReasoningEffortQuery = JBCefJSQuery.create(browser as com.intellij.ui.jcef.JBCefBrowserBase).apply {
+        addHandler { payload ->
+            val (chatId, adapterId, reasoningEffortId) = parseScopedIdPayload(payload, "reasoningEffortId")
+            scope.launch(Dispatchers.Default) {
+                handleScopedConfigChange(
+                    chatId,
+                    adapterId,
+                    reasoningEffortId,
+                    "reasoning effort",
+                    service::setReasoningEffort
+                )
+            }
+            JBCefJSQuery.Response("ok")
+        }
+    }
+
     listAdaptersQuery = JBCefJSQuery.create(browser as com.intellij.ui.jcef.JBCefBrowserBase).apply {
         addHandler {
             scope.launch(Dispatchers.IO) {

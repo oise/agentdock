@@ -25,6 +25,8 @@ interface ChatInputControlsProps {
   selectedModelId: string;
   selectedModeId: string;
   modeOptions: DropdownOption[];
+  selectedReasoningEffortId: string;
+  reasoningEffortOptions: DropdownOption[];
   isSending: boolean;
   hasSelectedAgent: boolean;
   status: string;
@@ -44,6 +46,7 @@ interface ChatInputControlsProps {
   onAgentChange: (id: string) => void;
   onModelChange: (id: string, targetAgentId?: string) => void;
   onModeChange: (id: string) => void;
+  onReasoningEffortChange: (id: string) => void;
   onSend: () => void;
   onStop: () => void;
 }
@@ -59,6 +62,8 @@ export function ChatInputControls({
   selectedModelId,
   selectedModeId,
   modeOptions,
+  selectedReasoningEffortId,
+  reasoningEffortOptions,
   isSending,
   hasSelectedAgent,
   status,
@@ -78,6 +83,7 @@ export function ChatInputControls({
   onAgentChange,
   onModelChange,
   onModeChange,
+  onReasoningEffortChange,
   onSend,
   onStop,
 }: ChatInputControlsProps) {
@@ -142,6 +148,17 @@ export function ChatInputControls({
             placeholder="Mode"
             disabled={isSending || !hasSelectedAgent}
             onChange={onModeChange}
+            className="ml-0.5"
+          />
+        )}
+
+        {reasoningEffortOptions.length > 0 && (
+          <ChatDropdown
+            value={selectedReasoningEffortId}
+            options={reasoningEffortOptions}
+            placeholder="Reasoning"
+            disabled={isSending || !hasSelectedAgent}
+            onChange={onReasoningEffortChange}
             className="ml-0.5"
           />
         )}

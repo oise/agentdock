@@ -40,8 +40,13 @@ class AcpClientService private constructor(val project: Project) {
     data class AdapterRuntimeMetadata(
         val currentModelId: String?,
         val availableModels: List<AcpAdapterConfig.ModelInfo>,
+        val modelConfigId: String? = null,
         val currentModeId: String?,
-        val availableModes: List<AcpAdapterConfig.ModeInfo>
+        val availableModes: List<AcpAdapterConfig.ModeInfo>,
+        val modeConfigId: String? = null,
+        val currentReasoningEffortId: String? = null,
+        val availableReasoningEfforts: List<AcpAdapterConfig.ModeInfo> = emptyList(),
+        val reasoningEffortConfigId: String? = null
     )
 
     companion object {
@@ -281,6 +286,7 @@ class AcpClientService private constructor(val project: Project) {
         val activeAdapterNameRef = AtomicReference<String?>(null)
         val activeModelIdRef = AtomicReference<String?>(null)
         val activeModeIdRef = AtomicReference<String?>(null)
+        val activeReasoningEffortIdRef = AtomicReference<String?>(null)
         @Volatile var lastHistoryLoadTime: Long = System.currentTimeMillis()
         @Volatile var allowReplayDelivery: Boolean = true
         @Volatile var ignoreUpdatesUntilPrompt: Boolean = false
@@ -300,6 +306,7 @@ class AcpClientService private constructor(val project: Project) {
             activeAdapterNameRef.set(null)
             activeModelIdRef.set(null)
             activeModeIdRef.set(null)
+            activeReasoningEffortIdRef.set(null)
             lastHistoryLoadTime = 0
             allowReplayDelivery = true
             ignoreUpdatesUntilPrompt = false

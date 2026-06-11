@@ -21,6 +21,13 @@ internal data class AdapterModePayload(
 )
 
 @Serializable
+internal data class AdapterReasoningEffortPayload(
+    val id: String,
+    val name: String,
+    val description: String
+)
+
+@Serializable
 internal data class AdapterPayload(
     val id: String,
     val name: String,
@@ -30,6 +37,8 @@ internal data class AdapterPayload(
     val availableModels: List<AdapterModelPayload>,
     val currentModeId: String,
     val availableModes: List<AdapterModePayload>,
+    val currentReasoningEffortId: String,
+    val availableReasoningEfforts: List<AdapterReasoningEffortPayload>,
     val downloaded: Boolean? = null,
     val downloadedKnown: Boolean = false,
     val downloadPath: String = "",

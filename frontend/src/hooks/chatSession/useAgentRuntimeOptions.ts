@@ -11,6 +11,7 @@ type UseAgentRuntimeOptionsArgs = {
   startedAgentIdRef: MutableRefObject<string>;
   startedModelIdRef: MutableRefObject<string>;
   startedModeIdRef: MutableRefObject<string>;
+  startedReasoningEffortIdRef: MutableRefObject<string>;
 };
 
 export function useAgentRuntimeOptions({
@@ -23,11 +24,14 @@ export function useAgentRuntimeOptions({
   startedAgentIdRef,
   startedModelIdRef,
   startedModeIdRef,
+  startedReasoningEffortIdRef,
 }: UseAgentRuntimeOptionsArgs) {
   const [selectedModelByAgent, setSelectedModelByAgent] = useState<Record<string, string>>({});
   const [selectedModeByAgent, setSelectedModeByAgent] = useState<Record<string, string>>({});
+  const [selectedReasoningEffortByAgent, setSelectedReasoningEffortByAgent] = useState<Record<string, string>>({});
   const availableModels = effectiveSelectedAgent?.availableModels ?? [];
   const availableModes = effectiveSelectedAgent?.availableModes ?? [];
+  const availableReasoningEfforts = effectiveSelectedAgent?.availableReasoningEfforts ?? [];
 
   const selectedModelId = effectiveSelectedAgent
     ? (selectedModelByAgent[effectiveSelectedAgent.id] || effectiveSelectedAgent.currentModelId || availableModels[0]?.modelId || '')
@@ -35,6 +39,15 @@ export function useAgentRuntimeOptions({
 
   const selectedModeId = effectiveSelectedAgent
     ? (selectedModeByAgent[effectiveSelectedAgent.id] || effectiveSelectedAgent.currentModeId || availableModes[0]?.id || '')
+    : '';
+
+  const selectedReasoningEffortId = effectiveSelectedAgent
+    ? (
+        selectedReasoningEffortByAgent[effectiveSelectedAgent.id] ||
+        effectiveSelectedAgent.currentReasoningEffortId ||
+        availableReasoningEfforts[0]?.id ||
+        ''
+      )
     : '';
 
   const modelIdForStart = selectedAgentId
@@ -59,6 +72,16 @@ export function useAgentRuntimeOptions({
         if (next[agent.id]) return;
         const currentMode = agent.currentModeId || agent.availableModes?.[0]?.id || '';
         if (currentMode) next[agent.id] = currentMode;
+      });
+      return next;
+    });
+
+    setSelectedReasoningEffortByAgent((prev) => {
+      const next: Record<string, string> = { ...prev };
+      availableAgents.forEach((agent) => {
+        if (next[agent.id]) return;
+        const currentReasoningEffort = agent.currentReasoningEffortId || agent.availableReasoningEfforts?.[0]?.id || '';
+        if (currentReasoningEffort) next[agent.id] = currentReasoningEffort;
       });
       return next;
     });
@@ -110,6 +133,30 @@ export function useAgentRuntimeOptions({
     }
   }, [conversationId, selectedAgentId, selectedModeId, status, startedAgentIdRef, startedModeIdRef]);
 
+  useEffect(() => {
+    if (!selectedAgentId || !selectedReasoningEffortId) return;
+    if (availableReasoningEfforts.length === 0) return;
+    if (status !== 'ready') return;
+    if (startedAgentIdRef.current !== selectedAgentId) return;
+    if (startedReasoningEffortIdRef.current === selectedReasoningEffortId) return;
+    if (typeof window.__setReasoningEffort !== 'function') return;
+
+    try {
+      window.__setReasoningEffort(conversationId, selectedAgentId, selectedReasoningEffortId);
+      startedReasoningEffortIdRef.current = selectedReasoningEffortId;
+    } catch (e) {
+      console.warn('[useChatSession] Failed to set reasoning effort:', e);
+    }
+  }, [
+    availableReasoningEfforts.length,
+    conversationId,
+    selectedAgentId,
+    selectedReasoningEffortId,
+    status,
+    startedAgentIdRef,
+    startedReasoningEffortIdRef
+  ]);
+
   const handleModelChange = (modelId: string, targetAgentId?: string) => {
     const agentId = targetAgentId || selectedAgentId;
     setSelectedModelByAgent((prev) => (
@@ -123,13 +170,22 @@ export function useAgentRuntimeOptions({
     ));
   };
 
+  const handleReasoningEffortChange = (reasoningEffortId: string) => {
+    setSelectedReasoningEffortByAgent((prev) => (
+      selectedAgentId ? { ...prev, [selectedAgentId]: reasoningEffortId } : prev
+    ));
+  };
+
   return {
     availableModels,
     availableModes,
+    availableReasoningEfforts,
     selectedModelId,
     selectedModeId,
+    selectedReasoningEffortId,
     modelIdForStart,
     handleModelChange,
     handleModeChange,
+    handleReasoningEffortChange,
   };
 }

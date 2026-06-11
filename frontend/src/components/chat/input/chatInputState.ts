@@ -24,6 +24,9 @@ export interface ChatInputProps {
   modeOptions: DropdownOption[];
   selectedModeId: string;
   onModeChange: (id: string) => void;
+  reasoningEffortOptions: DropdownOption[];
+  selectedReasoningEffortId: string;
+  onReasoningEffortChange: (id: string) => void;
   hasSelectedAgent: boolean;
   availableCommands: AvailableCommand[];
   attachments: ChatAttachment[];

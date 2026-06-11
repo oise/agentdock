@@ -80,6 +80,9 @@ export default function ChatSessionView({
     modeOptions,
     selectedModeId,
     handleModeChange,
+    reasoningEffortOptions,
+    selectedReasoningEffortId,
+    handleReasoningEffortChange,
     permissionRequest,
     handleSend,
     handleStop,
@@ -313,6 +316,10 @@ export default function ChatSessionView({
             modeOptions={modeOptions}
             selectedModeId={selectedModeId}
             onModeChange={handleModeChange}
+
+            reasoningEffortOptions={reasoningEffortOptions}
+            selectedReasoningEffortId={selectedReasoningEffortId}
+            onReasoningEffortChange={handleReasoningEffortChange}
             
             hasSelectedAgent={hasSelectedAgent}
             availableCommands={availableCommands}

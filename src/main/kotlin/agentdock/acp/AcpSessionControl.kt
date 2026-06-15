@@ -134,11 +134,10 @@ internal fun AcpClientService.replaceSharedProcess(adapterName: String): AcpClie
 }
 
 internal fun AcpClientService.teardownAdapterProcess(
-    adapterName: String,
+    _adapterName: String,
     shared: AcpClientService.SharedProcess?
 ) {
     runCatching { shared?.stop() }
-    runCatching { AcpProcessUtils.stopProcessesUsingAdapterRoot(adapterName) }
 }
 
 internal fun AcpClientService.resetExecutionEnvironment(

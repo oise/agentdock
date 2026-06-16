@@ -31,12 +31,12 @@ export function GeminiChatUsage({ modelId }: { modelId?: string }) {
       setDisabledModels(gemini?.disabledModels);
       setCurrentModelId(gemini?.currentModelId);
     });
-    
+
     // Request adapters initially to set disabledModels
     ACPBridge.requestAdapters();
-    
-    return () => { 
-      disposeAdapters(); 
+
+    return () => {
+      disposeAdapters();
     };
   }, []);
 
@@ -46,13 +46,13 @@ export function GeminiChatUsage({ modelId }: { modelId?: string }) {
     try {
       const parsed = JSON.parse(data);
       const buckets: any[] = parsed?.quota?.buckets ?? [];
-      const displayBuckets = buckets.filter((b: any) =>
-        !disabledRefs.current?.some(d => d && b.modelId.includes(d)) &&
-        hasDisplayableQuotaReset(b.resetTime)
+      const displayBuckets = buckets.filter(
+        (b: any) =>
+          !disabledRefs.current?.some((d) => d && b.modelId.includes(d)) && hasDisplayableQuotaReset(b.resetTime)
       );
 
       const isAuto = activeModelId?.toLowerCase().startsWith('auto');
-      const activeBucket = (activeModelId && !isAuto) ? displayBuckets.find(b => matchesActiveModel(b.modelId)) : null;
+      const activeBucket = activeModelId && !isAuto ? displayBuckets.find((b) => matchesActiveModel(b.modelId)) : null;
       if (activeBucket && typeof activeBucket.remainingFraction === 'number') {
         displayPct = (1 - activeBucket.remainingFraction) * 100;
       } else if (!activeModelId || isAuto) {

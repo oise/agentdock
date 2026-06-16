@@ -8,7 +8,7 @@ import {
   LexicalNode,
   NodeKey,
   SerializedLexicalNode,
-  Spread,
+  Spread
 } from 'lexical';
 import { ChatInputActionsContext } from './ChatInputActionsContext';
 import { CodeReferenceChip } from '../shared/CodeReferenceChip';
@@ -25,7 +25,9 @@ export class CodeReferenceNode extends DecoratorNode<JSX.Element> {
   __startLine?: number;
   __endLine?: number;
 
-  static getType(): string { return 'code-reference'; }
+  static getType(): string {
+    return 'code-reference';
+  }
   static clone(node: CodeReferenceNode): CodeReferenceNode {
     return new CodeReferenceNode(node.__id, node.__path, node.__fileName, node.__startLine, node.__endLine, node.__key);
   }
@@ -45,7 +47,9 @@ export class CodeReferenceNode extends DecoratorNode<JSX.Element> {
     return span;
   }
 
-  updateDOM(): false { return false; }
+  updateDOM(): false {
+    return false;
+  }
 
   static importJSON(serializedNode: SerializedCodeReferenceNode): CodeReferenceNode {
     return $createCodeReferenceNode(
@@ -65,7 +69,7 @@ export class CodeReferenceNode extends DecoratorNode<JSX.Element> {
       startLine: this.__startLine,
       endLine: this.__endLine,
       type: 'code-reference',
-      version: 1,
+      version: 1
     };
   }
 
@@ -107,7 +111,7 @@ function CodeReferenceComponent({
   fileName,
   path,
   startLine,
-  endLine,
+  endLine
 }: {
   id: string;
   nodeKey: NodeKey;

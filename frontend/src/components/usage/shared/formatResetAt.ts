@@ -32,7 +32,7 @@ export function formatResetAt(value: string | number | null | undefined): string
       day: 'numeric',
       hour: 'numeric',
       minute: '2-digit',
-      hour12: false,
+      hour12: false
     }).formatToParts(date);
 
     const month = parts.find((part) => part.type === 'month')?.value;

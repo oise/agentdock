@@ -3,7 +3,8 @@ import { UsageMetricRow } from './shared/UsageMetricRow';
 import { clampPercent, formatUsagePercent } from './shared/quotaVisuals';
 import { formatResetAt, hasDisplayableQuotaReset } from './shared/formatResetAt';
 
-const usageLinkClassName = 'text-link hover:underline focus:outline-none focus-visible:rounded-[3px] focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]';
+const usageLinkClassName =
+  'text-link hover:underline focus:outline-none focus-visible:rounded-[3px] focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]';
 
 interface QuotaBucket {
   modelId: string;
@@ -27,7 +28,7 @@ function matchesModel(bucketModelId: string, modelId: string): boolean {
 export function GeminiUsage({
   disabledModels,
   modelId,
-  stacked = false,
+  stacked = false
 }: {
   disabledModels?: string[];
   modelId?: string;
@@ -44,26 +45,34 @@ export function GeminiUsage({
     return null;
   }
 
-  const buckets = (usage?.quota?.buckets ?? []).filter(b =>
-    !disabledModels?.some(d => d && b.modelId.includes(d)) &&
-    hasDisplayableQuotaReset(b.resetTime) &&
-    (!modelId || matchesModel(b.modelId, modelId))
+  const buckets = (usage?.quota?.buckets ?? []).filter(
+    (b) =>
+      !disabledModels?.some((d) => d && b.modelId.includes(d)) &&
+      hasDisplayableQuotaReset(b.resetTime) &&
+      (!modelId || matchesModel(b.modelId, modelId))
   );
 
-  if (buckets.length === 0) return (
-    <div className="text-foreground-secondary">
-      Usage : <button type="button" onClick={() => window.__openUrl?.('https://console.cloud.google.com')} className={usageLinkClassName}>console.cloud.google.com</button>
-    </div>
-  );
+  if (buckets.length === 0)
+    return (
+      <div className='text-foreground-secondary'>
+        Usage :{' '}
+        <button
+          type='button'
+          onClick={() => window.__openUrl?.('https://console.cloud.google.com')}
+          className={usageLinkClassName}
+        >
+          console.cloud.google.com
+        </button>
+      </div>
+    );
 
   return (
-    <div className="flex flex-col gap-y-2">
-      <span className="whitespace-nowrap text-foreground-secondary">Usage quotas</span>
+    <div className='flex flex-col gap-y-2'>
+      <span className='whitespace-nowrap text-foreground-secondary'>Usage quotas</span>
       <div className={stacked ? 'flex flex-col gap-y-2' : 'flex flex-wrap gap-x-8 gap-y-2'}>
         {buckets.map((bucket, idx) => {
-          const percent = typeof bucket.remainingFraction === 'number'
-            ? clampPercent((1 - bucket.remainingFraction) * 100)
-            : null;
+          const percent =
+            typeof bucket.remainingFraction === 'number' ? clampPercent((1 - bucket.remainingFraction) * 100) : null;
           const resetLabel = formatResetAt(bucket.resetTime);
           return (
             <UsageMetricRow

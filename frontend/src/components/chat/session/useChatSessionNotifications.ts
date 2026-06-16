@@ -28,7 +28,7 @@ export function useChatSessionNotifications({
   onCanMarkReadChange,
   onPermissionRequestChange,
   onProcessingChange,
-  onSessionStateChange,
+  onSessionStateChange
 }: UseChatSessionNotificationsOptions) {
   const lastReportedSessionStateRef = useRef('');
   const permissionRequestChangeRef = useRef(onPermissionRequestChange);
@@ -36,13 +36,19 @@ export function useChatSessionNotifications({
   const pendingAssistantActivityRef = useRef(false);
   const lastNotifiedAssistantKeyRef = useRef('');
 
-  const handleAtBottomChange = useCallback((isAtBottom: boolean) => {
-    onAtBottomChange?.(isAtBottom);
-  }, [onAtBottomChange]);
+  const handleAtBottomChange = useCallback(
+    (isAtBottom: boolean) => {
+      onAtBottomChange?.(isAtBottom);
+    },
+    [onAtBottomChange]
+  );
 
-  const handleCanMarkReadChange = useCallback((canMarkRead: boolean) => {
-    onCanMarkReadChange?.(canMarkRead);
-  }, [onCanMarkReadChange]);
+  const handleCanMarkReadChange = useCallback(
+    (canMarkRead: boolean) => {
+      onCanMarkReadChange?.(canMarkRead);
+    },
+    [onCanMarkReadChange]
+  );
 
   useEffect(() => {
     const prev = prevIsSendingRef.current;
@@ -69,7 +75,14 @@ export function useChatSessionNotifications({
   }, [isSending, isHistoryReplaying, messages, onAssistantActivity, permissionRequest]);
 
   useEffect(() => {
-    if (permissionRequest || !pendingAssistantActivityRef.current || isSending || isHistoryReplaying || messages.length === 0) return;
+    if (
+      permissionRequest ||
+      !pendingAssistantActivityRef.current ||
+      isSending ||
+      isHistoryReplaying ||
+      messages.length === 0
+    )
+      return;
 
     const last = messages[messages.length - 1];
     if (last.role !== 'assistant') {
@@ -117,6 +130,6 @@ export function useChatSessionNotifications({
 
   return {
     handleAtBottomChange,
-    handleCanMarkReadChange,
+    handleCanMarkReadChange
   };
 }

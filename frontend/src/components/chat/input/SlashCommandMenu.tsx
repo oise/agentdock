@@ -16,11 +16,11 @@ export default function SlashCommandMenu({
   layout,
   menuRef,
   onHover,
-  onSelect,
+  onSelect
 }: SlashCommandMenuProps) {
-  const items = commands.map(cmd => ({
+  const items = commands.map((cmd) => ({
     primary: `${cmd.displayPrefix}${cmd.name}`,
-    secondary: cmd.description,
+    secondary: cmd.description
   }));
 
   return (

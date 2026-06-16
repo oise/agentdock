@@ -21,7 +21,7 @@ marked.use(
 
 marked.setOptions({
   breaks: true, // Support GFM line breaks
-  gfm: true,
+  gfm: true
 });
 
 interface MarkdownMessageProps {
@@ -30,7 +30,8 @@ interface MarkdownMessageProps {
 }
 
 const codeBlockClassName = 'markdown-code-block';
-const codeCopySlotClassName = 'absolute right-2 top-2 z-10 opacity-0 transition-opacity duration-200 ease-out delay-0 group-hover:opacity-100 group-hover:delay-300 group-focus-within:opacity-100 group-focus-within:delay-0';
+const codeCopySlotClassName =
+  'absolute right-2 top-2 z-10 opacity-0 transition-opacity duration-200 ease-out delay-0 group-hover:opacity-100 group-hover:delay-300 group-focus-within:opacity-100 group-focus-within:delay-0';
 
 /**
  * Minimalist Markdown rendering component for chat messages.
@@ -65,9 +66,7 @@ export const MarkdownMessage: React.FC<MarkdownMessageProps> = ({ content, enabl
       return;
     }
 
-    const nextSlots = Array.from(
-      containerRef.current?.querySelectorAll<HTMLElement>('[data-code-copy-slot]') ?? []
-    );
+    const nextSlots = Array.from(containerRef.current?.querySelectorAll<HTMLElement>('[data-code-copy-slot]') ?? []);
     setCopySlots(nextSlots);
   }, [html, enableCodeCopy]);
 
@@ -124,28 +123,31 @@ export const MarkdownMessage: React.FC<MarkdownMessageProps> = ({ content, enabl
     <>
       <div
         ref={containerRef}
-        className="markdown-body"
+        className='markdown-body'
         onClick={handleClick}
         dangerouslySetInnerHTML={{ __html: html as string }}
       />
-      {enableCodeCopy && copySlots.map((slot, index) => createPortal(
-        <Tooltip key={index} content={copiedIndex === index ? 'Copied' : 'Copy'} variant="minimal">
-          <button
-            type="button"
-            aria-label={copiedIndex === index ? 'Copied code' : 'Copy code'}
-            className="flex h-7 w-7 items-center justify-center rounded-[4px] border border-border bg-background
-              text-foreground-secondary transition-colors hover:bg-hover hover:text-foreground focus:outline-none"
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              void handleCopyCodeBlock(slot, index);
-            }}
-          >
-            {copiedIndex === index ? <Check size={14} /> : <Copy size={14} />}
-          </button>
-        </Tooltip>,
-        slot
-      ))}
+      {enableCodeCopy &&
+        copySlots.map((slot, index) =>
+          createPortal(
+            <Tooltip key={index} content={copiedIndex === index ? 'Copied' : 'Copy'} variant='minimal'>
+              <button
+                type='button'
+                aria-label={copiedIndex === index ? 'Copied code' : 'Copy code'}
+                className='flex h-7 w-7 items-center justify-center rounded-[4px] border border-border bg-background
+              text-foreground-secondary transition-colors hover:bg-hover hover:text-foreground focus:outline-none'
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void handleCopyCodeBlock(slot, index);
+                }}
+              >
+                {copiedIndex === index ? <Check size={14} /> : <Copy size={14} />}
+              </button>
+            </Tooltip>,
+            slot
+          )
+        )}
     </>
   );
 };
@@ -215,9 +217,7 @@ function parseLocalFileTarget(href: string): { path: string; line?: number } | n
 
   const colonLineMatch = pathWithOptionalLine.path.match(/^(.*\.[^./\\:]+):(\d+)$/);
   const rawPath = colonLineMatch ? colonLineMatch[1] : pathWithOptionalLine.path;
-  const line = colonLineMatch
-    ? Number(colonLineMatch[2]) - 1
-    : pathWithOptionalLine.line;
+  const line = colonLineMatch ? Number(colonLineMatch[2]) - 1 : pathWithOptionalLine.line;
 
   if (!isLikelyLocalFilePath(rawPath)) {
     return null;
@@ -225,7 +225,7 @@ function parseLocalFileTarget(href: string): { path: string; line?: number } | n
 
   return {
     path: rawPath,
-    line: line !== undefined && Number.isFinite(line) && line >= 0 ? line : undefined,
+    line: line !== undefined && Number.isFinite(line) && line >= 0 ? line : undefined
   };
 }
 
@@ -257,4 +257,3 @@ function normalizeLocalFileHref(href: string): string | null {
 
   return href;
 }
-

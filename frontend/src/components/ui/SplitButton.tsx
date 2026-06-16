@@ -22,7 +22,7 @@ const actionButtonClassName = [
   'inline-flex items-center justify-center whitespace-nowrap select-none',
   'rounded-l-[4px] rounded-r-none bg-transparent px-3.5 py-[6px]',
   'leading-none text-[var(--ide-Button-default-foreground)]',
-  'focus:outline-none focus-visible:shadow-none disabled:cursor-default disabled:pointer-events-none',
+  'focus:outline-none focus-visible:shadow-none disabled:cursor-default disabled:pointer-events-none'
 ].join(' ');
 
 const toggleButtonClassName = [
@@ -30,16 +30,10 @@ const toggleButtonClassName = [
   'rounded-r-[4px] bg-transparent text-[var(--ide-Button-default-foreground)]',
   'before:absolute before:left-0 before:top-[15%] before:h-[70%] before:w-px before:bg-primary-foreground before:opacity-50',
   'focus:outline-none focus-visible:shadow-none',
-  'disabled:cursor-default disabled:pointer-events-none',
+  'disabled:cursor-default disabled:pointer-events-none'
 ].join(' ');
 
-export function SplitButton({
-  label,
-  onAction,
-  onToggle,
-  disabled = false,
-  menuItems = [],
-}: SplitButtonProps) {
+export function SplitButton({ label, onAction, onToggle, disabled = false, menuItems = [] }: SplitButtonProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const hasMenu = menuItems.length > 0;
@@ -56,23 +50,17 @@ export function SplitButton({
   }, [menuOpen]);
 
   return (
-    <div ref={rootRef} className="relative inline-flex flex-col items-start">
-      <div className="inline-flex overflow-hidden rounded-[4px] border border-[var(--ide-Button-startBorderColor)] bg-primary
-        focus-within:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_0_0_1px_var(--ide-Button-default-focusColor)]">
-        <button
-          type="button"
-          className={actionButtonClassName}
-          disabled={disabled}
-          onClick={onAction}
-        >
+    <div ref={rootRef} className='relative inline-flex flex-col items-start'>
+      <div
+        className='inline-flex overflow-hidden rounded-[4px] border border-[var(--ide-Button-startBorderColor)] bg-primary
+        focus-within:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_0_0_1px_var(--ide-Button-default-focusColor)]'
+      >
+        <button type='button' className={actionButtonClassName} disabled={disabled} onClick={onAction}>
           {label}
         </button>
         <button
-          type="button"
-          className={cx(
-            toggleButtonClassName,
-            !hasMenu && 'before:hidden'
-          )}
+          type='button'
+          className={cx(toggleButtonClassName, !hasMenu && 'before:hidden')}
           aria-expanded={hasMenu ? menuOpen : undefined}
           disabled={disabled}
           onClick={(event) => {
@@ -86,15 +74,17 @@ export function SplitButton({
       </div>
 
       {hasMenu && menuOpen ? (
-        <div className="absolute left-0 top-[calc(100%+0.5em)] bg-background z-20 min-w-full rounded-[6px]
-          border border-[var(--ide-Button-startBorderColor)] p-1.5">
+        <div
+          className='absolute left-0 top-[calc(100%+0.5em)] bg-background z-20 min-w-full rounded-[6px]
+          border border-[var(--ide-Button-startBorderColor)] p-1.5'
+        >
           {menuItems.map((item, index) => (
             <button
               key={index}
-              type="button"
-              className="flex px-2 py-0.5 w-full items-center rounded-[4px] hover:bg-accent
+              type='button'
+              className='flex px-2 py-0.5 w-full items-center rounded-[4px] hover:bg-accent
                 hover:text-[var(--ide-Button-default-foreground)] focus:outline-none
-                focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]"
+                focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]'
               onClick={() => {
                 item.onClick?.();
                 setMenuOpen(false);

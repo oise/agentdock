@@ -17,15 +17,17 @@ function formatPromptTime(timestamp?: number): string | null {
   try {
     const date = new Date(timestamp);
     const now = new Date();
-    const isToday = date.getDate() === now.getDate()
-      && date.getMonth() === now.getMonth()
-      && date.getFullYear() === now.getFullYear();
+    const isToday =
+      date.getDate() === now.getDate() &&
+      date.getMonth() === now.getMonth() &&
+      date.getFullYear() === now.getFullYear();
 
     const yesterday = new Date(now);
     yesterday.setDate(now.getDate() - 1);
-    const isYesterday = date.getDate() === yesterday.getDate()
-      && date.getMonth() === yesterday.getMonth()
-      && date.getFullYear() === yesterday.getFullYear();
+    const isYesterday =
+      date.getDate() === yesterday.getDate() &&
+      date.getMonth() === yesterday.getMonth() &&
+      date.getFullYear() === yesterday.getFullYear();
 
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
@@ -71,7 +73,7 @@ export const UserMessage = memo(({ message, onImageClick, promptNumber }: UserMe
     const inline: RichContentBlock[] = [];
     const trailing: RichContentBlock[] = [];
     if (message.blocks) {
-      message.blocks.forEach(b => {
+      message.blocks.forEach((b) => {
         if (b.type === 'file' || (b.type === 'image' && (b as ImageBlock).isInline === false)) {
           trailing.push(b);
         } else {
@@ -91,7 +93,7 @@ export const UserMessage = memo(({ message, onImageClick, promptNumber }: UserMe
   const renderContent = () => {
     if (inline.length > 0) {
       return (
-        <div className="whitespace-pre-wrap">
+        <div className='whitespace-pre-wrap'>
           {inline.map((block, idx) => {
             if (block.type === 'image' && (block as ImageBlock).data) {
               const img = block as ImageBlock;
@@ -122,23 +124,28 @@ export const UserMessage = memo(({ message, onImageClick, promptNumber }: UserMe
                 />
               );
             }
-            return <span className="cursor-text" key={idx}>{block.type === 'text' ? (block as TextBlock).text : ''}</span>;
+            return (
+              <span className='cursor-text' key={idx}>
+                {block.type === 'text' ? (block as TextBlock).text : ''}
+              </span>
+            );
           })}
         </div>
       );
     }
-    return <div className="whitespace-pre-wrap">{message.content}</div>;
+    return <div className='whitespace-pre-wrap'>{message.content}</div>;
   };
 
   const renderTrailingAttachments = () => {
     if (trailing.length === 0) return null;
     return (
-      <div className="flex flex-wrap pt-2 block w-full">
+      <div className='flex flex-wrap pt-2 block w-full'>
         {trailing.map((block, idx) => {
           if (block.type === 'file') {
             const fb = block as FileBlock;
             return (
-              <AttachmentItem key={`trail-${idx}`}
+              <AttachmentItem
+                key={`trail-${idx}`}
                 att={{ id: `trail-${idx}`, name: fb.name, mimeType: fb.mimeType, data: fb.data, path: fb.path }}
                 onImageClick={onImageClick}
               />
@@ -146,7 +153,8 @@ export const UserMessage = memo(({ message, onImageClick, promptNumber }: UserMe
           }
           const ib = block as ImageBlock;
           return (
-            <AttachmentItem key={`trail-${idx}`}
+            <AttachmentItem
+              key={`trail-${idx}`}
               att={{ id: `trail-${idx}`, name: 'Image', mimeType: ib.mimeType, data: ib.data }}
               onImageClick={onImageClick}
             />
@@ -161,14 +169,16 @@ export const UserMessage = memo(({ message, onImageClick, promptNumber }: UserMe
   const showFooter = showCollapseToggle || promptNumber !== undefined || !!formattedTime;
 
   return (
-    <div className="flex flex-col mb-8 animate-in fade-in slide-in-from-bottom-2">
-      <div className="flex justify-end relative">
-        <div className="user-message-bubble bg-accent rounded-[6px] group max-w-[85%] px-4 pt-3 pb-2 text-foreground"
-          style={{backgroundColor: 'var(--user-message-bg)',}}
+    <div className='flex flex-col mb-8 animate-in fade-in slide-in-from-bottom-2'>
+      <div className='flex justify-end relative'>
+        <div
+          className='user-message-bubble bg-accent rounded-[6px] group max-w-[85%] px-4 pt-3 pb-2 text-foreground'
+          style={{ backgroundColor: 'var(--user-message-bg)' }}
         >
           <div>
-            <div className="relative brightness-[110%]">
-              <div ref={contentRef}
+            <div className='relative brightness-[110%]'>
+              <div
+                ref={contentRef}
                 className={`break-words transition-[max-height] duration-1000 ease-in-out ${
                   isLargeContent && !isExpanded
                     ? 'max-h-[220px] overflow-hidden [mask-image:linear-gradient(to_bottom,black_calc(100%-64px),transparent)] [-webkit-mask-image:linear-gradient(to_bottom,black_calc(100%-64px),transparent)]'
@@ -185,18 +195,20 @@ export const UserMessage = memo(({ message, onImageClick, promptNumber }: UserMe
             {showFooter && (
               <div className={`mt-2 flex items-center gap-3 ${showCollapseToggle ? 'justify-between' : 'justify-end'}`}>
                 {showCollapseToggle && (
-                  <button type="button" onClick={() => setIsExpanded(!isExpanded)}
-                    className="inline-flex items-center gap-1 text-xs text-foreground hover:underline
-                    focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)] focus-visible:outline-none"
+                  <button
+                    type='button'
+                    onClick={() => setIsExpanded(!isExpanded)}
+                    className='inline-flex items-center gap-1 text-xs text-foreground hover:underline
+                    focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)] focus-visible:outline-none'
                   >
                     {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                     <span>{isExpanded ? 'Show less' : 'Show more'}</span>
                   </button>
                 )}
 
-                <div className="flex items-center gap-1.5 text-xs text-foreground opacity-80">
+                <div className='flex items-center gap-1.5 text-xs text-foreground opacity-80'>
                   {promptNumber !== undefined && <span>{`#${promptNumber}`}</span>}
-                  {promptNumber !== undefined && formattedTime && <span aria-hidden="true">•</span>}
+                  {promptNumber !== undefined && formattedTime && <span aria-hidden='true'>•</span>}
                   {formattedTime && <span>{formattedTime}</span>}
                 </div>
               </div>

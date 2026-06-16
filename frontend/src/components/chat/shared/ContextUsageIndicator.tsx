@@ -19,7 +19,7 @@ export function ContextUsageIndicator({ used, size }: ContextUsageIndicatorProps
   const percent = (used / size) * 100;
   const percentUsed = Math.max(0, Math.min(100, Math.round(percent)));
   const percentLeft = Math.max(0, 100 - percentUsed);
-  
+
   const r = 5.5;
   const circumference = 2 * Math.PI * r;
   const strokeDashoffset = circumference - (percent / 100) * circumference;
@@ -28,38 +28,48 @@ export function ContextUsageIndicator({ used, size }: ContextUsageIndicatorProps
   const sizeFormatted = formatCompactTokens(size);
 
   return (
-    <Tooltip 
+    <Tooltip
       content={
-        <div className="text-left text-ide-small">
-          <div className="text-foreground-secondary mb-2">Context window</div>
-          <div className="">
-            {percentUsed}% used <span className="text-foreground-secondary">({percentLeft}% left)</span>
+        <div className='text-left text-ide-small'>
+          <div className='text-foreground-secondary mb-2'>Context window</div>
+          <div className=''>
+            {percentUsed}% used <span className='text-foreground-secondary'>({percentLeft}% left)</span>
           </div>
           <div>
-            <span>{usedFormatted} / {sizeFormatted}</span>{' '}
-            <span className="text-foreground-secondary">tokens used</span>
+            <span>
+              {usedFormatted} / {sizeFormatted}
+            </span>{' '}
+            <span className='text-foreground-secondary'>tokens used</span>
           </div>
         </div>
       }
     >
-      <button className="flex items-center h-full px-1.5 ml-0.5 appearance-none border-0 bg-editor-bg hover:text-foreground cursor-default transition-colors outline-none rounded hover:bg-hover text-ide-small group focus-visible:bg-hover focus-visible:text-foreground focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]">
-        <div className="flex items-center">
-          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 14 14" className="rotate-[-90deg]">
-            <circle cx="7" cy="7" r={r} fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-20" />
-            <circle 
-              cx="7" 
-               cy="7" 
-              r={r} 
-              fill="none" 
-              stroke="currentColor" 
-              strokeWidth="2.5" 
+      <button className='flex items-center h-full px-1.5 ml-0.5 appearance-none border-0 bg-editor-bg hover:text-foreground cursor-default transition-colors outline-none rounded hover:bg-hover text-ide-small group focus-visible:bg-hover focus-visible:text-foreground focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]'>
+        <div className='flex items-center'>
+          <svg
+            xmlns='http://www.w3.org/2000/svg'
+            width='15'
+            height='15'
+            viewBox='0 0 14 14'
+            className='rotate-[-90deg]'
+          >
+            <circle cx='7' cy='7' r={r} fill='none' stroke='currentColor' strokeWidth='2.5' className='opacity-20' />
+            <circle
+              cx='7'
+              cy='7'
+              r={r}
+              fill='none'
+              stroke='currentColor'
+              strokeWidth='2.5'
               strokeDasharray={circumference}
               strokeDashoffset={strokeDashoffset}
-              strokeLinecap="round"
+              strokeLinecap='round'
             />
           </svg>
-          <span className="ml-1 whitespace-nowrap">{percentUsed}%</span>
-          <span className="invisible w-0" aria-hidden="true">&nbsp;</span>
+          <span className='ml-1 whitespace-nowrap'>{percentUsed}%</span>
+          <span className='invisible w-0' aria-hidden='true'>
+            &nbsp;
+          </span>
         </div>
       </button>
     </Tooltip>

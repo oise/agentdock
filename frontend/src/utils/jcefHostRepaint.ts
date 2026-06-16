@@ -56,14 +56,14 @@ function scheduleClickRepaints() {
 }
 
 export function installJcefHostRepaintCoordinator() {
-  if (typeof window === "undefined" || coordinatorInstalled) return;
+  if (typeof window === 'undefined' || coordinatorInstalled) return;
   coordinatorInstalled = true;
 
-  document.addEventListener("click", scheduleClickRepaints, { passive: true, capture: true });
+  document.addEventListener('click', scheduleClickRepaints, { passive: true, capture: true });
 }
 
 export function acquireJcefLivePromptRepaint() {
-  if (typeof window === "undefined") return () => {};
+  if (typeof window === 'undefined') return () => {};
 
   const requestId = Symbol('live-prompt-repaint');
   livePromptRepaintRequests.add(requestId);

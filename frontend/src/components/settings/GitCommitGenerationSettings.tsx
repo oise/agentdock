@@ -140,7 +140,9 @@ export function GitCommitGenerationSettings({ settings, installedAgents, onChang
             <textarea
               value={localInstructions}
               onChange={(event) => setLocalInstructions(event.target.value)}
-              onFocus={() => { isFocusedRef.current = true; }}
+              onFocus={() => {
+                isFocusedRef.current = true;
+              }}
               onBlur={handleInstructionsBlur}
               rows={5}
               placeholder='Describe how commit messages should be written.'

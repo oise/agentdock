@@ -18,12 +18,7 @@ const APPLIED_STATUSES = new Set(['success', 'completed']);
  */
 function pathsMatch(path1: string, path2: string): boolean {
   const normalize = (path: string) => {
-    const normalized = path
-      .trim()
-      .replace(/\\/g, '/')
-      .replace(/\/+/g, '/')
-      .replace(/^\.\//, '')
-      .replace(/\/$/, '');
+    const normalized = path.trim().replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\.\//, '').replace(/\/$/, '');
     return /^[A-Za-z]:\//.test(normalized) ? normalized.toLowerCase() : normalized;
   };
 
@@ -41,11 +36,7 @@ function pathsMatch(path1: string, path2: string): boolean {
   return relativePath.length > 0 && absolutePath.endsWith(`/${relativePath}`);
 }
 
-export function useFileChanges(
-  conversationId: string,
-  sessionId: string,
-  adapterName: string
-) {
+export function useFileChanges(conversationId: string, sessionId: string, adapterName: string) {
   const [undoErrorMessage, setUndoErrorMessage] = useState<string | null>(null);
   const [statsByFilePath, setStatsByFilePath] = useState<Record<string, { additions: number; deletions: number }>>({});
   const [toolCallEvents, setToolCallEvents] = useState<ToolCallEvent[]>([]);
@@ -94,12 +85,12 @@ export function useFileChanges(
   useEffect(() => {
     const unsubChangesState = ACPBridge.onChangesState((e) => {
       if (e.detail.chatId !== conversationId) return;
-      
+
       const state = e.detail.state;
       const hasEdits = Boolean(state.hasPluginEdits);
-      
+
       if (initialHasPluginEditsRef.current === null) {
-          initialHasPluginEditsRef.current = hasEdits;
+        initialHasPluginEditsRef.current = hasEdits;
       }
 
       let newBaseIndex = state.baseToolCallIndex;
@@ -108,18 +99,20 @@ export function useFileChanges(
       // it means the first live tool call just triggered state creation.
       // We must update the baseToolCallIndex to bypass all previous replay events (from CLI etc).
       if (!initialHasPluginEditsRef.current && hasEdits && state.baseToolCallIndex === 0) {
-         const replayCount = toolCallEventsRef.current.filter(ev => ev.isReplay).length;
-         if (replayCount > 0) {
-            newBaseIndex = replayCount;
-            if (window.__keepAll && sessionId && adapterName) {
-               window.__keepAll(JSON.stringify({
-                 sessionId,
-                 adapterName,
-                 toolCallIndex: String(replayCount)
-               }));
-            }
-         }
-         initialHasPluginEditsRef.current = true;
+        const replayCount = toolCallEventsRef.current.filter((ev) => ev.isReplay).length;
+        if (replayCount > 0) {
+          newBaseIndex = replayCount;
+          if (window.__keepAll && sessionId && adapterName) {
+            window.__keepAll(
+              JSON.stringify({
+                sessionId,
+                adapterName,
+                toolCallIndex: String(replayCount)
+              })
+            );
+          }
+        }
+        initialHasPluginEditsRef.current = true;
       }
 
       setBaseToolCallIndex(newBaseIndex);
@@ -210,16 +203,18 @@ export function useFileChanges(
             additions: 0,
             deletions: 0,
             operations: [{ oldText: diff.oldText || '', newText: diff.newText }],
-            latestToolCallIndex: eventIndex,
+            latestToolCallIndex: eventIndex
           });
         }
       }
     }
 
     return Array.from(changesMap.values()).filter(
-      (fc) => !processedFileStates.some(
-        (processed) => pathsMatch(processed.filePath, fc.filePath) && processed.toolCallIndex >= fc.latestToolCallIndex
-      )
+      (fc) =>
+        !processedFileStates.some(
+          (processed) =>
+            pathsMatch(processed.filePath, fc.filePath) && processed.toolCallIndex >= fc.latestToolCallIndex
+        )
     );
   }, [toolCallEvents, baseToolCallIndex, processedFileStates]);
 
@@ -230,18 +225,20 @@ export function useFileChanges(
     }
 
     let cancelled = false;
-    ACPBridge.computeFileChangeStats(baseFileChanges.map((fc) => ({
-      filePath: fc.filePath,
-      status: fc.status,
-      operations: fc.operations,
-    })))
+    ACPBridge.computeFileChangeStats(
+      baseFileChanges.map((fc) => ({
+        filePath: fc.filePath,
+        status: fc.status,
+        operations: fc.operations
+      }))
+    )
       .then((result) => {
         if (cancelled) return;
         const nextStats: Record<string, { additions: number; deletions: number }> = {};
         result.files.forEach((file) => {
           nextStats[file.filePath] = {
             additions: file.additions,
-            deletions: file.deletions,
+            deletions: file.deletions
           };
         });
         setStatsByFilePath(nextStats);
@@ -261,11 +258,11 @@ export function useFileChanges(
   const fileChanges = useMemo<FileChangeSummary[]>(() => {
     return baseFileChanges.map((fc) => {
       const stats = statsByFilePath[fc.filePath];
-        return {
-          ...fc,
-          additions: stats?.additions ?? 0,
-          deletions: stats?.deletions ?? 0,
-        };
+      return {
+        ...fc,
+        additions: stats?.additions ?? 0,
+        deletions: stats?.deletions ?? 0
+      };
     });
   }, [baseFileChanges, statsByFilePath]);
   fileChangesRef.current = fileChanges;
@@ -280,7 +277,7 @@ export function useFileChanges(
     setToolCallEvents((prev) =>
       prev.map((event) => ({
         ...event,
-        diffs: event.diffs.filter((d) => !pathsArray.some(p => pathsMatch(p, d.path))),
+        diffs: event.diffs.filter((d) => !pathsArray.some((p) => pathsMatch(p, d.path)))
       }))
     );
   }, []);
@@ -293,59 +290,73 @@ export function useFileChanges(
     });
   }, []);
 
-  const handleUndoFile = useCallback((filePath: string) => {
-    const fc = fileChanges.find((f) => f.filePath === filePath);
-    if (!fc) return;
+  const handleUndoFile = useCallback(
+    (filePath: string) => {
+      const fc = fileChanges.find((f) => f.filePath === filePath);
+      if (!fc) return;
 
-    if (window.__undoFile) {
-      setPendingUndoFilePaths([fc.filePath]);
-      window.__undoFile(JSON.stringify({
-        chatId: conversationId,
-        filePath: fc.filePath,
-        status: fc.status,
-        operations: fc.operations,
-      }));
-    }
-  }, [conversationId, fileChanges]);
+      if (window.__undoFile) {
+        setPendingUndoFilePaths([fc.filePath]);
+        window.__undoFile(
+          JSON.stringify({
+            chatId: conversationId,
+            filePath: fc.filePath,
+            status: fc.status,
+            operations: fc.operations
+          })
+        );
+      }
+    },
+    [conversationId, fileChanges]
+  );
 
   const handleUndoAllFiles = useCallback(() => {
     if (window.__undoAllFiles) {
       setPendingUndoFilePaths(fileChanges.map((fc) => fc.filePath));
-      window.__undoAllFiles(JSON.stringify({
-        chatId: conversationId,
-        files: fileChanges.map((fc) => ({
-          filePath: fc.filePath,
-          status: fc.status,
-          operations: fc.operations,
-        })),
-      }));
+      window.__undoAllFiles(
+        JSON.stringify({
+          chatId: conversationId,
+          files: fileChanges.map((fc) => ({
+            filePath: fc.filePath,
+            status: fc.status,
+            operations: fc.operations
+          }))
+        })
+      );
     }
   }, [conversationId, fileChanges]);
 
-  const handleKeepFile = useCallback((filePath: string) => {
-    const fc = fileChanges.find((f) => f.filePath === filePath);
-    if (!fc) return;
+  const handleKeepFile = useCallback(
+    (filePath: string) => {
+      const fc = fileChanges.find((f) => f.filePath === filePath);
+      if (!fc) return;
 
-    if (window.__processFile && sessionId && adapterName) {
-      window.__processFile(JSON.stringify({
-        sessionId,
-        adapterName,
-        filePath,
-        toolCallIndex: String(fc.latestToolCallIndex),
-      }));
-      upsertProcessedFileState(filePath, fc.latestToolCallIndex);
-    }
-    // Remove this file's diffs from events so old ops won't be re-counted
-    removeDiffsForFiles(new Set([filePath]));
-  }, [sessionId, adapterName, fileChanges, removeDiffsForFiles, upsertProcessedFileState]);
+      if (window.__processFile && sessionId && adapterName) {
+        window.__processFile(
+          JSON.stringify({
+            sessionId,
+            adapterName,
+            filePath,
+            toolCallIndex: String(fc.latestToolCallIndex)
+          })
+        );
+        upsertProcessedFileState(filePath, fc.latestToolCallIndex);
+      }
+      // Remove this file's diffs from events so old ops won't be re-counted
+      removeDiffsForFiles(new Set([filePath]));
+    },
+    [sessionId, adapterName, fileChanges, removeDiffsForFiles, upsertProcessedFileState]
+  );
 
   const handleKeepAll = useCallback(() => {
     if (window.__keepAll && sessionId && adapterName) {
-      window.__keepAll(JSON.stringify({
-        sessionId,
-        adapterName,
-        toolCallIndex: String(toolCallEvents.length),
-      }));
+      window.__keepAll(
+        JSON.stringify({
+          sessionId,
+          adapterName,
+          toolCallIndex: String(toolCallEvents.length)
+        })
+      );
     }
     setBaseToolCallIndex(toolCallEvents.length);
     setProcessedFileStates([]);
@@ -368,21 +379,23 @@ export function useFileChanges(
         for (const filePath of successfulFilePaths) {
           const fc = fileChangesRef.current.find((file) => pathsMatch(file.filePath, filePath));
           if (!fc || !window.__processFile || !sessionId || !adapterName) continue;
-          window.__processFile(JSON.stringify({
-            sessionId,
-            adapterName,
-            filePath: fc.filePath,
-            toolCallIndex: String(fc.latestToolCallIndex),
-          }));
+          window.__processFile(
+            JSON.stringify({
+              sessionId,
+              adapterName,
+              filePath: fc.filePath,
+              toolCallIndex: String(fc.latestToolCallIndex)
+            })
+          );
           upsertProcessedFileState(fc.filePath, fc.latestToolCallIndex);
         }
         removeDiffsForFiles(undoPaths);
       }
 
       if (failedFileResults.length > 0) {
-        setUndoErrorMessage(failedFileResults
-          .map((fileResult) => `${fileResult.filePath}: ${fileResult.message}`)
-          .join('\n'));
+        setUndoErrorMessage(
+          failedFileResults.map((fileResult) => `${fileResult.filePath}: ${fileResult.message}`).join('\n')
+        );
       } else if (!e.detail.result.success) {
         setUndoErrorMessage(e.detail.result.message);
       }
@@ -405,6 +418,6 @@ export function useFileChanges(
     handleUndoFile,
     handleUndoAllFiles,
     handleKeepFile,
-    handleKeepAll,
+    handleKeepAll
   };
 }

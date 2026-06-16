@@ -29,18 +29,19 @@ export function DropdownSelect({
   className,
   buttonClassName,
   menuClassName,
-  optionClassName,
+  optionClassName
 }: DropdownSelectProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const selected = useMemo(
-    () => options.find((option) => option.value === value) ?? options[0],
-    [options, value]
-  );
+  const selected = useMemo(() => options.find((option) => option.value === value) ?? options[0], [options, value]);
   const selectedIndex = useMemo(
-    () => Math.max(0, options.findIndex((option) => option.value === selected?.value)),
+    () =>
+      Math.max(
+        0,
+        options.findIndex((option) => option.value === selected?.value)
+      ),
     [options, selected]
   );
 
@@ -75,9 +76,9 @@ export function DropdownSelect({
     <div ref={rootRef} className={cx('relative inline-flex min-w-[7.2em]', className)}>
       <button
         ref={buttonRef}
-        type="button"
+        type='button'
         disabled={disabled}
-        aria-haspopup="listbox"
+        aria-haspopup='listbox'
         aria-expanded={open}
         onClick={() => {
           if (disabled) return;
@@ -90,22 +91,23 @@ export function DropdownSelect({
           'focus:outline-none focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]',
           'disabled:cursor-default disabled:text-[var(--ide-Button-disabledText)]',
           'focus:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]',
-          open && 'border-[var(--ide-TextField-focusedBorderColor)] shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]',
+          open &&
+            'border-[var(--ide-TextField-focusedBorderColor)] shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]',
           buttonClassName
         )}
       >
-        <span className="truncate leading-[1.2]">{selected?.label ?? ''}</span>
-        <span className="flex h-[1.5rem] w-[1rem] items-center justify-center text-foreground-secondary">
+        <span className='truncate leading-[1.2]'>{selected?.label ?? ''}</span>
+        <span className='flex h-[1.5rem] w-[1rem] items-center justify-center text-foreground-secondary'>
           <ChevronDown size={14} />
         </span>
       </button>
 
       {open ? (
         <div
-          role="listbox"
+          role='listbox'
           className={cx(
             'absolute left-0 top-[calc(100%+0.35em)] z-20 min-w-full w-max overflow-hidden rounded-[4px] ' +
-            'border border-[var(--ide-Button-startBorderColor)] bg-background px-1.5 py-0.5',
+              'border border-[var(--ide-Button-startBorderColor)] bg-background px-1.5 py-0.5',
             menuClassName
           )}
         >
@@ -117,8 +119,8 @@ export function DropdownSelect({
                 ref={(node) => {
                   optionRefs.current[index] = node;
                 }}
-                type="button"
-                role="option"
+                type='button'
+                role='option'
                 aria-selected={isSelected}
                 onKeyDown={(event) => {
                   if (event.key === 'Escape') {

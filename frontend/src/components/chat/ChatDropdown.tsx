@@ -15,7 +15,7 @@ export default function ChatDropdown({
   showSubValueInTrigger = false,
   onChange,
   onSubChange,
-  className = '',
+  className = ''
 }: {
   value: string;
   subValue?: string;
@@ -86,32 +86,33 @@ export default function ChatDropdown({
       }
     }
   };
-  
+
   const selectedOption = options.find((option) => option.id === value);
   const selectedSub = selectedOption?.subOptions?.find((sub) => sub.id === subValue);
   const hoveredOption = options.find((option) => option.id === hoveredOptionId && option.subOptions?.length);
-  const renderIcon = (option?: DropdownOption, className: string = "w-4 h-4") => {
+  const renderIcon = (option?: DropdownOption, className: string = 'w-4 h-4') => {
     if (!option) return null;
     const icon = option.icon || option.iconPath;
     if (!icon) return null;
-    
+
     if (typeof icon === 'string') {
-      return <img src={icon} className={className} alt="" />;
+      return <img src={icon} className={className} alt='' />;
     }
     return <div className={className}>{icon}</div>;
   };
 
   const renderOptionText = (option: DropdownOption) => {
-    return <span className="flex-1 truncate">{option.label}</span>;
+    return <span className='flex-1 truncate'>{option.label}</span>;
   };
-  
-  const selectedText = (showSubValueInTrigger ? (selectedSub?.label || subValue) : undefined) || selectedOption?.label || placeholder;
+
+  const selectedText =
+    (showSubValueInTrigger ? selectedSub?.label || subValue : undefined) || selectedOption?.label || placeholder;
 
   useEffect(() => {
     const updateSize = () => {
       if (rootRef.current) {
         const rect = rootRef.current.getBoundingClientRect();
-        const tabHeight = 85; 
+        const tabHeight = 85;
         if (direction === 'up') {
           setDynamicMaxHeight(Math.max(rect.top - tabHeight - 10, 150));
         } else {
@@ -229,9 +230,16 @@ export default function ChatDropdown({
   };
 
   return (
-    <div ref={rootRef} className={`text-ide-small relative inline-flex min-w-0 items-stretch h-full overflow-visible 
-      ${minWidthClass} ${className}`}>
-      <button ref={triggerRef} type="button" disabled={disabled} onClick={handleTriggerClick}
+    <div
+      ref={rootRef}
+      className={`text-ide-small relative inline-flex min-w-0 items-stretch h-full overflow-visible 
+      ${minWidthClass} ${className}`}
+    >
+      <button
+        ref={triggerRef}
+        type='button'
+        disabled={disabled}
+        onClick={handleTriggerClick}
         onKeyDown={handleTriggerKeyDown}
         className={`inline-flex max-w-full appearance-none border-0 items-center 
           ${collapsed ? 'justify-center gap-0.5' : 'justify-start gap-1 min-w-0'} 
@@ -241,29 +249,46 @@ export default function ChatDropdown({
           focus-visible:text-foreground focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)] 
           ${open ? 'bg-hover' : 'hover:text-foreground hover:bg-hover'}`}
       >
-        {customTrigger ? (customTrigger) : (
+        {customTrigger ? (
+          customTrigger
+        ) : (
           <>
-            {renderIcon(selectedOption, "w-4 h-4 shrink-0 mr-0.5 opacity-80")}
-            {!collapsed && (<span className="min-w-0 max-w-[120px] truncate">
-              <Tooltip variant="minimal" content={selectedText} delay={300}>
-                {selectedText}
-              </Tooltip>
-            </span>)}
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-              className="flex-shrink-0 opacity-50 group-hover:opacity-100 transition-opacity"
+            {renderIcon(selectedOption, 'w-4 h-4 shrink-0 mr-0.5 opacity-80')}
+            {!collapsed && (
+              <span className='min-w-0 max-w-[120px] truncate'>
+                <Tooltip variant='minimal' content={selectedText} delay={300}>
+                  {selectedText}
+                </Tooltip>
+              </span>
+            )}
+            <svg
+              xmlns='http://www.w3.org/2000/svg'
+              width='12'
+              height='12'
+              viewBox='0 0 24 24'
+              fill='none'
+              stroke='currentColor'
+              strokeWidth='2.5'
+              strokeLinecap='round'
+              strokeLinejoin='round'
+              className='flex-shrink-0 opacity-50 group-hover:opacity-100 transition-opacity'
             >
-              <polyline points="6 9 12 15 18 9"></polyline>
+              <polyline points='6 9 12 15 18 9'></polyline>
             </svg>
           </>
         )}
       </button>
 
       {open && !disabled && (
-        <div ref={popupRef} className={`absolute mb-[4px] z-[100] w-max rounded-md border border-border bg-background px-1 py-0.5 
+        <div
+          ref={popupRef}
+          className={`absolute mb-[4px] z-[100] w-max rounded-md border border-border bg-background px-1 py-0.5 
           animate-in fade-in duration-75 ${direction === 'up' ? 'bottom-full mb-2 left-0' : 'top-full mt-2 left-0'}`}
         >
-          <div className="flex flex-col overflow-y-auto" style={{ maxHeight: dynamicMaxHeight }} onScroll={() => {
+          <div
+            className='flex flex-col overflow-y-auto'
+            style={{ maxHeight: dynamicMaxHeight }}
+            onScroll={() => {
               if (hoveredOptionId && popupRef.current) {
                 const el = popupRef.current.querySelector(`[data-option-id="${hoveredOptionId}"]`);
                 if (el) {
@@ -273,7 +298,10 @@ export default function ChatDropdown({
             }}
           >
             {options.map((option, index) => (
-              <div key={option.id} data-option-id={option.id} className="relative"
+              <div
+                key={option.id}
+                data-option-id={option.id}
+                className='relative'
                 onMouseEnter={(e) => {
                   setHoveredOptionId(option.id);
                   if (option.subOptions && popupRef.current) {
@@ -287,11 +315,14 @@ export default function ChatDropdown({
                       ref={(element) => {
                         optionButtonRefs.current[index] = element;
                       }}
-                      type="button"
+                      type='button'
                       onFocus={(e) => {
                         setHoveredOptionId(option.id);
                         if (option.subOptions && popupRef.current) {
-                          applySubMenuPosition(e.currentTarget.closest('[data-option-id]') as Element, popupRef.current);
+                          applySubMenuPosition(
+                            e.currentTarget.closest('[data-option-id]') as Element,
+                            popupRef.current
+                          );
                         }
                       }}
                       onKeyDown={(event) => handleMainOptionKeyDown(event, index)}
@@ -305,45 +336,62 @@ export default function ChatDropdown({
                       className={`flex items-center w-full my-0.5 px-2 min-h-8 text-left transition-colors 
                         rounded min-w-[70px] outline-none 
                         focus-visible:shadow-[inset_0_0_0_1px_var(--ide-Button-default-focusColor)] 
-                        ${option.id === value && !subValue ? 'bg-accent text-accent-foreground' : 'text-foreground hover:bg-accent hover:text-accent-foreground'
-                      }`}
+                        ${
+                          option.id === value && !subValue
+                            ? 'bg-accent text-accent-foreground'
+                            : 'text-foreground hover:bg-accent hover:text-accent-foreground'
+                        }`}
                     >
-                      {renderIcon(option, "w-4 h-4 mr-2 flex-shrink-0")}
+                      {renderIcon(option, 'w-4 h-4 mr-2 flex-shrink-0')}
                       {renderOptionText(option)}
                       {option.subOptions && (
-                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
-                             stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                             className="opacity-40 ml-4">
-                          <polyline points="9 18 15 12 9 6"></polyline>
+                        <svg
+                          xmlns='http://www.w3.org/2000/svg'
+                          width='12'
+                          height='12'
+                          viewBox='0 0 24 24'
+                          fill='none'
+                          stroke='currentColor'
+                          strokeWidth='2'
+                          strokeLinecap='round'
+                          strokeLinejoin='round'
+                          className='opacity-40 ml-4'
+                        >
+                          <polyline points='9 18 15 12 9 6'></polyline>
                         </svg>
                       )}
                     </button>
                   );
 
-                  const hasUniqueDescription = option.description && option.description !== option.label && !option.subOptions;
+                  const hasUniqueDescription =
+                    option.description && option.description !== option.label && !option.subOptions;
 
                   return hasUniqueDescription ? (
-                    <Tooltip variant="default" content={option.description} className="w-full flex" delay={300}>
+                    <Tooltip variant='default' content={option.description} className='w-full flex' delay={300}>
                       {btn}
                     </Tooltip>
-                  ) : (<div className="w-full flex">{btn}</div>);
+                  ) : (
+                    <div className='w-full flex'>{btn}</div>
+                  );
                 })()}
               </div>
             ))}
           </div>
 
           {hoveredOption?.subOptions && (
-            <div className={`absolute mb-[4px] left-full z-[101] ml-1 w-max rounded-md border border-border 
+            <div
+              className={`absolute mb-[4px] left-full z-[101] ml-1 w-max rounded-md border border-border 
               bg-background px-1 py-0.5 animate-in fade-in slide-in-from-left-1 duration-75`}
-              style={{[subMenuPosition.prop]: subMenuPosition.offset}}
+              style={{ [subMenuPosition.prop]: subMenuPosition.offset }}
             >
-              <div className="overflow-y-auto" style={{ maxHeight: subMenuPosition.maxHeight }}>
+              <div className='overflow-y-auto' style={{ maxHeight: subMenuPosition.maxHeight }}>
                 {hoveredOption.subOptions.map((sub, index) => {
                   const btn = (
-                    <button ref={(element) => {
+                    <button
+                      ref={(element) => {
                         subOptionButtonRefs.current[index] = element;
                       }}
-                      type="button"
+                      type='button'
                       onKeyDown={(event) => handleSubOptionKeyDown(event, index)}
                       onClick={() => {
                         onChange(hoveredOption.id);
@@ -352,22 +400,32 @@ export default function ChatDropdown({
                         setHoveredOptionId(null);
                       }}
                       className={`flex items-center w-full my-0.5 px-2 min-h-8 text-left transition-colors rounded outline-none focus-visible:shadow-[inset_0_0_0_1px_var(--ide-Button-default-focusColor)] ${
-                        hoveredOption.id === value && sub.id === subValue ? 'bg-accent text-accent-foreground' : 'text-foreground hover:bg-accent hover:text-accent-foreground'
+                        hoveredOption.id === value && sub.id === subValue
+                          ? 'bg-accent text-accent-foreground'
+                          : 'text-foreground hover:bg-accent hover:text-accent-foreground'
                       }`}
                     >
-                      {renderIcon(sub, "w-4 h-4 mr-2 flex-shrink-0")}
+                      {renderIcon(sub, 'w-4 h-4 mr-2 flex-shrink-0')}
                       {renderOptionText(sub)}
                     </button>
                   );
-                  
+
                   const hasUniqueDescription = sub.description && sub.description !== sub.label;
 
                   return hasUniqueDescription ? (
-                    <Tooltip key={sub.id} variant="default" content={sub.description} className="w-full flex" delay={300}>
+                    <Tooltip
+                      key={sub.id}
+                      variant='default'
+                      content={sub.description}
+                      className='w-full flex'
+                      delay={300}
+                    >
                       {btn}
                     </Tooltip>
                   ) : (
-                    <div key={sub.id} className="w-full flex">{btn}</div>
+                    <div key={sub.id} className='w-full flex'>
+                      {btn}
+                    </div>
                   );
                 })}
               </div>

@@ -5,9 +5,16 @@ import {
   ExploringBlock,
   ToolCallBlock,
   ToolCallEntry,
-  ContentChunk,
+  ContentChunk
 } from '../../types/chat';
-import { safeParseJson, buildToolCallEntry, extractResultTexts, appendToolOutput, replaceToolOutput, extractToolCallDiffEntries } from '../../utils/toolCallUtils';
+import {
+  safeParseJson,
+  buildToolCallEntry,
+  extractResultTexts,
+  appendToolOutput,
+  replaceToolOutput,
+  extractToolCallDiffEntries
+} from '../../utils/toolCallUtils';
 import { nextMessageId } from './messageBasics';
 import {
   closeStreamingExploring,
@@ -15,7 +22,7 @@ import {
   getBlocks,
   isExploringChunk,
   setBlocks,
-  stripTransferredContextForDisplay,
+  stripTransferredContextForDisplay
 } from './chunkBlockHelpers';
 import { createToolCallBlocks, isExecuteToolKind, matchesToolCallId } from './toolCallBlocks';
 
@@ -42,7 +49,7 @@ function applyPromptDone(messages: Message[], chunk: ContentChunk): Message[] {
       contextTokensUsed: chunk.contextTokensUsed ?? message.contextTokensUsed,
       contextWindowSize: chunk.contextWindowSize ?? message.contextWindowSize,
       contentBlocks: failPendingToolStatuses(message.contentBlocks),
-      metaComplete: true,
+      metaComplete: true
     };
     next[i] = finalizedMessage;
     return next;
@@ -56,9 +63,10 @@ function applyOneChunk(messages: Message[], chunk: ContentChunk): Message[] {
     return applyPromptDone(messages, chunk);
   }
 
-  const displayText = (chunk.type === 'text' || chunk.type === 'thinking')
-    ? stripTransferredContextForDisplay(chunk.text || '', chunk.role, chunk.isReplay)
-    : chunk.text;
+  const displayText =
+    chunk.type === 'text' || chunk.type === 'thinking'
+      ? stripTransferredContextForDisplay(chunk.text || '', chunk.role, chunk.isReplay)
+      : chunk.text;
 
   // Skip empty text/thinking chunks
   if ((chunk.type === 'text' || chunk.type === 'thinking') && !displayText) return messages;
@@ -72,7 +80,7 @@ function applyOneChunk(messages: Message[], chunk: ContentChunk): Message[] {
     const newMsg: Message = {
       id: nextMessageId(chunk.role),
       role: chunk.role,
-      content: chunk.type === 'text' ? (displayText || '') : '',
+      content: chunk.type === 'text' ? displayText || '' : '',
       timestamp: chunk.isReplay ? undefined : Date.now()
     };
     if (chunk.role === 'assistant') {
@@ -127,12 +135,14 @@ function applyOneChunk(messages: Message[], chunk: ContentChunk): Message[] {
         type: 'exploring',
         isStreaming: !chunk.isReplay,
         isReplay: chunk.isReplay,
-        entries: [{
-          toolCallId: nextThinkingId(),
-          kind: 'thinking',
-          text: displayText || '',
-          rawJson: ''
-        }]
+        entries: [
+          {
+            toolCallId: nextThinkingId(),
+            kind: 'thinking',
+            text: displayText || '',
+            rawJson: ''
+          }
+        ]
       });
     }
   } else if (chunk.type === 'image') {
@@ -151,7 +161,10 @@ function applyOneChunk(messages: Message[], chunk: ContentChunk): Message[] {
   }
 
   // Final rebuild
-  const txt = blocks.filter((b): b is TextBlock => b.type === 'text').map(b => b.text).join('');
+  const txt = blocks
+    .filter((b): b is TextBlock => b.type === 'text')
+    .map((b) => b.text)
+    .join('');
   const finalMsg = setBlocks({ ...lastMsg, content: txt }, blocks);
   newMessages[newMessages.length - 1] = finalMsg;
   return newMessages;
@@ -160,17 +173,21 @@ function applyOneChunk(messages: Message[], chunk: ContentChunk): Message[] {
 function buildBlocks(chunk: ContentChunk): RichContentBlock[] {
   switch (chunk.type) {
     case 'thinking':
-      return [{
-        type: 'exploring',
-        isStreaming: !chunk.isReplay,
-        isReplay: chunk.isReplay,
-        entries: [{
-          toolCallId: nextThinkingId(),
-          kind: 'thinking',
-          text: chunk.text || '',
-          rawJson: ''
-        }]
-      }];
+      return [
+        {
+          type: 'exploring',
+          isStreaming: !chunk.isReplay,
+          isReplay: chunk.isReplay,
+          entries: [
+            {
+              toolCallId: nextThinkingId(),
+              kind: 'thinking',
+              text: chunk.text || '',
+              rawJson: ''
+            }
+          ]
+        }
+      ];
     case 'image':
       return [{ type: 'image', data: chunk.data!, mimeType: chunk.mimeType! } as any];
     case 'audio':
@@ -178,13 +195,15 @@ function buildBlocks(chunk: ContentChunk): RichContentBlock[] {
     case 'video':
       return [{ type: 'video', data: chunk.data!, mimeType: chunk.mimeType! } as any];
     case 'file':
-      return [{ 
-        type: 'file', 
-        name: chunk.name || 'file', 
-        mimeType: chunk.mimeType || 'application/octet-stream',
-        data: chunk.data,
-        path: chunk.path
-      } as any];
+      return [
+        {
+          type: 'file',
+          name: chunk.name || 'file',
+          mimeType: chunk.mimeType || 'application/octet-stream',
+          data: chunk.data,
+          path: chunk.path
+        } as any
+      ];
     case 'tool_call': {
       const entry = buildToolCallEntry(chunk);
       const json = safeParseJson(chunk.toolRawJson);
@@ -195,7 +214,14 @@ function buildBlocks(chunk: ContentChunk): RichContentBlock[] {
       if (!isExploringChunk(chunk)) {
         return createToolCallBlocks(entry, chunk.isReplay);
       }
-      return [{ type: 'exploring', isStreaming: !chunk.isReplay, isReplay: chunk.isReplay, entries: [entry] } as ExploringBlock];
+      return [
+        {
+          type: 'exploring',
+          isStreaming: !chunk.isReplay,
+          isReplay: chunk.isReplay,
+          entries: [entry]
+        } as ExploringBlock
+      ];
     }
     case 'plan':
       return [{ type: 'plan', entries: chunk.planEntries || [], isReplay: chunk.isReplay }];
@@ -217,10 +243,14 @@ function handleToolCall(blocks: RichContentBlock[], lastBlock: RichContentBlock 
     closeStreamingExploring(blocks);
     const replacements = createToolCallBlocks(entry, chunk.isReplay);
     const matchingIndexes = blocks
-      .map((block, index) => block.type === 'tool_call' && matchesToolCallId((block as ToolCallBlock).entry.toolCallId, entry.toolCallId) ? index : -1)
-      .filter(index => index >= 0);
+      .map((block, index) =>
+        block.type === 'tool_call' && matchesToolCallId((block as ToolCallBlock).entry.toolCallId, entry.toolCallId)
+          ? index
+          : -1
+      )
+      .filter((index) => index >= 0);
     if (matchingIndexes.length > 0) {
-      const existingBlocks = matchingIndexes.map(index => blocks[index] as ToolCallBlock);
+      const existingBlocks = matchingIndexes.map((index) => blocks[index] as ToolCallBlock);
       const mergedBlocks = replacements.map((replacement, index) => {
         const existing = existingBlocks[index]?.entry;
         if (!existing) return replacement;
@@ -247,7 +277,7 @@ function handleToolCall(blocks: RichContentBlock[], lastBlock: RichContentBlock 
     // Minor tool - group into exploring block
     if (lastBlock && lastBlock.type === 'exploring' && ((lastBlock as ExploringBlock).isStreaming || chunk.isReplay)) {
       const prevEntries = [...(lastBlock as ExploringBlock).entries];
-      const eIdx = prevEntries.findIndex(e => e.toolCallId === entry.toolCallId);
+      const eIdx = prevEntries.findIndex((e) => e.toolCallId === entry.toolCallId);
       if (eIdx >= 0) {
         prevEntries[eIdx] = entry;
       } else {
@@ -256,7 +286,12 @@ function handleToolCall(blocks: RichContentBlock[], lastBlock: RichContentBlock 
       blocks[blocks.length - 1] = { ...lastBlock, entries: prevEntries } as ExploringBlock;
     } else {
       closeStreamingExploring(blocks);
-      blocks.push({ type: 'exploring', isStreaming: !chunk.isReplay, isReplay: chunk.isReplay, entries: [entry] } as ExploringBlock);
+      blocks.push({
+        type: 'exploring',
+        isStreaming: !chunk.isReplay,
+        isReplay: chunk.isReplay,
+        entries: [entry]
+      } as ExploringBlock);
     }
   }
 }
@@ -276,8 +311,10 @@ function handleToolCallUpdate(blocks: RichContentBlock[], chunk: ContentChunk) {
 
     if (b.type === 'tool_call' && matchesToolCallId(b.entry.toolCallId, tid)) {
       const matchingIndexes = blocks
-        .map((block, index) => block.type === 'tool_call' && matchesToolCallId((block as ToolCallBlock).entry.toolCallId, tid) ? index : -1)
-        .filter(index => index >= 0);
+        .map((block, index) =>
+          block.type === 'tool_call' && matchesToolCallId((block as ToolCallBlock).entry.toolCallId, tid) ? index : -1
+        )
+        .filter((index) => index >= 0);
 
       const initialJson = safeParseJson(b.entry.rawJson);
       const diffEntries = extractToolCallDiffEntries(json, initialJson.rawInput);
@@ -285,8 +322,11 @@ function handleToolCallUpdate(blocks: RichContentBlock[], chunk: ContentChunk) {
       if (diffEntries.length > 0) {
         nextContent = diffEntries;
       } else if (incomingKind === 'edit') {
-        const hasIncomingDiffContent = Array.isArray(nextContent)
-          && nextContent.some((item: any) => item?.type === 'diff' || (item?.path !== undefined && item?.newText !== undefined));
+        const hasIncomingDiffContent =
+          Array.isArray(nextContent) &&
+          nextContent.some(
+            (item: any) => item?.type === 'diff' || (item?.path !== undefined && item?.newText !== undefined)
+          );
         if (!hasIncomingDiffContent) {
           nextContent = b.entry.content;
         }
@@ -323,7 +363,7 @@ function handleToolCallUpdate(blocks: RichContentBlock[], chunk: ContentChunk) {
         updatedBaseEntry.result = merged.text;
       }
       const replacements = createToolCallBlocks(updatedBaseEntry, chunk.isReplay);
-      const existingBlocks = matchingIndexes.map(index => blocks[index] as ToolCallBlock);
+      const existingBlocks = matchingIndexes.map((index) => blocks[index] as ToolCallBlock);
       const mergedBlocks = replacements.map((replacement, index) => {
         const existing = existingBlocks[index]?.entry;
         if (!existing) return replacement;
@@ -342,7 +382,7 @@ function handleToolCallUpdate(blocks: RichContentBlock[], chunk: ContentChunk) {
 
     if (b.type === 'exploring') {
       const exp = b as ExploringBlock;
-      const idx = exp.entries.findIndex(e => e.toolCallId === tid);
+      const idx = exp.entries.findIndex((e) => e.toolCallId === tid);
       if (idx >= 0) {
         const e = { ...exp.entries[idx] };
         if (nextStatus) e.status = nextStatus;
@@ -393,7 +433,7 @@ function handleToolCallUpdate(blocks: RichContentBlock[], chunk: ContentChunk) {
     const merged = replaceToolOutput(resultText, undefined, entry.kind || json.kind);
     entry.result = merged.text;
   }
-  if (entry.kind === 'edit'&& (!Array.isArray(entry.content) || entry.content.length === 0) && !entry.result) {
+  if (entry.kind === 'edit' && (!Array.isArray(entry.content) || entry.content.length === 0) && !entry.result) {
     return;
   }
   if (!isExploringChunk(chunk)) {
@@ -407,7 +447,12 @@ function handleToolCallUpdate(blocks: RichContentBlock[], chunk: ContentChunk) {
       blocks[blocks.length - 1] = { ...lastBlock, entries: prevEntries } as ExploringBlock;
     } else {
       closeStreamingExploring(blocks);
-      blocks.push({ type: 'exploring', isStreaming: !chunk.isReplay, isReplay: chunk.isReplay, entries: [entry] } as ExploringBlock);
+      blocks.push({
+        type: 'exploring',
+        isStreaming: !chunk.isReplay,
+        isReplay: chunk.isReplay,
+        entries: [entry]
+      } as ExploringBlock);
     }
   }
 }
@@ -433,7 +478,7 @@ export function closeAllStreamingThinking(messages: Message[]): Message[] {
   if (lastMsg.role !== 'assistant' || !lastMsg.contentBlocks) return messages;
 
   let changed = false;
-  const blocks = lastMsg.contentBlocks.map(block => {
+  const blocks = lastMsg.contentBlocks.map((block) => {
     if (block.type === 'exploring' && (block as ExploringBlock).isStreaming) {
       changed = true;
       return { ...block, isStreaming: false };
@@ -442,8 +487,5 @@ export function closeAllStreamingThinking(messages: Message[]): Message[] {
   });
 
   if (!changed) return messages;
-  return [
-    ...messages.slice(0, -1),
-    { ...lastMsg, contentBlocks: blocks }
-  ];
+  return [...messages.slice(0, -1), { ...lastMsg, contentBlocks: blocks }];
 }

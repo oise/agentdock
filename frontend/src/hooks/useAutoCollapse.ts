@@ -8,7 +8,7 @@ import { useState } from 'react';
 export function useAutoCollapse() {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const toggle = () => setIsExpanded(v => !v);
+  const toggle = () => setIsExpanded((v) => !v);
 
   return { isExpanded, toggle };
 }

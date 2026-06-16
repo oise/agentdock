@@ -1,9 +1,4 @@
-import {
-  $createParagraphNode,
-  $createTextNode,
-  $getRoot,
-  LexicalEditor,
-} from 'lexical';
+import { $createParagraphNode, $createTextNode, $getRoot, LexicalEditor } from 'lexical';
 import { AvailableCommand } from '../../../types/chat';
 import { PromptLibraryItem } from '../../../types/promptLibrary';
 
@@ -21,7 +16,7 @@ export function buildAgentSlashItems(commands: AvailableCommand[]): SlashCommand
     name: command.name,
     description: command.description,
     insertText: `/${command.name} `,
-    displayPrefix: '/',
+    displayPrefix: '/'
   }));
 }
 
@@ -33,7 +28,7 @@ export function buildPromptLibrarySlashItems(prompts: PromptLibraryItem[]): Slas
       name: prompt.name.trim(),
       description: prompt.prompt.trim(),
       insertText: prompt.prompt,
-      displayPrefix: '',
+      displayPrefix: ''
     }));
 }
 
@@ -78,16 +73,13 @@ export function calculateSlashMenuLayout(
 
   return {
     width,
-    maxHeight: preferAbove ? availableAbove : availableBelow,
+    maxHeight: preferAbove ? availableAbove : availableBelow
   };
 }
 
 export function computeViewportTopInset(rootElement: HTMLDivElement): number {
   const rootRect = rootElement.getBoundingClientRect();
-  const elementsAtTop = document.elementsFromPoint(
-    Math.max(16, rootRect.left + 16),
-    16
-  );
+  const elementsAtTop = document.elementsFromPoint(Math.max(16, rootRect.left + 16), 16);
   const bottomEdge = elementsAtTop.reduce((max, element) => {
     const rect = element.getBoundingClientRect();
     return rect.bottom > 0 ? Math.max(max, rect.bottom) : max;

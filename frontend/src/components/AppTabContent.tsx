@@ -44,7 +44,7 @@ export function AppTabContent({
   onAgentChangeRequest,
   onForkRequest,
   onHandoffConsumed,
-  onSessionStateChange,
+  onSessionStateChange
 }: AppTabContentProps) {
   // Singleton tabs (non-chat) mount lazily on first activation to avoid eager
   // network requests and polling from tabs the user has not opened yet.
@@ -83,9 +83,7 @@ export function AppTabContent({
         <>
           {tab.type === 'management' && <AgentManagementView initialAgents={availableAgents} isActive={isActive} />}
           {tab.type === 'design' && <DesignSystemView />}
-          {tab.type === 'history' && (
-            <HistoryPanel availableAgents={availableAgents} onOpenSession={onOpenHistory} />
-          )}
+          {tab.type === 'history' && <HistoryPanel availableAgents={availableAgents} onOpenSession={onOpenHistory} />}
           {tab.type === 'mcp' && <McpServersView />}
           {tab.type === 'prompt-library' && <PromptLibraryView />}
           {tab.type === 'system-instructions' && <SystemInstructionsView />}

@@ -28,40 +28,52 @@ export function AttachmentItem({ att, onRemove, onImageClick }: AttachmentItemPr
   };
 
   return (
-    <div className={`group relative min-h-[22px] inline-flex min-w-0 max-w-[200px] flex-shrink-0 items-center 
+    <div
+      className={`group relative min-h-[22px] inline-flex min-w-0 max-w-[200px] flex-shrink-0 items-center 
       gap-1.5 rounded-[6px] border border-[var(--ide-Button-startBorderColor)] bg-background px-2 py-1 mb-1 mx-0.5 transition-all 
       focus-within:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]`}
     >
-      <button type="button" onClick={onClick}
+      <button
+        type='button'
+        onClick={onClick}
         className={`flex min-w-0 items-center gap-1.5 overflow-hidden rounded-sm text-left outline-none
           transition-colors focus-visible:text-foreground ${isClickable ? 'cursor-pointer' : 'cursor-default'}`}
       >
-        <div className="flex-shrink-0 w-3 h-3 flex items-center justify-center overflow-hidden">
+        <div className='flex-shrink-0 w-3 h-3 flex items-center justify-center overflow-hidden'>
           {isImage ? (
-            <img src={`data:${att.mimeType};base64,${att.data}`} className="w-full h-full object-cover rounded-[1px]"/>
+            <img src={`data:${att.mimeType};base64,${att.data}`} className='w-full h-full object-cover rounded-[1px]' />
           ) : (
-            <FileIcon mimeType={att.mimeType}/>
+            <FileIcon mimeType={att.mimeType} />
           )}
         </div>
 
-        <span className="text-xs font-medium text-foreground truncate relative top-[1px]">{att.name}</span>
+        <span className='text-xs font-medium text-foreground truncate relative top-[1px]'>{att.name}</span>
       </button>
 
       {onRemove && (
         <button
-          type="button"
+          type='button'
           onClick={(e) => {
             e.stopPropagation();
             onRemove(att.id);
           }}
-          className="ml-0.5 rounded-[4px] p-0.5 text-foreground transition-all hover:bg-background-secondary focus:outline-none focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]"
-          title="Remove"
+          className='ml-0.5 rounded-[4px] p-0.5 text-foreground transition-all hover:bg-background-secondary focus:outline-none focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]'
+          title='Remove'
           aria-label={`Remove attachment ${att.name}`}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none"
-               stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
+          <svg
+            xmlns='http://www.w3.org/2000/svg'
+            width='10'
+            height='10'
+            viewBox='0 0 24 24'
+            fill='none'
+            stroke='currentColor'
+            strokeWidth='3'
+            strokeLinecap='round'
+            strokeLinejoin='round'
+          >
+            <line x1='18' y1='6' x2='6' y2='18'></line>
+            <line x1='6' y1='6' x2='18' y2='18'></line>
           </svg>
         </button>
       )}
@@ -69,39 +81,83 @@ export function AttachmentItem({ att, onRemove, onImageClick }: AttachmentItemPr
   );
 }
 
-function FileIcon({mimeType}: { mimeType: string }) {
+function FileIcon({ mimeType }: { mimeType: string }) {
   if (mimeType.startsWith('audio/')) {
-    return <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                className="text-accent">
-      <path d="M9 18V5l12-2v13"></path>
-      <circle cx="6" cy="18" r="3"></circle>
-      <circle cx="18" cy="16" r="3"></circle>
-    </svg>;
+    return (
+      <svg
+        xmlns='http://www.w3.org/2000/svg'
+        width='10'
+        height='10'
+        viewBox='0 0 24 24'
+        fill='none'
+        stroke='currentColor'
+        strokeWidth='2.5'
+        strokeLinecap='round'
+        strokeLinejoin='round'
+        className='text-accent'
+      >
+        <path d='M9 18V5l12-2v13'></path>
+        <circle cx='6' cy='18' r='3'></circle>
+        <circle cx='18' cy='16' r='3'></circle>
+      </svg>
+    );
   }
   if (mimeType.startsWith('video/')) {
-    return <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                className="text-accent">
-      <polygon points="23 7 16 12 23 17 23 7"></polygon>
-      <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
-    </svg>;
+    return (
+      <svg
+        xmlns='http://www.w3.org/2000/svg'
+        width='10'
+        height='10'
+        viewBox='0 0 24 24'
+        fill='none'
+        stroke='currentColor'
+        strokeWidth='2.5'
+        strokeLinecap='round'
+        strokeLinejoin='round'
+        className='text-accent'
+      >
+        <polygon points='23 7 16 12 23 17 23 7'></polygon>
+        <rect x='1' y='5' width='15' height='14' rx='2' ry='2'></rect>
+      </svg>
+    );
   }
   if (mimeType === 'application/pdf') {
-    return <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                className="text-error">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-      <polyline points="14 2 14 8 20 8"></polyline>
-      <line x1="16" y1="13" x2="8" y2="13"></line>
-      <line x1="16" y1="17" x2="8" y2="17"></line>
-      <polyline points="10 9 9 9 8 9"></polyline>
-    </svg>;
+    return (
+      <svg
+        xmlns='http://www.w3.org/2000/svg'
+        width='10'
+        height='10'
+        viewBox='0 0 24 24'
+        fill='none'
+        stroke='currentColor'
+        strokeWidth='2.5'
+        strokeLinecap='round'
+        strokeLinejoin='round'
+        className='text-error'
+      >
+        <path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'></path>
+        <polyline points='14 2 14 8 20 8'></polyline>
+        <line x1='16' y1='13' x2='8' y2='13'></line>
+        <line x1='16' y1='17' x2='8' y2='17'></line>
+        <polyline points='10 9 9 9 8 9'></polyline>
+      </svg>
+    );
   }
-  return <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-              className="text-foreground">
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-    <polyline points="14 2 14 8 20 8"></polyline>
-  </svg>;
+  return (
+    <svg
+      xmlns='http://www.w3.org/2000/svg'
+      width='10'
+      height='10'
+      viewBox='0 0 24 24'
+      fill='none'
+      stroke='currentColor'
+      strokeWidth='2.5'
+      strokeLinecap='round'
+      strokeLinejoin='round'
+      className='text-foreground'
+    >
+      <path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'></path>
+      <polyline points='14 2 14 8 20 8'></polyline>
+    </svg>
+  );
 }

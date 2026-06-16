@@ -48,7 +48,7 @@ interface MessageListProps {
   scrollToBottomOnInitialMessages?: boolean;
 }
 
-function MessageList({ 
+function MessageList({
   messages,
   onImageClick,
   onAtBottomChange,
@@ -113,7 +113,7 @@ function MessageList({
     }
 
     const SYMBOL_LIMIT = 15000;
-    
+
     // Safely estimate block size without counting base64 media
     const getBlockSize = (block: RichContentBlock): number => {
       if (!block) return 0;
@@ -135,8 +135,8 @@ function MessageList({
         return tc.entry ? JSON.stringify(tc.entry).length : 0;
       }
       if (block.type === 'plan') {
-         const plan = block as PlanBlock;
-         return plan.entries ? JSON.stringify(plan.entries).length : 0;
+        const plan = block as PlanBlock;
+        return plan.entries ? JSON.stringify(plan.entries).length : 0;
       }
       return 0;
     };
@@ -152,7 +152,7 @@ function MessageList({
 
     let totalSize = 0;
     let cutoffIndex = 0;
-    
+
     // Go backwards from newest to oldest
     for (let i = messages.length - 1; i >= 0; i--) {
       // Always show at least the last 6 messages (ensures last 3 full interactions are visible)
@@ -160,7 +160,7 @@ function MessageList({
         totalSize += getMessageSize(messages[i]);
         continue;
       }
-      
+
       const size = getMessageSize(messages[i]);
       if (totalSize + size > SYMBOL_LIMIT) {
         cutoffIndex = i + 1;
@@ -174,7 +174,7 @@ function MessageList({
     return {
       visibleMessages: messages.slice(effectiveCutoffIndex),
       hiddenCount: effectiveCutoffIndex,
-      hiddenPromptCount: countUserMessages(messages, effectiveCutoffIndex),
+      hiddenPromptCount: countUserMessages(messages, effectiveCutoffIndex)
     };
   }, [messages, revealedPromptCount]);
 
@@ -318,12 +318,10 @@ function MessageList({
   }, [messages, isSending, isHistoryReplaying]);
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 relative">
+    <div className='flex-1 flex flex-col min-h-0 relative'>
       {isHistoryReplaying && messages.length === 0 && status === 'initializing' && (
-        <div className="absolute inset-0 flex items-center justify-center z-10">
-          <div className="text-foreground-secondary text-sm">
-            {`Connect to ${agentName || 'agent'}...`}
-          </div>
+        <div className='absolute inset-0 flex items-center justify-center z-10'>
+          <div className='text-foreground-secondary text-sm'>{`Connect to ${agentName || 'agent'}...`}</div>
         </div>
       )}
       <div
@@ -334,67 +332,65 @@ function MessageList({
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onKeyDown={handleKeyDown}
-        className="flex-1 min-h-0 overflow-y-auto px-6 py-6 space-y-6 opacity-100 transition-opacity duration-300"
+        className='flex-1 min-h-0 overflow-y-auto px-6 py-6 space-y-6 opacity-100 transition-opacity duration-300'
       >
-      <div className="mx-auto w-full max-w-[1200px] flex flex-col">
-        
-        {hiddenCount > 0 && !isHistoryReplaying && (
-          <div className="flex justify-center mb-12">
-            <Button onClick={handleExpand} variant="secondary">
-              Show {Math.min(hiddenPromptCount, EARLIER_PROMPTS_BATCH_SIZE)} earlier message{Math.min(hiddenPromptCount, EARLIER_PROMPTS_BATCH_SIZE) > 1 ? 's' : ''}
-            </Button>
-          </div>
-        )}
+        <div className='mx-auto w-full max-w-[1200px] flex flex-col'>
+          {hiddenCount > 0 && !isHistoryReplaying && (
+            <div className='flex justify-center mb-12'>
+              <Button onClick={handleExpand} variant='secondary'>
+                Show {Math.min(hiddenPromptCount, EARLIER_PROMPTS_BATCH_SIZE)} earlier message
+                {Math.min(hiddenPromptCount, EARLIER_PROMPTS_BATCH_SIZE) > 1 ? 's' : ''}
+              </Button>
+            </div>
+          )}
 
-        {visibleMessages.map((message, index) => {
-          const isAssistant = message.role === 'assistant';
-          const isLast = index === visibleMessages.length - 1;
+          {visibleMessages.map((message, index) => {
+            const isAssistant = message.role === 'assistant';
+            const isLast = index === visibleMessages.length - 1;
 
-          if (isAssistant) {
-            const resolvedAgentIconPath = message.agentId
-              ? availableAgents.find((agent) => agent.id === message.agentId)?.iconPath
-              : undefined;
+            if (isAssistant) {
+              const resolvedAgentIconPath = message.agentId
+                ? availableAgents.find((agent) => agent.id === message.agentId)?.iconPath
+                : undefined;
+
+              return (
+                <AssistantMessage
+                  key={message.id}
+                  message={message}
+                  onImageClick={onImageClick}
+                  showBorder={!isLast}
+                  agentIconPath={resolvedAgentIconPath}
+                  isActivePrompt={Boolean(isSending) && isLast}
+                  onFork={!isSending && onForkFromMessage ? () => onForkFromMessage(message.id) : undefined}
+                />
+              );
+            }
 
             return (
-              <AssistantMessage 
-                key={message.id} 
-                message={message} 
-                onImageClick={onImageClick} 
-                showBorder={!isLast}
-                agentIconPath={resolvedAgentIconPath}
-                isActivePrompt={Boolean(isSending) && isLast}
-                onFork={!isSending && onForkFromMessage ? () => onForkFromMessage(message.id) : undefined}
+              <UserMessage
+                key={message.id}
+                message={message}
+                onImageClick={onImageClick}
+                promptNumber={userPromptNumberById.get(message.id)}
               />
             );
-          }
+          })}
 
-          return (
-            <UserMessage 
-              key={message.id} 
-              message={message} 
-              onImageClick={onImageClick}
-              promptNumber={userPromptNumberById.get(message.id)}
-            />
-          );
-        })}
+          {visibleMessages.length === 0 && !isSending && !isHistoryReplaying && agentIconPath && (
+            <div className='flex items-center justify-center min-h-[45vh]'>
+              <img src={agentIconPath} className='w-14 h-14 opacity-60 select-none pointer-events-none' />
+            </div>
+          )}
 
-        {visibleMessages.length === 0 && !isSending && !isHistoryReplaying && agentIconPath && (
-          <div className="flex items-center justify-center min-h-[45vh]">
-            <img src={agentIconPath}
-              className="w-14 h-14 opacity-60 select-none pointer-events-none"
-            />
-          </div>
-        )}
-
-        {isSending && !isHistoryReplaying && (
-          <div className="flex justify-start mb-8">
-            <ChatLoadingIndicator status={status} agentName={agentName} />
-          </div>
-        )}
+          {isSending && !isHistoryReplaying && (
+            <div className='flex justify-start mb-8'>
+              <ChatLoadingIndicator status={status} agentName={agentName} />
+            </div>
+          )}
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
 }
 
 export default memo(MessageList);

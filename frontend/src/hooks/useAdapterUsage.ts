@@ -49,7 +49,7 @@ function normalizeChatUsage(json: string | null | undefined): string | null {
 
 export function AdapterUsageLifecycleProvider({
   value,
-  children,
+  children
 }: {
   value: UsageLifecycleContextValue;
   children: ReactNode;

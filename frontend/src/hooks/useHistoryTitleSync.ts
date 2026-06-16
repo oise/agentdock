@@ -27,7 +27,7 @@ export function useHistoryTitleSync(setTabs: Dispatch<SetStateAction<ChatTab[]>>
               ...tab,
               historySession: {
                 ...tab.historySession,
-                title: historyItem.title,
+                title: historyItem.title
               }
             };
           }

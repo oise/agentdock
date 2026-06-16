@@ -18,7 +18,7 @@ import {
   KeyboardPlugin,
   PasteLogPlugin,
   PlainTextFormattingGuardPlugin,
-  RegisterEditorPlugin,
+  RegisterEditorPlugin
 } from './ChatInputPlugins';
 
 interface ChatInputEditorProps {
@@ -62,20 +62,26 @@ export function ChatInputEditor({
   onImagePaste,
   onSend,
   onKeyDownCapture,
-  onEditorReady,
+  onEditorReady
 }: ChatInputEditorProps) {
   return (
-    <div ref={editorContainerRef} onKeyDownCapture={onKeyDownCapture}
+    <div
+      ref={editorContainerRef}
+      onKeyDownCapture={onKeyDownCapture}
       className={`relative flex min-h-0 flex-1 cursor-text flex-col overflow-y-auto rounded-t-ide transition-colors
         ${isDragOver ? 'bg-accent/5 ring-2 ring-inset ring-accent/50' : ''}`}
     >
       <ChatInputActionsContext.Provider value={{ onImageClick, onOpenFile, attachments }}>
         <LexicalComposer key={`chat-input-${conversationId}-${composerRevision}`} initialConfig={initialConfig}>
-          <RichTextPlugin contentEditable={
-              <ContentEditable className="outline-none p-3 text-foreground placeholder:text-foreground" spellCheck={false}/>
+          <RichTextPlugin
+            contentEditable={
+              <ContentEditable
+                className='outline-none p-3 text-foreground placeholder:text-foreground'
+                spellCheck={false}
+              />
             }
             placeholder={
-              <div className="absolute top-3 left-3 text-foreground-secondary pointer-events-none">
+              <div className='absolute top-3 left-3 text-foreground-secondary pointer-events-none'>
                 Type your task here, @ to add files, / for commands
               </div>
             }
@@ -83,12 +89,14 @@ export function ChatInputEditor({
           />
           <HistoryPlugin />
           <RegisterEditorPlugin onReady={onEditorReady} />
-          <OnChangePlugin onChange={(editorState) => {
-            editorState.read(() => {
-              const text = $getRoot().getTextContent();
-              if (text !== inputValue) onInputChange(text);
-            });
-          }} />
+          <OnChangePlugin
+            onChange={(editorState) => {
+              editorState.read(() => {
+                const text = $getRoot().getTextContent();
+                if (text !== inputValue) onInputChange(text);
+              });
+            }}
+          />
           <ClearEditorPlugin inputValue={inputValue} />
           <AttachmentsSyncPlugin attachments={attachments} onAttachmentsChange={onAttachmentsChange} />
           <PasteLogPlugin onImagePaste={onImagePaste} />
@@ -101,10 +109,7 @@ export function ChatInputEditor({
             onAttachmentsChange={onAttachmentsChange}
           />
           {onHeightChange && (
-            <AutoHeightPlugin
-              onHeightChange={onHeightChange}
-              scrollContainerRef={editorContainerRef}
-            />
+            <AutoHeightPlugin onHeightChange={onHeightChange} scrollContainerRef={editorContainerRef} />
           )}
           <ClickToFocusPlugin containerRef={editorContainerRef} />
         </LexicalComposer>

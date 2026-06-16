@@ -48,7 +48,7 @@ export const EditBlock: React.FC<Props> = ({ block }) => {
         type: 'diff',
         path: item.path || '',
         oldText: item.oldText ?? null,
-        newText: item.newText ?? '',
+        newText: item.newText ?? ''
       }))
       .filter((entry) => normalizeLineEndings(entry.oldText ?? '') !== normalizeLineEndings(entry.newText ?? ''));
 
@@ -94,7 +94,7 @@ export const EditBlock: React.FC<Props> = ({ block }) => {
             oldLine: oldLineNumRef.value++,
             newLine: newLineNumRef.value++,
             highlightedHtml,
-            hunkIndex,
+            hunkIndex
           });
         }
       });
@@ -151,59 +151,59 @@ export const EditBlock: React.FC<Props> = ({ block }) => {
   };
 
   return (
-    <div className="border border-border rounded-[6px] overflow-hidden mb-2">
+    <div className='border border-border rounded-[6px] overflow-hidden mb-2'>
       <button
         onClick={toggle}
         className={`flex items-center gap-2 w-full px-3 h-9 bg-editor-bg ${chatInsetFocusClassName}`}
       >
-        <div className="flex-shrink-0 text-foreground-secondary">
-          <FileCode className="text-foreground" size={14} />
+        <div className='flex-shrink-0 text-foreground-secondary'>
+          <FileCode className='text-foreground' size={14} />
         </div>
-        <div className="flex-1 flex items-center gap-2 min-w-0">
+        <div className='flex-1 flex items-center gap-2 min-w-0'>
           <span
-            role="button"
+            role='button'
             tabIndex={0}
-            onClick={(e) => { e.stopPropagation(); handleOpenFile(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenFile();
+            }}
             onKeyDown={handleOpenFileKeyDown}
             className={`font-mono truncate text-editor-fg opacity-90 hover:underline cursor-pointer text-left ${chatFocusClassName}`}
           >
             {fileName}
           </span>
           {diffData && (
-            <div className="flex items-center gap-1.5 ml-1 flex-shrink-0 text-ide-small">
+            <div className='flex items-center gap-1.5 ml-1 flex-shrink-0 text-ide-small'>
               {diffData.additions > 0 && (
-                <span className="font-bold text-added leading-none">
-                  +{diffData.additions}
-                </span>
+                <span className='font-bold text-added leading-none'>+{diffData.additions}</span>
               )}
               {diffData.deletions > 0 && (
-                <span className="font-bold text-deleted leading-none">
-                  -{diffData.deletions}
-                </span>
+                <span className='font-bold text-deleted leading-none'>-{diffData.deletions}</span>
               )}
             </div>
           )}
         </div>
-        <div className="flex-shrink-0 flex items-center gap-2">
+        <div className='flex-shrink-0 flex items-center gap-2'>
           {diffData && isFinished && (
-            <Tooltip variant="minimal" content="View diff in editor">
+            <Tooltip variant='minimal' content='View diff in editor'>
               <button
-                type="button"
+                type='button'
                 className={`p-1 text-foreground-secondary hover:text-foreground rounded transition-colors ${chatFocusClassName}`}
-                onClick={(e) => { e.stopPropagation(); handleShowDiff(); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleShowDiff();
+                }}
               >
                 <FileDiff size={14} />
               </button>
             </Tooltip>
           )}
           {(isPending || isError) && (
-            <div
-              className={`w-2.5 h-2.5 rounded-full ${
-                isPending ? 'bg-warning animate-pulse' : 'bg-error'
-              }`}
-            />
+            <div className={`w-2.5 h-2.5 rounded-full ${isPending ? 'bg-warning animate-pulse' : 'bg-error'}`} />
           )}
-          <div className={`transition-transform duration-200 text-editor-fg opacity-50 ${isExpanded ? 'rotate-90' : ''}`}>
+          <div
+            className={`transition-transform duration-200 text-editor-fg opacity-50 ${isExpanded ? 'rotate-90' : ''}`}
+          >
             <ChevronRight size={14} />
           </div>
         </div>
@@ -213,31 +213,34 @@ export const EditBlock: React.FC<Props> = ({ block }) => {
         className={`grid transition-[grid-template-rows] duration-300 ease-in-out overflow-hidden ${isExpanded ? 'border-t border-border' : ''}`}
         style={{ gridTemplateRows: isExpanded ? '1fr' : '0fr' }}
       >
-        <div className="overflow-hidden">
+        <div className='overflow-hidden'>
           {diffData && (
-            <div tabIndex={-1} className="bg-editor-bg max-h-[400px] overflow-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent ">
-              <div className="syntax-highlighted font-mono text-ide-small cursor-text py-2 min-w-max inline-block w-full">
+            <div
+              tabIndex={-1}
+              className='bg-editor-bg max-h-[400px] overflow-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent '
+            >
+              <div className='syntax-highlighted font-mono text-ide-small cursor-text py-2 min-w-max inline-block w-full'>
                 {diffData.lines.map((line, i) => (
                   <React.Fragment key={i}>
-                    {i > 0 && line.hunkIndex !== diffData.lines[i - 1].hunkIndex && (
-                      <div className="h-px my-1" />
-                    )}
+                    {i > 0 && line.hunkIndex !== diffData.lines[i - 1].hunkIndex && <div className='h-px my-1' />}
                     <div
                       className={`flex w-full ${
-                        line.type === 'added' ? 'bg-added-bg' :
-                        line.type === 'removed' ? 'bg-deleted-bg' :
-                        ''
+                        line.type === 'added' ? 'bg-added-bg' : line.type === 'removed' ? 'bg-deleted-bg' : ''
                       }`}
                     >
-                      <div className={`w-5 flex-shrink-0 flex justify-center select-none py-0.5 font-bold ${
-                        line.type === 'added' ? 'text-success' :
-                        line.type === 'removed' ? 'text-error' :
-                        'text-editor-fg'
-                      }`}>
+                      <div
+                        className={`w-5 flex-shrink-0 flex justify-center select-none py-0.5 font-bold ${
+                          line.type === 'added'
+                            ? 'text-success'
+                            : line.type === 'removed'
+                              ? 'text-error'
+                              : 'text-editor-fg'
+                        }`}
+                      >
                         {line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' '}
                       </div>
                       <div
-                        className="flex-1 px-1 whitespace-pre break-all py-0.5 text-editor-fg"
+                        className='flex-1 px-1 whitespace-pre break-all py-0.5 text-editor-fg'
                         dangerouslySetInnerHTML={{ __html: line.highlightedHtml || ' ' }}
                       />
                     </div>
@@ -248,8 +251,8 @@ export const EditBlock: React.FC<Props> = ({ block }) => {
           )}
 
           {!diffData && (
-            <div className="p-4 bg-editor-bg text-center">
-              <span className="opacity-40 italic">
+            <div className='p-4 bg-editor-bg text-center'>
+              <span className='opacity-40 italic'>
                 {isFinished ? 'No diff information available.' : 'Calculating diff...'}
               </span>
             </div>

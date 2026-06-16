@@ -22,7 +22,7 @@ export function Checkbox({
   return (
     <button
       type={type}
-      role="checkbox"
+      role='checkbox'
       aria-checked={checked}
       disabled={disabled}
       className={cx(

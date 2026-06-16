@@ -21,7 +21,7 @@ export function useAvailableCommands(availableAgents: AgentOption[], selectedAge
       const { adapterId, commands } = e.detail;
       setAvailableCommandsByAgent((prev) => ({
         ...prev,
-        [adapterId]: commands,
+        [adapterId]: commands
       }));
     });
   }, []);

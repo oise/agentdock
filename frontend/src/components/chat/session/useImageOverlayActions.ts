@@ -17,39 +17,45 @@ export function useImageOverlayActions() {
     setOverlayActionState(null);
   }, []);
 
-  const flashOverlayActionState = useCallback((state: Exclude<OverlayActionState, null>) => {
-    clearOverlayActionState();
-    setOverlayActionState(state);
-    overlayActionTimerRef.current = window.setTimeout(() => {
-      overlayActionTimerRef.current = null;
-      setOverlayActionState(null);
-    }, 1800);
-  }, [clearOverlayActionState]);
+  const flashOverlayActionState = useCallback(
+    (state: Exclude<OverlayActionState, null>) => {
+      clearOverlayActionState();
+      setOverlayActionState(state);
+      overlayActionTimerRef.current = window.setTimeout(() => {
+        overlayActionTimerRef.current = null;
+        setOverlayActionState(null);
+      }, 1800);
+    },
+    [clearOverlayActionState]
+  );
 
   const handleDownload = (e: MouseEvent) => {
     e.stopPropagation();
     flashOverlayActionState('downloaded');
   };
 
-  const handleCopyImage = useCallback(async (e: MouseEvent) => {
-    e.stopPropagation();
-    if (!selectedImage || !navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
-      return;
-    }
+  const handleCopyImage = useCallback(
+    async (e: MouseEvent) => {
+      e.stopPropagation();
+      if (!selectedImage || !navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
+        return;
+      }
 
-    try {
-      const response = await fetch(selectedImage);
-      const blob = await response.blob();
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          [blob.type || 'image/png']: blob,
-        }),
-      ]);
-      flashOverlayActionState('copied');
-    } catch (error) {
-      console.warn('[ChatSessionView] Failed to copy image:', error);
-    }
-  }, [flashOverlayActionState, selectedImage]);
+      try {
+        const response = await fetch(selectedImage);
+        const blob = await response.blob();
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            [blob.type || 'image/png']: blob
+          })
+        ]);
+        flashOverlayActionState('copied');
+      } catch (error) {
+        console.warn('[ChatSessionView] Failed to copy image:', error);
+      }
+    },
+    [flashOverlayActionState, selectedImage]
+  );
 
   useEffect(() => {
     return () => {
@@ -75,6 +81,6 @@ export function useImageOverlayActions() {
     overlayActionState,
     overlayPrimaryActionRef,
     handleDownload,
-    handleCopyImage,
+    handleCopyImage
   };
 }

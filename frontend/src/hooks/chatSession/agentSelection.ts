@@ -22,7 +22,7 @@ export function toPinnedAgentSnapshot(agent: AgentOption): PinnedAgentSnapshot {
     currentModeId: agent.currentModeId,
     availableModes: agent.availableModes,
     currentReasoningEffortId: agent.currentReasoningEffortId,
-    availableReasoningEfforts: agent.availableReasoningEfforts,
+    availableReasoningEfforts: agent.availableReasoningEfforts
   };
 }
 
@@ -42,7 +42,7 @@ export function resolveSelectedAgent(
     currentModeId: pinnedSnapshot.currentModeId,
     availableModes: pinnedSnapshot.availableModes,
     currentReasoningEffortId: pinnedSnapshot.currentReasoningEffortId,
-    availableReasoningEfforts: pinnedSnapshot.availableReasoningEfforts,
+    availableReasoningEfforts: pinnedSnapshot.availableReasoningEfforts
   } as AgentOption;
 }
 
@@ -55,10 +55,10 @@ export function buildAgentOptions(
     id: agent.id,
     label: agent.name,
     iconPath: agent.iconPath,
-    subOptions: agent.availableModels?.map(m => ({
+    subOptions: agent.availableModels?.map((m) => ({
       id: m.modelId,
       label: m.name,
-      description: m.description,
+      description: m.description
     }))
   }));
 
@@ -72,15 +72,21 @@ export function buildAgentOptions(
       id: pinnedSnapshot.id,
       label: pinnedSnapshot.name || pinnedSnapshot.id,
       iconPath: pinnedSnapshot.iconPath,
-      subOptions: pinnedSnapshot.availableModels?.map((model) => ({
-        id: model.modelId,
-        label: model.name,
-        description: model.description,
-      })) || (pinnedSnapshot.currentModelId ? [{
-        id: pinnedSnapshot.currentModelId,
-        label: pinnedSnapshot.currentModelId,
-        description: undefined,
-      }] : []),
+      subOptions:
+        pinnedSnapshot.availableModels?.map((model) => ({
+          id: model.modelId,
+          label: model.name,
+          description: model.description
+        })) ||
+        (pinnedSnapshot.currentModelId
+          ? [
+              {
+                id: pinnedSnapshot.currentModelId,
+                label: pinnedSnapshot.currentModelId,
+                description: undefined
+              }
+            ]
+          : [])
     });
   }
 
@@ -91,16 +97,18 @@ export function buildModeOptions(availableModes: ModeOption[], selectedModeId: s
   const options = availableModes.map((mode) => ({
     id: mode.id,
     label: mode.name,
-    description: mode.description,
+    description: mode.description
   }));
 
   if (options.length > 0) return options;
   if (!selectedModeId) return [];
-  return [{
-    id: selectedModeId,
-    label: selectedModeId,
-    description: undefined,
-  }];
+  return [
+    {
+      id: selectedModeId,
+      label: selectedModeId,
+      description: undefined
+    }
+  ];
 }
 
 export function buildReasoningEffortOptions(
@@ -110,14 +118,16 @@ export function buildReasoningEffortOptions(
   const options = availableReasoningEfforts.map((effort) => ({
     id: effort.id,
     label: effort.name,
-    description: effort.description,
+    description: effort.description
   }));
 
   if (options.length > 0) return options;
   if (!selectedReasoningEffortId) return [];
-  return [{
-    id: selectedReasoningEffortId,
-    label: selectedReasoningEffortId,
-    description: undefined,
-  }];
+  return [
+    {
+      id: selectedReasoningEffortId,
+      label: selectedReasoningEffortId,
+      description: undefined
+    }
+  ];
 }

@@ -10,13 +10,15 @@ interface Props {
 
 export const ThinkingActivity: React.FC<Props> = ({ entry, isExploring }) => {
   return (
-    <div className="flex items-start gap-1.5 min-w-0 w-full">
-      <div className="flex-shrink-0 relative top-[4px] text-foreground-secondary">
+    <div className='flex items-start gap-1.5 min-w-0 w-full'>
+      <div className='flex-shrink-0 relative top-[4px] text-foreground-secondary'>
         <Brain size={13} strokeWidth={1.8} />
       </div>
-      <div className={`flex-1 min-w-0 overflow-hidden [&_.markdown-body]:my-0 ${
-        isExploring ? '[&_.markdown-body>p:last-child]:mb-0' : ''
-      }`}>
+      <div
+        className={`flex-1 min-w-0 overflow-hidden [&_.markdown-body]:my-0 ${
+          isExploring ? '[&_.markdown-body>p:last-child]:mb-0' : ''
+        }`}
+      >
         <MarkdownMessage content={entry.text || 'Thinking...'} enableCodeCopy={false} />
       </div>
     </div>

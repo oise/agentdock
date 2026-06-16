@@ -15,7 +15,7 @@ export function buildPromptBlocks(inputValue: string, attachments: ChatAttachmen
 
     const attType = match[1];
     const attId = match[2];
-    const att = attachments.find(a => a.id === attId);
+    const att = attachments.find((a) => a.id === attId);
     if (att) {
       if (attType === 'image') {
         blocks.push({ type: 'image', data: att.data, mimeType: att.mimeType, isInline: true });
@@ -27,7 +27,7 @@ export function buildPromptBlocks(inputValue: string, attachments: ChatAttachmen
           path: att.path,
           startLine: att.startLine,
           endLine: att.endLine,
-          isInline: true,
+          isInline: true
         });
       } else {
         blocks.push({ type: 'text', text: match[0] });
@@ -42,7 +42,7 @@ export function buildPromptBlocks(inputValue: string, attachments: ChatAttachmen
   const remainingText = currentText.substring(lastIndex);
   if (remainingText) blocks.push({ type: 'text', text: remainingText });
 
-  attachments.forEach(att => {
+  attachments.forEach((att) => {
     if (!usedAttachmentIds.has(att.id) && att.attachmentType !== 'code_ref') {
       if (att.mimeType.startsWith('image/') && att.data) {
         blocks.push({ type: 'image', data: att.data, mimeType: att.mimeType, isInline: false });

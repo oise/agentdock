@@ -24,14 +24,14 @@ export function SettingsToggleCard({
   ariaLabel,
   disabled = false,
   children,
-  className = '',
+  className = ''
 }: SettingsToggleCardProps) {
   return (
     <SettingsCardShell
       title={title}
       description={description}
       className={className}
-      leading={(
+      leading={
         <Checkbox
           checked={enabled}
           onCheckedChange={onToggle}
@@ -39,7 +39,7 @@ export function SettingsToggleCard({
           disabled={disabled}
           className={disabled ? 'opacity-50' : ''}
         />
-      )}
+      }
     >
       {children}
     </SettingsCardShell>

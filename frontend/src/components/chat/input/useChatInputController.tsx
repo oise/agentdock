@@ -1,32 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
-import {
-  $getRoot,
-  $getSelection,
-  $isRangeSelection,
-  LexicalEditor,
-} from 'lexical';
-import {
-  Bookmark,
-  CornerDownLeft,
-  Keyboard as KeyboardIcon,
-  Paperclip,
-  SquareTerminal,
-} from 'lucide-react';
+import { $getRoot, $getSelection, $isRangeSelection, LexicalEditor } from 'lexical';
+import { Bookmark, CornerDownLeft, Keyboard as KeyboardIcon, Paperclip, SquareTerminal } from 'lucide-react';
 
-import {
-  AudioRecordingStatePayload,
-  DropdownOption,
-} from '../../../types/chat';
+import { AudioRecordingStatePayload, DropdownOption } from '../../../types/chat';
 import { PromptLibraryItem } from '../../../types/promptLibrary';
 import { ACPBridge } from '../../../utils/bridge';
 import { openFile } from '../../../utils/openFile';
 import { useSlashCommands } from '../../../hooks/useSlashCommands';
-import {
-  applySlashCommandToEditor,
-  buildAgentSlashItems,
-  buildPromptLibrarySlashItems,
-} from './slashCommands';
+import { applySlashCommandToEditor, buildAgentSlashItems, buildPromptLibrarySlashItems } from './slashCommands';
 import { useFileMentions } from '../../../hooks/useFileMentions';
 import { ImageNode, $createImageNode } from './ImageNode';
 import { CodeReferenceNode } from './CodeReferenceNode';
@@ -46,7 +28,7 @@ export function useChatInputController({
   attachments,
   onAttachmentsChange,
   customHeight = 180,
-  autoFocus = false,
+  autoFocus = false
 }: ChatInputProps) {
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const inputRootRef = useRef<HTMLDivElement>(null);
@@ -64,7 +46,7 @@ export function useChatInputController({
   const [composerRevision, setComposerRevision] = useState(0);
   const registeredNodeClassesRef = useRef({
     imageNode: ImageNode,
-    codeReferenceNode: CodeReferenceNode,
+    codeReferenceNode: CodeReferenceNode
   });
 
   useEffect(() => {
@@ -78,7 +60,7 @@ export function useChatInputController({
     if (previous.imageNode !== ImageNode || previous.codeReferenceNode !== CodeReferenceNode) {
       registeredNodeClassesRef.current = {
         imageNode: ImageNode,
-        codeReferenceNode: CodeReferenceNode,
+        codeReferenceNode: CodeReferenceNode
       };
       lexicalEditorRef.current = null;
       setComposerRevision((value) => value + 1);
@@ -133,52 +115,48 @@ export function useChatInputController({
     return (localStorage.getItem('chat-send-mode') as 'enter' | 'ctrl-enter') || 'enter';
   });
 
-  const initialConfig = useMemo(() => ({
-    namespace: `ChatInput-${conversationId}`,
-    nodes: [ImageNode, CodeReferenceNode],
-    theme: {
-      paragraph: 'm-0',
-      text: { base: 'text-foreground' },
-    },
-    onError: (error: Error) => console.error(error),
-  }), [conversationId, composerRevision]);
-
-  const agentSlashItems = useMemo(
-    () => buildAgentSlashItems(availableCommands),
-    [availableCommands]
+  const initialConfig = useMemo(
+    () => ({
+      namespace: `ChatInput-${conversationId}`,
+      nodes: [ImageNode, CodeReferenceNode],
+      theme: {
+        paragraph: 'm-0',
+        text: { base: 'text-foreground' }
+      },
+      onError: (error: Error) => console.error(error)
+    }),
+    [conversationId, composerRevision]
   );
 
-  const promptLibrarySlashItems = useMemo(
-    () => buildPromptLibrarySlashItems(promptLibraryItems),
-    [promptLibraryItems]
+  const agentSlashItems = useMemo(() => buildAgentSlashItems(availableCommands), [availableCommands]);
+
+  const promptLibrarySlashItems = useMemo(() => buildPromptLibrarySlashItems(promptLibraryItems), [promptLibraryItems]);
+
+  const slashItems = useMemo(
+    () => [...agentSlashItems, ...promptLibrarySlashItems],
+    [agentSlashItems, promptLibrarySlashItems]
   );
 
-  const slashItems = useMemo(() => ([
-    ...agentSlashItems,
-    ...promptLibrarySlashItems,
-  ]), [agentSlashItems, promptLibrarySlashItems]);
-
-  const sendModeIcon = useMemo(() => (
-    sendMode === 'ctrl-enter'
-      ? <KeyboardIcon className="w-4 h-4" />
-      : <CornerDownLeft className="w-4 h-4" />
-  ), [sendMode]);
+  const sendModeIcon = useMemo(
+    () => (sendMode === 'ctrl-enter' ? <KeyboardIcon className='w-4 h-4' /> : <CornerDownLeft className='w-4 h-4' />),
+    [sendMode]
+  );
 
   const plusMenuOptions: DropdownOption[] = useMemo(() => {
     const options: DropdownOption[] = [
-      { id: 'add-files', label: 'Attach file', icon: <Paperclip className="w-4 h-4" /> },
+      { id: 'add-files', label: 'Attach file', icon: <Paperclip className='w-4 h-4' /> }
     ];
 
     if (agentSlashItems.length > 0) {
       options.push({
         id: 'commands',
         label: 'Insert command',
-        icon: <SquareTerminal className="w-4 h-4" />,
+        icon: <SquareTerminal className='w-4 h-4' />,
         subOptions: agentSlashItems.map((command) => ({
           id: command.id,
           label: `${command.displayPrefix}${command.name}`,
-          description: command.description,
-        })),
+          description: command.description
+        }))
       });
     }
 
@@ -186,12 +164,12 @@ export function useChatInputController({
       options.push({
         id: 'prompt-library',
         label: 'Insert prompt',
-        icon: <Bookmark className="w-4 h-4" />,
+        icon: <Bookmark className='w-4 h-4' />,
         subOptions: promptLibrarySlashItems.map((prompt) => ({
           id: prompt.id,
           label: prompt.name,
-          description: prompt.description,
-        })),
+          description: prompt.description
+        }))
       });
     }
 
@@ -200,32 +178,35 @@ export function useChatInputController({
       label: 'Send mode',
       icon: sendModeIcon,
       subOptions: [
-        { id: 'enter', label: 'Enter', icon: <CornerDownLeft className="w-4 h-4" /> },
-        { id: 'ctrl-enter', label: 'Ctrl+Enter', icon: <KeyboardIcon className="w-4 h-4" /> },
+        { id: 'enter', label: 'Enter', icon: <CornerDownLeft className='w-4 h-4' /> },
+        { id: 'ctrl-enter', label: 'Ctrl+Enter', icon: <KeyboardIcon className='w-4 h-4' /> }
       ]
     });
 
     return options;
   }, [agentSlashItems, promptLibrarySlashItems, sendModeIcon]);
 
-  const handleImagePaste = useCallback((file: File, editor: LexicalEditor) => {
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = (event.target?.result as string).split(',')[1];
-      const id = Math.random().toString(36).substring(2, 9);
-      const newAtt = { id, name: file.name || 'pasted-image.png', data: base64, mimeType: file.type, isInline: true };
-      onAttachmentsChange([...attachments, newAtt]);
+  const handleImagePaste = useCallback(
+    (file: File, editor: LexicalEditor) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = (event.target?.result as string).split(',')[1];
+        const id = Math.random().toString(36).substring(2, 9);
+        const newAtt = { id, name: file.name || 'pasted-image.png', data: base64, mimeType: file.type, isInline: true };
+        onAttachmentsChange([...attachments, newAtt]);
 
-      editor.update(() => {
-        const selection = $getSelection();
-        if ($isRangeSelection(selection)) {
-          const imageNode = $createImageNode(id);
-          selection.insertNodes([imageNode]);
-        }
-      });
-    };
-    reader.readAsDataURL(file);
-  }, [attachments, onAttachmentsChange]);
+        editor.update(() => {
+          const selection = $getSelection();
+          if ($isRangeSelection(selection)) {
+            const imageNode = $createImageNode(id);
+            selection.insertNodes([imageNode]);
+          }
+        });
+      };
+      reader.readAsDataURL(file);
+    },
+    [attachments, onAttachmentsChange]
+  );
 
   useEffect(() => {
     if (!autoFocus) return;
@@ -246,7 +227,7 @@ export function useChatInputController({
     highlightedIndex,
     setHighlightedIndex,
     applyCommand,
-    handleKeyDownCapture,
+    handleKeyDownCapture
   } = useSlashCommands({
     inputValue,
     selectedAgentId,
@@ -254,7 +235,7 @@ export function useChatInputController({
     inputRootRef,
     menuRef: slashMenuRef,
     lexicalEditorRef,
-    onInputChange,
+    onInputChange
   });
 
   const {
@@ -264,60 +245,66 @@ export function useChatInputController({
     highlightedIndex: fileHighlightedIndex,
     setHighlightedIndex: setFileHighlightedIndex,
     applyFile,
-    handleKeyDownCapture: handleFileMentionsKeyDownCapture,
+    handleKeyDownCapture: handleFileMentionsKeyDownCapture
   } = useFileMentions({
     inputRootRef,
     menuRef: fileMenuRef,
-    lexicalEditorRef,
+    lexicalEditorRef
   });
 
-  const combinedHandleKeyDownCapture = useCallback((e: KeyboardEvent<HTMLDivElement>) => {
-     if (isFileMenuOpen) {
-       handleFileMentionsKeyDownCapture(e);
-       if (e.defaultPrevented) return;
-     }
-     if (isSlashMenuOpen) {
-       handleKeyDownCapture(e);
-       if (e.defaultPrevented) return;
-     }
-  }, [handleFileMentionsKeyDownCapture, handleKeyDownCapture, isFileMenuOpen, isSlashMenuOpen]);
-
-  const insertTranscript = useCallback((text: string) => {
-    const normalizedText = text.trim();
-    if (!normalizedText) return;
-
-    const editor = lexicalEditorRef.current;
-    if (!editor) {
-      const fallback = inputValue.trim() ? `${inputValue.trimEnd()} ${normalizedText}` : normalizedText;
-      onInputChange(fallback);
-      return;
-    }
-
-    let nextText = normalizedText;
-    editor.update(() => {
-      const root = $getRoot();
-      const existingText = root.getTextContent();
-      const prefix = existingText.trim().length > 0 && !existingText.endsWith(' ') && !existingText.endsWith('\n') ? ' ' : '';
-      root.selectEnd();
-      const selection = $getSelection();
-      if ($isRangeSelection(selection)) {
-        selection.insertText(`${prefix}${normalizedText}`);
+  const combinedHandleKeyDownCapture = useCallback(
+    (e: KeyboardEvent<HTMLDivElement>) => {
+      if (isFileMenuOpen) {
+        handleFileMentionsKeyDownCapture(e);
+        if (e.defaultPrevented) return;
       }
-      nextText = root.getTextContent();
-    });
-    onInputChange(nextText);
-  }, [inputValue, onInputChange]);
+      if (isSlashMenuOpen) {
+        handleKeyDownCapture(e);
+        if (e.defaultPrevented) return;
+      }
+    },
+    [handleFileMentionsKeyDownCapture, handleKeyDownCapture, isFileMenuOpen, isSlashMenuOpen]
+  );
 
-  const handleInsertSlashItem = useCallback((itemId: string, items: typeof slashItems) => {
-    const item = items.find((candidate) => candidate.id === itemId);
-    if (!item) return;
+  const insertTranscript = useCallback(
+    (text: string) => {
+      const normalizedText = text.trim();
+      if (!normalizedText) return;
 
-    applySlashCommandToEditor(
-      lexicalEditorRef.current,
-      item,
-      onInputChange
-    );
-  }, [lexicalEditorRef, onInputChange]);
+      const editor = lexicalEditorRef.current;
+      if (!editor) {
+        const fallback = inputValue.trim() ? `${inputValue.trimEnd()} ${normalizedText}` : normalizedText;
+        onInputChange(fallback);
+        return;
+      }
+
+      let nextText = normalizedText;
+      editor.update(() => {
+        const root = $getRoot();
+        const existingText = root.getTextContent();
+        const prefix =
+          existingText.trim().length > 0 && !existingText.endsWith(' ') && !existingText.endsWith('\n') ? ' ' : '';
+        root.selectEnd();
+        const selection = $getSelection();
+        if ($isRangeSelection(selection)) {
+          selection.insertText(`${prefix}${normalizedText}`);
+        }
+        nextText = root.getTextContent();
+      });
+      onInputChange(nextText);
+    },
+    [inputValue, onInputChange]
+  );
+
+  const handleInsertSlashItem = useCallback(
+    (itemId: string, items: typeof slashItems) => {
+      const item = items.find((candidate) => candidate.id === itemId);
+      if (!item) return;
+
+      applySlashCommandToEditor(lexicalEditorRef.current, item, onInputChange);
+    },
+    [lexicalEditorRef, onInputChange]
+  );
 
   const handleVoiceInput = useCallback(async () => {
     if (isTranscribing) return;
@@ -390,6 +377,6 @@ export function useChatInputController({
     handleVoiceInput,
     setLexicalEditor: (editor: LexicalEditor) => {
       lexicalEditorRef.current = editor;
-    },
+    }
   };
 }

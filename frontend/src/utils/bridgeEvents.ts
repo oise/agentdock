@@ -16,37 +16,94 @@ import {
   HistorySessionMeta,
   PermissionRequest,
   ToolCallEvent,
-  UndoResultPayload,
+  UndoResultPayload
 } from '../types/chat';
 import { McpServerConfig } from '../types/mcp';
 import { PromptLibraryItem } from '../types/promptLibrary';
 import { SystemInstruction } from '../types/systemInstructions';
 
-export interface ContentChunkEvent { chunk: ContentChunk; }
-export interface StatusEvent { chatId: string; status: string; }
-export interface SessionIdEvent { chatId: string; sessionId: string; }
-export interface ModeEvent { chatId: string; modeId: string; }
-export interface AdaptersEvent { adapters: AgentOption[]; }
-export interface PermissionRequestEvent { request: PermissionRequest; }
-export interface AvailableCommandsEvent { adapterId: string; commands: AvailableCommand[]; }
-export interface HistoryListEvent { list: HistorySessionMeta[]; }
-export interface HistoryDeleteResultEvent { result: HistoryDeleteResultPayload; }
-export interface UndoResultEvent { chatId: string; result: UndoResultPayload; }
-export interface ChangesStateEvent { chatId: string; state: ChangesState; }
-export interface ToolCallBridgeEvent { chatId: string; payload: ToolCallEvent; }
-export interface ConversationTranscriptSavedEvent { payload: ConversationTranscriptSavedPayload; }
-export interface BridgeOperationResultEvent { payload: BridgeOperationResultPayload; }
-export interface ConversationReplayLoadedEvent { payload: ConversationReplayLoadedPayload; }
-export interface FileChangeStatsEvent { payload: FileChangeStatsResultPayload; }
-export interface McpServersEvent { servers: McpServerConfig[]; }
-export interface PromptLibraryEvent { items: PromptLibraryItem[]; }
-export interface SystemInstructionsEvent { instructions: SystemInstruction[]; }
-export interface AudioTranscriptionFeatureEvent { state: AudioTranscriptionFeatureState; }
-export interface AudioTranscriptionResultEvent { payload: AudioTranscriptionResultPayload; }
-export interface AudioRecordingStateEvent { payload: AudioRecordingStatePayload; }
-export interface AudioTranscriptionSettingsEvent { settings: AudioTranscriptionSettings; }
-export interface GlobalSettingsEvent { payload: GlobalSettingsPayload; }
-export interface AdapterDeletedEvent { adapterId: string; }
+export interface ContentChunkEvent {
+  chunk: ContentChunk;
+}
+export interface StatusEvent {
+  chatId: string;
+  status: string;
+}
+export interface SessionIdEvent {
+  chatId: string;
+  sessionId: string;
+}
+export interface ModeEvent {
+  chatId: string;
+  modeId: string;
+}
+export interface AdaptersEvent {
+  adapters: AgentOption[];
+}
+export interface PermissionRequestEvent {
+  request: PermissionRequest;
+}
+export interface AvailableCommandsEvent {
+  adapterId: string;
+  commands: AvailableCommand[];
+}
+export interface HistoryListEvent {
+  list: HistorySessionMeta[];
+}
+export interface HistoryDeleteResultEvent {
+  result: HistoryDeleteResultPayload;
+}
+export interface UndoResultEvent {
+  chatId: string;
+  result: UndoResultPayload;
+}
+export interface ChangesStateEvent {
+  chatId: string;
+  state: ChangesState;
+}
+export interface ToolCallBridgeEvent {
+  chatId: string;
+  payload: ToolCallEvent;
+}
+export interface ConversationTranscriptSavedEvent {
+  payload: ConversationTranscriptSavedPayload;
+}
+export interface BridgeOperationResultEvent {
+  payload: BridgeOperationResultPayload;
+}
+export interface ConversationReplayLoadedEvent {
+  payload: ConversationReplayLoadedPayload;
+}
+export interface FileChangeStatsEvent {
+  payload: FileChangeStatsResultPayload;
+}
+export interface McpServersEvent {
+  servers: McpServerConfig[];
+}
+export interface PromptLibraryEvent {
+  items: PromptLibraryItem[];
+}
+export interface SystemInstructionsEvent {
+  instructions: SystemInstruction[];
+}
+export interface AudioTranscriptionFeatureEvent {
+  state: AudioTranscriptionFeatureState;
+}
+export interface AudioTranscriptionResultEvent {
+  payload: AudioTranscriptionResultPayload;
+}
+export interface AudioRecordingStateEvent {
+  payload: AudioRecordingStatePayload;
+}
+export interface AudioTranscriptionSettingsEvent {
+  settings: AudioTranscriptionSettings;
+}
+export interface GlobalSettingsEvent {
+  payload: GlobalSettingsPayload;
+}
+export interface AdapterDeletedEvent {
+  adapterId: string;
+}
 
 export const EVENT_NAMES = {
   ADAPTER_DELETED: 'acp-adapter-deleted',
@@ -77,7 +134,7 @@ export const EVENT_NAMES = {
   AUDIO_TRANSCRIPTION_RESULT: 'audio-transcription-result',
   AUDIO_RECORDING_STATE: 'audio-recording-state',
   AUDIO_TRANSCRIPTION_SETTINGS: 'audio-transcription-settings',
-  GLOBAL_SETTINGS: 'global-settings',
+  GLOBAL_SETTINGS: 'global-settings'
 } as const;
 
 export function onBridgeEvent<T>(eventName: string, callback: (e: CustomEvent<T>) => void) {

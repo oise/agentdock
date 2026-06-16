@@ -21,9 +21,12 @@ import { ImageNode } from './ImageNode';
 import { CodeReferenceNode, $createCodeReferenceNode, $isCodeReferenceNode } from './CodeReferenceNode';
 import { ChatAttachment } from '../../../types/chat';
 
-export function AttachmentsSyncPlugin({ attachments, onAttachmentsChange }: {
-  attachments: ChatAttachment[],
-  onAttachmentsChange: (items: ChatAttachment[]) => void
+export function AttachmentsSyncPlugin({
+  attachments,
+  onAttachmentsChange
+}: {
+  attachments: ChatAttachment[];
+  onAttachmentsChange: (items: ChatAttachment[]) => void;
 }) {
   const [editor] = useLexicalComposerContext();
 
@@ -32,7 +35,7 @@ export function AttachmentsSyncPlugin({ attachments, onAttachmentsChange }: {
       editor.read(() => {
         const existingIds = new Set([
           ...$nodesOfType(ImageNode).map((node) => node.__id),
-          ...$nodesOfType(CodeReferenceNode).map((node) => node.__id),
+          ...$nodesOfType(CodeReferenceNode).map((node) => node.__id)
         ]);
         const filtered = attachments.filter((attachment) => !attachment.isInline || existingIds.has(attachment.id));
         if (filtered.length !== attachments.length) {
@@ -71,19 +74,22 @@ export function AttachmentsSyncPlugin({ attachments, onAttachmentsChange }: {
 export function PasteLogPlugin({ onImagePaste }: { onImagePaste: (file: File, editor: LexicalEditor) => void }) {
   const [editor] = useLexicalComposerContext();
 
-  const handlePaste = useCallback((e: ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
+  const handlePaste = useCallback(
+    (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
 
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.indexOf('image') !== -1) {
-        const file = items[i].getAsFile();
-        if (file) {
-          onImagePaste(file, editor);
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          const file = items[i].getAsFile();
+          if (file) {
+            onImagePaste(file, editor);
+          }
         }
       }
-    }
-  }, [onImagePaste, editor]);
+    },
+    [onImagePaste, editor]
+  );
 
   useEffect(() => {
     const rootElement = editor.getRootElement();
@@ -136,11 +142,11 @@ export function PasteLogPlugin({ onImagePaste }: { onImagePaste: (file: File, ed
 export function KeyboardPlugin({
   onSend,
   sendMode,
-  disabled = false,
+  disabled = false
 }: {
-  onSend: () => void,
-  sendMode: 'enter' | 'ctrl-enter',
-  disabled?: boolean,
+  onSend: () => void;
+  sendMode: 'enter' | 'ctrl-enter';
+  disabled?: boolean;
 }) {
   const [editor] = useLexicalComposerContext();
 
@@ -175,11 +181,7 @@ export function PlainTextFormattingGuardPlugin() {
   const [editor] = useLexicalComposerContext();
 
   useEffect(() => {
-    return editor.registerCommand(
-      FORMAT_TEXT_COMMAND,
-      () => true,
-      COMMAND_PRIORITY_CRITICAL
-    );
+    return editor.registerCommand(FORMAT_TEXT_COMMAND, () => true, COMMAND_PRIORITY_CRITICAL);
   }, [editor]);
 
   return null;
@@ -210,9 +212,7 @@ export function InlineAttachmentBackspacePlugin() {
 
           const anchorNode = selection.anchor.getNode();
           let previousNode =
-            $isTextNode(anchorNode) && selection.anchor.offset === 0
-              ? anchorNode.getPreviousSibling()
-              : null;
+            $isTextNode(anchorNode) && selection.anchor.offset === 0 ? anchorNode.getPreviousSibling() : null;
 
           if (!previousNode && $isElementNode(anchorNode) && selection.anchor.offset > 0) {
             previousNode = anchorNode.getChildAtIndex(selection.anchor.offset - 1);
@@ -236,7 +236,7 @@ export function InlineAttachmentBackspacePlugin() {
 export function ExternalCodeReferencePlugin({
   isActive,
   attachments,
-  onAttachmentsChange,
+  onAttachmentsChange
 }: {
   isActive: boolean;
   attachments: ChatAttachment[];
@@ -253,7 +253,8 @@ export function ExternalCodeReferencePlugin({
     if (!isActive) return;
 
     const handleExternalReference = (event: Event) => {
-      const detail = (event as CustomEvent<{ path: string; fileName: string; startLine?: number; endLine?: number }>).detail;
+      const detail = (event as CustomEvent<{ path: string; fileName: string; startLine?: number; endLine?: number }>)
+        .detail;
       if (!detail?.path || !detail?.fileName) return;
 
       const id = crypto.randomUUID();
@@ -265,20 +266,14 @@ export function ExternalCodeReferencePlugin({
         isInline: true,
         attachmentType: 'code_ref',
         startLine: detail.startLine,
-        endLine: detail.endLine,
+        endLine: detail.endLine
       };
 
       onAttachmentsChangeRef.current([...attachmentsRef.current, attachment]);
 
       editor.update(() => {
         const selection = $getSelection();
-        const node = $createCodeReferenceNode(
-          id,
-          detail.path,
-          detail.fileName,
-          detail.startLine,
-          detail.endLine
-        );
+        const node = $createCodeReferenceNode(id, detail.path, detail.fileName, detail.startLine, detail.endLine);
         if ($isRangeSelection(selection)) {
           selection.insertNodes([node, $createTextNode(' ')]);
         } else {
@@ -305,7 +300,7 @@ function readScrollSnapshot(container: HTMLDivElement): ScrollSnapshot | null {
   if (container.scrollHeight <= container.clientHeight + 1) return null;
 
   return {
-    scrollTop: container.scrollTop,
+    scrollTop: container.scrollTop
   };
 }
 
@@ -323,7 +318,7 @@ function isDeleteInput(event: Event): boolean {
 
 export function AutoHeightPlugin({
   onHeightChange,
-  scrollContainerRef,
+  scrollContainerRef
 }: {
   onHeightChange: (height: number) => void;
   scrollContainerRef?: RefObject<HTMLDivElement>;
@@ -332,11 +327,14 @@ export function AutoHeightPlugin({
   const pendingRestoreRef = useRef<ScrollSnapshot | null>(null);
   const restoreFrameRef = useRef<number | null>(null);
 
-  const captureDeleteScroll = useCallback((event: Event) => {
-    const container = scrollContainerRef?.current;
-    if (!container || !isDeleteInput(event)) return;
-    pendingRestoreRef.current = readScrollSnapshot(container);
-  }, [scrollContainerRef]);
+  const captureDeleteScroll = useCallback(
+    (event: Event) => {
+      const container = scrollContainerRef?.current;
+      if (!container || !isDeleteInput(event)) return;
+      pendingRestoreRef.current = readScrollSnapshot(container);
+    },
+    [scrollContainerRef]
+  );
 
   const restoreDeleteScroll = useCallback(() => {
     const container = scrollContainerRef?.current;
@@ -377,7 +375,7 @@ export function AutoHeightPlugin({
         scheduleDeleteScrollRestore();
       }
     };
-    
+
     updateHeight();
     return editor.registerUpdateListener(updateHeight);
   }, [editor, onHeightChange, scheduleDeleteScrollRestore]);

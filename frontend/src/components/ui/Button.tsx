@@ -31,34 +31,32 @@ const variantClassNames: Record<ButtonVariant, string> = {
   danger: [
     'bg-[rgb(196,77,77)] text-[var(--ide-Button-default-foreground)]',
     'border-[rgb(144,53,53)] py-[0.45rem]'
-  ].join(' '),
+  ].join(' ')
 };
 
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({
-  children,
-  className,
-  variant = 'secondary',
-  leftIcon,
-  rightIcon,
-  fullWidth = false,
-  type = 'button',
-  ...props
-}: ButtonProps, ref) {
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  {
+    children,
+    className,
+    variant = 'secondary',
+    leftIcon,
+    rightIcon,
+    fullWidth = false,
+    type = 'button',
+    ...props
+  }: ButtonProps,
+  ref
+) {
   return (
     <button
       ref={ref}
       type={type}
-      className={cx(
-        baseClassName,
-        variantClassNames[variant],
-        fullWidth && 'w-full',
-        className
-      )}
+      className={cx(baseClassName, variantClassNames[variant], fullWidth && 'w-full', className)}
       {...props}
     >
-      {leftIcon ? <span className="flex h-[1em] w-[1em] items-center justify-center">{leftIcon}</span> : null}
+      {leftIcon ? <span className='flex h-[1em] w-[1em] items-center justify-center'>{leftIcon}</span> : null}
       {children ? <span>{children}</span> : null}
-      {rightIcon ? <span className="flex h-[1em] w-[1em] items-center justify-center">{rightIcon}</span> : null}
+      {rightIcon ? <span className='flex h-[1em] w-[1em] items-center justify-center'>{rightIcon}</span> : null}
     </button>
   );
 });

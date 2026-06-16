@@ -1,9 +1,4 @@
-import {
-  AudioTranscriptionFeatureState,
-  AvailableCommand,
-  ChatAttachment,
-  DropdownOption,
-} from '../../../types/chat';
+import { AudioTranscriptionFeatureState, AvailableCommand, ChatAttachment, DropdownOption } from '../../../types/chat';
 
 export interface ChatInputProps {
   conversationId: string;
@@ -46,5 +41,5 @@ export const emptyTranscriptionFeature: AudioTranscriptionFeatureState = {
   supported: false,
   status: 'Loading',
   detail: '',
-  installPath: '',
+  installPath: ''
 };

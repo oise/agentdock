@@ -30,30 +30,33 @@ export function useChatInputResize(attachments: ChatAttachment[]) {
     }
   }, []);
 
-  const startResizing = useCallback((e: MouseEvent) => {
-    e.preventDefault();
-    isResizingRef.current = true;
-    setIsManualSize(true);
-    document.body.style.cursor = 'row-resize';
+  const startResizing = useCallback(
+    (e: MouseEvent) => {
+      e.preventDefault();
+      isResizingRef.current = true;
+      setIsManualSize(true);
+      document.body.style.cursor = 'row-resize';
 
-    handleMouseMoveRef.current = (ev: globalThis.MouseEvent) => {
-      if (!isResizingRef.current) return;
-      const newHeight = window.innerHeight - ev.clientY;
-      const maxHeight = window.innerHeight * MAX_HEIGHT_RATIO;
-      const clampedHeight = Math.max(INPUT_MIN_HEIGHT, Math.min(newHeight, maxHeight));
-      setInputHeight(clampedHeight);
-    };
+      handleMouseMoveRef.current = (ev: globalThis.MouseEvent) => {
+        if (!isResizingRef.current) return;
+        const newHeight = window.innerHeight - ev.clientY;
+        const maxHeight = window.innerHeight * MAX_HEIGHT_RATIO;
+        const clampedHeight = Math.max(INPUT_MIN_HEIGHT, Math.min(newHeight, maxHeight));
+        setInputHeight(clampedHeight);
+      };
 
-    handleMouseUpRef.current = stopResizing;
+      handleMouseUpRef.current = stopResizing;
 
-    document.addEventListener('mousemove', handleMouseMoveRef.current);
-    document.addEventListener('mouseup', handleMouseUpRef.current);
-  }, [stopResizing]);
+      document.addEventListener('mousemove', handleMouseMoveRef.current);
+      document.addEventListener('mouseup', handleMouseUpRef.current);
+    },
+    [stopResizing]
+  );
 
   useEffect(() => {
     if (isManualSize) return;
 
-    const hasAttachmentBar = attachments.some(a => !a.isInline);
+    const hasAttachmentBar = attachments.some((a) => !a.isInline);
     const extraHeight = hasAttachmentBar ? ATTACHMENT_BAR_HEIGHT : 0;
 
     const totalContentNeeded = contentHeight + INPUT_BOTTOM_BAR_BUFFER + extraHeight;
@@ -73,6 +76,6 @@ export function useChatInputResize(attachments: ChatAttachment[]) {
   return {
     inputHeight,
     setContentHeight,
-    startResizing,
+    startResizing
   };
 }

@@ -23,7 +23,7 @@ function normalizeDiffEntry(item: Record<string, any>) {
     type: 'diff',
     path,
     oldText,
-    newText,
+    newText
   };
 }
 
@@ -82,7 +82,7 @@ export function createToolCallBlocks(entry: ToolCallEntry, isReplay: boolean): T
         ...entry,
         toolCallId: buildSplitToolCallId(entry.toolCallId, group.path || `idx-${index}`),
         content: group.diffs,
-        locations: matchingLocation ? [matchingLocation] : (group.path ? [{ path: group.path }] : entry.locations),
+        locations: matchingLocation ? [matchingLocation] : group.path ? [{ path: group.path }] : entry.locations
       }
     } as ToolCallBlock;
   });

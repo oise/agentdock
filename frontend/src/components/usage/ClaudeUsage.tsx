@@ -3,7 +3,8 @@ import { UsageMetricRow } from './shared/UsageMetricRow';
 import { clampPercent, formatUsagePercent } from './shared/quotaVisuals';
 import { formatResetAt, hasDisplayableQuotaReset } from './shared/formatResetAt';
 
-const usageLinkClassName = 'text-link hover:underline focus:outline-none focus-visible:rounded-[3px] focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]';
+const usageLinkClassName =
+  'text-link hover:underline focus:outline-none focus-visible:rounded-[3px] focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]';
 
 interface UsageWindow {
   utilization: number | null;
@@ -48,25 +49,34 @@ export function ClaudeUsage({ stacked = false }: { stacked?: boolean }) {
   const usage = data ? parseData(data) : null;
   if (!usage) return null;
 
-  const fiveHour = usage.five_hour && hasDisplayableQuotaReset(usage.five_hour.resets_at) || !usage.five_hour?.resets_at ? usage.five_hour : null;
+  const fiveHour =
+    (usage.five_hour && hasDisplayableQuotaReset(usage.five_hour.resets_at)) || !usage.five_hour?.resets_at
+      ? usage.five_hour
+      : null;
   const sevenDay = usage.seven_day && hasDisplayableQuotaReset(usage.seven_day.resets_at) ? usage.seven_day : null;
   const hasUsageData = fiveHour || sevenDay;
 
   if (!hasUsageData) {
-    const url = usage.authType === 'api_key' ? 'https://platform.claude.com/settings/billing' : 'https://claude.ai/settings/usage';
+    const url =
+      usage.authType === 'api_key'
+        ? 'https://platform.claude.com/settings/billing'
+        : 'https://claude.ai/settings/usage';
     return (
-      <div className="text-foreground-secondary">
-        Usage quotas: <button type="button" onClick={() => window.__openUrl?.(url)} className={usageLinkClassName}>{url}</button>
+      <div className='text-foreground-secondary'>
+        Usage quotas:{' '}
+        <button type='button' onClick={() => window.__openUrl?.(url)} className={usageLinkClassName}>
+          {url}
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-y-2">
-      <span className="whitespace-nowrap text-foreground-secondary">Usage quotas</span>
+    <div className='flex flex-col gap-y-2'>
+      <span className='whitespace-nowrap text-foreground-secondary'>Usage quotas</span>
       <div className={stacked ? 'flex flex-col gap-y-1.5' : 'flex flex-wrap gap-x-8 gap-y-1.5'}>
-        {fiveHour && <WindowLine label="5 hour limit" window={fiveHour} />}
-        {sevenDay && <WindowLine label="7 day limit" window={sevenDay} />}
+        {fiveHour && <WindowLine label='5 hour limit' window={fiveHour} />}
+        {sevenDay && <WindowLine label='7 day limit' window={sevenDay} />}
       </div>
     </div>
   );

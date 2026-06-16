@@ -13,12 +13,14 @@ export function ClaudeChatUsage() {
     try {
       const p = JSON.parse(data);
       if (p && typeof p === 'object') {
-        const fiveHour = hasDisplayableQuotaReset(p.five_hour?.resets_at) && typeof p.five_hour?.utilization === 'number'
-          ? p.five_hour.utilization
-          : null;
-        const sevenDay = hasDisplayableQuotaReset(p.seven_day?.resets_at) && typeof p.seven_day?.utilization === 'number'
-          ? p.seven_day.utilization
-          : null;
+        const fiveHour =
+          hasDisplayableQuotaReset(p.five_hour?.resets_at) && typeof p.five_hour?.utilization === 'number'
+            ? p.five_hour.utilization
+            : null;
+        const sevenDay =
+          hasDisplayableQuotaReset(p.seven_day?.resets_at) && typeof p.seven_day?.utilization === 'number'
+            ? p.seven_day.utilization
+            : null;
 
         hasData = fiveHour !== null || sevenDay !== null;
 

@@ -46,16 +46,16 @@ function animate() {
 
 function getProgressiveDelta(delta: number): number {
   const absDelta = Math.abs(delta);
-  
+
   let multiplier = 1.5;
 
   if (absDelta > 30) {
-    multiplier = 1.5 + (absDelta - 30) * 0.1
+    multiplier = 1.5 + (absDelta - 30) * 0.1;
   }
 
   // Increased cap for maximum speed
   const finalMultiplier = Math.min(multiplier, 3.0);
-  
+
   return delta * finalMultiplier;
 }
 
@@ -70,10 +70,10 @@ export function installJcefScrollFix() {
       let element = e.target as HTMLElement | null;
       while (element && element !== document.documentElement) {
         const style = window.getComputedStyle(element);
-        const canScrollY = element.scrollHeight > element.clientHeight && 
-                           (style.overflowY === 'auto' || style.overflowY === 'scroll');
-        const canScrollX = element.scrollWidth > element.clientWidth && 
-                           (style.overflowX === 'auto' || style.overflowX === 'scroll');
+        const canScrollY =
+          element.scrollHeight > element.clientHeight && (style.overflowY === 'auto' || style.overflowY === 'scroll');
+        const canScrollX =
+          element.scrollWidth > element.clientWidth && (style.overflowX === 'auto' || style.overflowX === 'scroll');
 
         if (canScrollY || canScrollX) {
           e.preventDefault();
@@ -117,17 +117,21 @@ export function installJcefScrollFix() {
     { passive: false, capture: true }
   );
 
-  window.addEventListener('scroll', (e) => {
-    const element = e.target as HTMLElement;
-    if (element === targetElement) {
-      if (Math.abs(element.scrollTop - lastInternalScrollTop) > 1) {
-        currentTop = element.scrollTop;
-        targetTop = currentTop;
+  window.addEventListener(
+    'scroll',
+    (e) => {
+      const element = e.target as HTMLElement;
+      if (element === targetElement) {
+        if (Math.abs(element.scrollTop - lastInternalScrollTop) > 1) {
+          currentTop = element.scrollTop;
+          targetTop = currentTop;
+        }
+        if (Math.abs(element.scrollLeft - lastInternalScrollLeft) > 1) {
+          currentLeft = element.scrollLeft;
+          targetLeft = currentLeft;
+        }
       }
-      if (Math.abs(element.scrollLeft - lastInternalScrollLeft) > 1) {
-        currentLeft = element.scrollLeft;
-        targetLeft = currentLeft;
-      }
-    }
-  }, { capture: true, passive: true });
+    },
+    { capture: true, passive: true }
+  );
 }

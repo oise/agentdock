@@ -16,7 +16,7 @@ import {
   normalizeOutgoingBlocks,
   plainTextFromBlocks,
   prependHandoffContext,
-  titleFromFirstPrompt,
+  titleFromFirstPrompt
 } from './chatSession/messageBasics';
 import { buildPromptBlocks } from './chatSession/promptBlocks';
 import {
@@ -25,7 +25,7 @@ import {
   buildModeOptions,
   buildReasoningEffortOptions,
   resolveSelectedAgent,
-  toPinnedAgentSnapshot,
+  toPinnedAgentSnapshot
 } from './chatSession/agentSelection';
 import { useAgentRuntimeOptions } from './chatSession/useAgentRuntimeOptions';
 import { useAvailableCommands } from './chatSession/useAvailableCommands';
@@ -80,12 +80,10 @@ export function useChatSession(
   const initialUserMessageCountRef = useRef(initialMessages.filter((message) => message.role === 'user').length);
   const forkBaseRef = useRef<ForkConversationBase | undefined>(forkBase);
 
-  const {
-    applyBufferedChunks,
-    enqueueChunk,
-    clearBufferedChunks,
-    markFlushUnscheduled,
-  } = useBufferedMessageChunks({ setHistoryMessages, setLiveMessages });
+  const { applyBufferedChunks, enqueueChunk, clearBufferedChunks, markFlushUnscheduled } = useBufferedMessageChunks({
+    setHistoryMessages,
+    setLiveMessages
+  });
 
   const finishActivePromptAfterError = useCallback(() => {
     pendingPromptRef.current = null;
@@ -104,8 +102,8 @@ export function useChatSession(
         {
           ...lastMessage,
           duration,
-          metaComplete: true,
-        },
+          metaComplete: true
+        }
       ];
     });
   }, []);
@@ -141,7 +139,7 @@ export function useChatSession(
     modelIdForStart,
     handleModelChange,
     handleModeChange,
-    handleReasoningEffortChange,
+    handleReasoningEffortChange
   } = useAgentRuntimeOptions({
     availableAgents,
     effectiveSelectedAgent,
@@ -152,7 +150,7 @@ export function useChatSession(
     startedAgentIdRef,
     startedModelIdRef,
     startedModeIdRef,
-    startedReasoningEffortIdRef,
+    startedReasoningEffortIdRef
   });
 
   const adapterDisplayName = resolvedSelectedAgent?.name || '';
@@ -160,81 +158,74 @@ export function useChatSession(
     () => buildAgentOptions(availableAgents, pinnedAgentSnapshotRef.current, pinnedAgentId),
     [availableAgents, pinnedAgentId]
   );
-  const modeOptions = useMemo(
-    () => buildModeOptions(availableModes, selectedModeId),
-    [availableModes, selectedModeId]
-  );
+  const modeOptions = useMemo(() => buildModeOptions(availableModes, selectedModeId), [availableModes, selectedModeId]);
   const reasoningEffortOptions = useMemo(
     () => buildReasoningEffortOptions(availableReasoningEfforts, selectedReasoningEffortId),
     [availableReasoningEfforts, selectedReasoningEffortId]
   );
 
-  const failActivePromptLocally = useCallback((message: string) => {
-    const text = message.startsWith('[Error:') ? message : `[Error: ${message}]`;
-    const startedAt = startTimeRef.current ?? Date.now();
-    pendingPromptRef.current = null;
-    setPermissionQueue([]);
-    statusRef.current = 'error';
-    setStatus('error');
-    setIsSending(false);
-    markFlushUnscheduled();
-    applyBufferedChunks('bridge-error');
+  const failActivePromptLocally = useCallback(
+    (message: string) => {
+      const text = message.startsWith('[Error:') ? message : `[Error: ${message}]`;
+      const startedAt = startTimeRef.current ?? Date.now();
+      pendingPromptRef.current = null;
+      setPermissionQueue([]);
+      statusRef.current = 'error';
+      setStatus('error');
+      setIsSending(false);
+      markFlushUnscheduled();
+      applyBufferedChunks('bridge-error');
 
-    setLiveMessages((prev) => {
-      const duration = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
-      const lastMessage = prev[prev.length - 1];
+      setLiveMessages((prev) => {
+        const duration = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
+        const lastMessage = prev[prev.length - 1];
 
-      if (lastMessage?.role === 'assistant' && !lastMessage.metaComplete) {
-        const existingBlocks = [...(lastMessage.contentBlocks || [])];
-        const lastBlock = existingBlocks[existingBlocks.length - 1];
-        if (lastBlock?.type === 'text') {
-          existingBlocks[existingBlocks.length - 1] = {
-            ...lastBlock,
-            text: `${lastBlock.text}${text}`,
-          };
-        } else {
-          existingBlocks.push({ type: 'text', text });
+        if (lastMessage?.role === 'assistant' && !lastMessage.metaComplete) {
+          const existingBlocks = [...(lastMessage.contentBlocks || [])];
+          const lastBlock = existingBlocks[existingBlocks.length - 1];
+          if (lastBlock?.type === 'text') {
+            existingBlocks[existingBlocks.length - 1] = {
+              ...lastBlock,
+              text: `${lastBlock.text}${text}`
+            };
+          } else {
+            existingBlocks.push({ type: 'text', text });
+          }
+
+          return [
+            ...prev.slice(0, -1),
+            {
+              ...lastMessage,
+              content: `${lastMessage.content || ''}${text}`,
+              contentBlocks: existingBlocks,
+              duration,
+              metaComplete: true
+            }
+          ];
         }
 
         return [
-          ...prev.slice(0, -1),
+          ...prev,
           {
-            ...lastMessage,
-            content: `${lastMessage.content || ''}${text}`,
-            contentBlocks: existingBlocks,
+            id: nextMessageId('assistant'),
+            role: 'assistant',
+            content: text,
+            contentBlocks: [{ type: 'text', text }],
+            timestamp: Date.now(),
+            agentId: selectedAgentId,
+            agentName: adapterDisplayName,
+            modelName: selectedModelId,
+            modeName: selectedModeId,
+            promptStartedAtMillis: startedAt,
             duration,
-            metaComplete: true,
-          },
+            metaComplete: true
+          }
         ];
-      }
-
-      return [
-        ...prev,
-        {
-          id: nextMessageId('assistant'),
-          role: 'assistant',
-          content: text,
-          contentBlocks: [{ type: 'text', text }],
-          timestamp: Date.now(),
-          agentId: selectedAgentId,
-          agentName: adapterDisplayName,
-          modelName: selectedModelId,
-          modeName: selectedModeId,
-          promptStartedAtMillis: startedAt,
-          duration,
-          metaComplete: true,
-        },
-      ];
-    });
-    startTimeRef.current = null;
-  }, [
-    adapterDisplayName,
-    applyBufferedChunks,
-    markFlushUnscheduled,
-    selectedAgentId,
-    selectedModelId,
-    selectedModeId,
-  ]);
+      });
+      startTimeRef.current = null;
+    },
+    [adapterDisplayName, applyBufferedChunks, markFlushUnscheduled, selectedAgentId, selectedModelId, selectedModeId]
+  );
 
   const requestRuntimeRecovery = useCallback((reason: string) => {
     if (recoveryInFlightRef.current) return;
@@ -305,7 +296,16 @@ export function useChatSession(
       console.warn('[useChatSession] Failed to auto-start agent:', e);
       return false;
     }
-  }, [clearBufferedChunks, conversationId, failActivePromptLocally, historySession, modelIdForStart, requestRuntimeRecovery, selectedAgent, selectedAgentId]);
+  }, [
+    clearBufferedChunks,
+    conversationId,
+    failActivePromptLocally,
+    historySession,
+    modelIdForStart,
+    requestRuntimeRecovery,
+    selectedAgent,
+    selectedAgentId
+  ]);
 
   useEffect(() => {
     if (!pendingHandoff) return;
@@ -379,18 +379,20 @@ export function useChatSession(
         pendingPromptRef.current = null;
 
         setIsSending(true);
-        
+
         // Assistant message is already added in handleSend, we just need to trigger the actual send
         const forkBaseToPersist = forkBaseRef.current;
-        ACPBridge.sendPrompt(conversationId, JSON.stringify(blocksToSend), forkBaseToPersist).then(() => {
-          forkBaseRef.current = undefined;
-          consumeHandoff();
-        }).catch((err) => {
-          console.warn('[useChatSession] Failed to send pending blocks:', err);
-          const message = err instanceof Error ? err.message : String(err);
-          failActivePromptLocally(`Prompt was not sent. ${message}`);
-          requestRuntimeRecovery(message);
-        });
+        ACPBridge.sendPrompt(conversationId, JSON.stringify(blocksToSend), forkBaseToPersist)
+          .then(() => {
+            forkBaseRef.current = undefined;
+            consumeHandoff();
+          })
+          .catch((err) => {
+            console.warn('[useChatSession] Failed to send pending blocks:', err);
+            const message = err instanceof Error ? err.message : String(err);
+            failActivePromptLocally(`Prompt was not sent. ${message}`);
+            requestRuntimeRecovery(message);
+          });
       }
     });
 
@@ -421,7 +423,17 @@ export function useChatSession(
       unsubMode();
       unsubPermission();
     };
-  }, [conversationId, enqueueChunk, applyBufferedChunks, clearBufferedChunks, markFlushUnscheduled, consumeHandoff, failActivePromptLocally, finishActivePromptAfterError, requestRuntimeRecovery]);
+  }, [
+    conversationId,
+    enqueueChunk,
+    applyBufferedChunks,
+    clearBufferedChunks,
+    markFlushUnscheduled,
+    consumeHandoff,
+    failActivePromptLocally,
+    finishActivePromptAfterError,
+    requestRuntimeRecovery
+  ]);
 
   useEffect(() => {
     if (!isSending || isHistoryReplaying) return;
@@ -467,11 +479,7 @@ export function useChatSession(
         return;
       }
       historyLoadRequestedRef.current = loadRequestKey;
-      ACPBridge.loadHistoryConversation(
-        conversationId,
-        historySession.projectPath,
-        historySession.conversationId
-      );
+      ACPBridge.loadHistoryConversation(conversationId, historySession.projectPath, historySession.conversationId);
       historyLoadTimerRef.current = null;
     }, 0);
 
@@ -506,7 +514,7 @@ export function useChatSession(
       title,
       inheritedAdapterNames,
       touchUpdatedAt: touchUpdatedAtRef.current,
-      forceTitle: Boolean(metadataTitleOverride?.trim()),
+      forceTitle: Boolean(metadataTitleOverride?.trim())
     });
     window.setTimeout(() => {
       ACPBridge.requestHistoryList();
@@ -533,7 +541,7 @@ export function useChatSession(
       role: 'user',
       content: plainTextFromBlocks(normalizedBlocks),
       blocks: normalizedBlocks,
-      timestamp: Date.now(),
+      timestamp: Date.now()
     };
     setLiveMessages((prev) => [...prev, userMessage]);
     setInputValue('');
@@ -551,7 +559,7 @@ export function useChatSession(
       modelName: selectedModelId,
       modeName: selectedModeId,
       promptStartedAtMillis: promptStartedAt,
-      metaComplete: false,
+      metaComplete: false
     };
     setLiveMessages((prev) => [...prev, assistantMessage]);
 
@@ -565,20 +573,36 @@ export function useChatSession(
     }
 
     const forkBaseToPersist = forkBaseRef.current;
-    ACPBridge.sendPrompt(conversationId, JSON.stringify(outgoingBlocks), forkBaseToPersist).then(() => {
-      forkBaseRef.current = undefined;
-      consumeHandoff();
-      setPermissionQueue([]);
-    }).catch((e) => {
-      console.warn('[useChatSession] Failed to send prompt:', e);
-      const message = e instanceof Error ? e.message : String(e);
-      failActivePromptLocally(`Prompt was not sent. ${message}`);
-      requestRuntimeRecovery(message);
-    });
-  // Refs (pendingHandoffRef, allowMetadataUpdateRef, touchUpdatedAtRef, startTimeRef)
-  // are intentionally excluded — their identity is stable across renders.
-  }, [inputValue, attachments, isSending, status, conversationId, selectedAgentId,
-      adapterDisplayName, selectedModelId, selectedModeId, startSelectedAgent, consumeHandoff, failActivePromptLocally, requestRuntimeRecovery, onUserMessageSent]);
+    ACPBridge.sendPrompt(conversationId, JSON.stringify(outgoingBlocks), forkBaseToPersist)
+      .then(() => {
+        forkBaseRef.current = undefined;
+        consumeHandoff();
+        setPermissionQueue([]);
+      })
+      .catch((e) => {
+        console.warn('[useChatSession] Failed to send prompt:', e);
+        const message = e instanceof Error ? e.message : String(e);
+        failActivePromptLocally(`Prompt was not sent. ${message}`);
+        requestRuntimeRecovery(message);
+      });
+    // Refs (pendingHandoffRef, allowMetadataUpdateRef, touchUpdatedAtRef, startTimeRef)
+    // are intentionally excluded — their identity is stable across renders.
+  }, [
+    inputValue,
+    attachments,
+    isSending,
+    status,
+    conversationId,
+    selectedAgentId,
+    adapterDisplayName,
+    selectedModelId,
+    selectedModeId,
+    startSelectedAgent,
+    consumeHandoff,
+    failActivePromptLocally,
+    requestRuntimeRecovery,
+    onUserMessageSent
+  ]);
 
   const handleStop = () => {
     if (pendingPromptRef.current && status !== 'prompting') {

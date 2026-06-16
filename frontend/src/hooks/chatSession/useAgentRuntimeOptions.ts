@@ -24,7 +24,7 @@ export function useAgentRuntimeOptions({
   startedAgentIdRef,
   startedModelIdRef,
   startedModeIdRef,
-  startedReasoningEffortIdRef,
+  startedReasoningEffortIdRef
 }: UseAgentRuntimeOptionsArgs) {
   const [selectedModelByAgent, setSelectedModelByAgent] = useState<Record<string, string>>({});
   const [selectedModeByAgent, setSelectedModeByAgent] = useState<Record<string, string>>({});
@@ -34,24 +34,28 @@ export function useAgentRuntimeOptions({
   const availableReasoningEfforts = effectiveSelectedAgent?.availableReasoningEfforts ?? [];
 
   const selectedModelId = effectiveSelectedAgent
-    ? (selectedModelByAgent[effectiveSelectedAgent.id] || effectiveSelectedAgent.currentModelId || availableModels[0]?.modelId || '')
+    ? selectedModelByAgent[effectiveSelectedAgent.id] ||
+      effectiveSelectedAgent.currentModelId ||
+      availableModels[0]?.modelId ||
+      ''
     : '';
 
   const selectedModeId = effectiveSelectedAgent
-    ? (selectedModeByAgent[effectiveSelectedAgent.id] || effectiveSelectedAgent.currentModeId || availableModes[0]?.id || '')
+    ? selectedModeByAgent[effectiveSelectedAgent.id] ||
+      effectiveSelectedAgent.currentModeId ||
+      availableModes[0]?.id ||
+      ''
     : '';
 
   const selectedReasoningEffortId = effectiveSelectedAgent
-    ? (
-        selectedReasoningEffortByAgent[effectiveSelectedAgent.id] ||
-        effectiveSelectedAgent.currentReasoningEffortId ||
-        availableReasoningEfforts[0]?.id ||
-        ''
-      )
+    ? selectedReasoningEffortByAgent[effectiveSelectedAgent.id] ||
+      effectiveSelectedAgent.currentReasoningEffortId ||
+      availableReasoningEfforts[0]?.id ||
+      ''
     : '';
 
   const modelIdForStart = selectedAgentId
-    ? (selectedModelByAgent[selectedAgentId] || effectiveSelectedAgent?.currentModelId || '')
+    ? selectedModelByAgent[selectedAgentId] || effectiveSelectedAgent?.currentModelId || ''
     : '';
 
   useEffect(() => {
@@ -159,21 +163,17 @@ export function useAgentRuntimeOptions({
 
   const handleModelChange = (modelId: string, targetAgentId?: string) => {
     const agentId = targetAgentId || selectedAgentId;
-    setSelectedModelByAgent((prev) => (
-      agentId ? { ...prev, [agentId]: modelId } : prev
-    ));
+    setSelectedModelByAgent((prev) => (agentId ? { ...prev, [agentId]: modelId } : prev));
   };
 
   const handleModeChange = (modeId: string) => {
-    setSelectedModeByAgent((prev) => (
-      selectedAgentId ? { ...prev, [selectedAgentId]: modeId } : prev
-    ));
+    setSelectedModeByAgent((prev) => (selectedAgentId ? { ...prev, [selectedAgentId]: modeId } : prev));
   };
 
   const handleReasoningEffortChange = (reasoningEffortId: string) => {
-    setSelectedReasoningEffortByAgent((prev) => (
+    setSelectedReasoningEffortByAgent((prev) =>
       selectedAgentId ? { ...prev, [selectedAgentId]: reasoningEffortId } : prev
-    ));
+    );
   };
 
   return {
@@ -186,6 +186,6 @@ export function useAgentRuntimeOptions({
     modelIdForStart,
     handleModelChange,
     handleModeChange,
-    handleReasoningEffortChange,
+    handleReasoningEffortChange
   };
 }

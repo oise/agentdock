@@ -18,7 +18,7 @@ export function useAvailableAgents() {
           ...previous,
           ...agent,
           iconPath: agent.iconPath || previous?.iconPath,
-          name: agent.name || previous?.name,
+          name: agent.name || previous?.name
         };
       });
       stableAgentSnapshotsRef.current = nextSnapshots;
@@ -28,7 +28,9 @@ export function useAvailableAgents() {
         lastStableNewTabAgentIdRef.current = stableLastUsedRunnableId;
       } else {
         const currentStable = lastStableNewTabAgentIdRef.current;
-        const currentStableStatus = currentStable ? safeAdapters.find((agent) => agent.id === currentStable) : undefined;
+        const currentStableStatus = currentStable
+          ? safeAdapters.find((agent) => agent.id === currentStable)
+          : undefined;
         if (currentStableStatus?.downloadedKnown === true && currentStableStatus.downloaded !== true) {
           lastStableNewTabAgentIdRef.current = safeAdapters.find((agent) => agent.downloaded === true)?.id || '';
         } else if (!currentStable) {
@@ -53,6 +55,6 @@ export function useAvailableAgents() {
   return {
     availableAgents,
     adaptersResolved,
-    lastStableNewTabAgentIdRef,
+    lastStableNewTabAgentIdRef
   };
 }

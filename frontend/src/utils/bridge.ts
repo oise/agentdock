@@ -11,7 +11,7 @@ import {
   ForkConversationBase,
   GlobalSettingsPayload,
   SessionMetadataUpdatePayload,
-  ToolCallEvent,
+  ToolCallEvent
 } from '../types/chat';
 import { extractToolCallDiffEntries } from './toolCallUtils';
 import { McpServerConfig } from '../types/mcp';
@@ -44,7 +44,7 @@ import {
   SystemInstructionsEvent,
   ToolCallBridgeEvent,
   UndoResultEvent,
-  onBridgeEvent,
+  onBridgeEvent
 } from './bridgeEvents';
 
 let saveTranscriptCounter = 0;
@@ -77,7 +77,10 @@ function nextBridgeOperationRequestId(operation: string): string {
   return `${operation}-${bridgeOperationCounter}-${Date.now()}`;
 }
 
-function awaitBridgeOperation(operation: BridgeOperationResultPayload['operation'], invoke: (requestId: string) => void): Promise<void> {
+function awaitBridgeOperation(
+  operation: BridgeOperationResultPayload['operation'],
+  invoke: (requestId: string) => void
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const requestId = nextBridgeOperationRequestId(operation);
     let cleanup = () => {};
@@ -122,8 +125,10 @@ export const ACPBridge = {
           if (chunk.type === 'tool_call' && toolCallId && raw.rawInput && typeof raw.rawInput === 'object') {
             toolCallRawInputById.set(toolCallId, raw.rawInput);
           }
-          const diffs = extractToolCallDiffEntries(raw, toolCallId ? toolCallRawInputById.get(toolCallId) : undefined)
-            .map((diff) => ({ path: diff.path, oldText: diff.oldText, newText: diff.newText }));
+          const diffs = extractToolCallDiffEntries(
+            raw,
+            toolCallId ? toolCallRawInputById.get(toolCallId) : undefined
+          ).map((diff) => ({ path: diff.path, oldText: diff.oldText, newText: diff.newText }));
           const status = chunk.toolStatus || raw.status;
           if (diffs.length > 0) {
             const payload: ToolCallEvent = {
@@ -133,7 +138,7 @@ export const ACPBridge = {
               status,
               isReplay: chunk.isReplay,
               diffs,
-              locations: raw.locations,
+              locations: raw.locations
             };
             const eventName = chunk.type === 'tool_call' ? EVENT_NAMES.TOOL_CALL : EVENT_NAMES.TOOL_CALL_UPDATE;
             window.dispatchEvent(new CustomEvent(eventName, { detail: { chatId: chunk.chatId, payload } }));
@@ -144,11 +149,18 @@ export const ACPBridge = {
               kind: chunk.toolKind || raw.kind,
               status,
               isReplay: chunk.isReplay,
-              diffs: [],
+              diffs: []
             };
-            window.dispatchEvent(new CustomEvent(EVENT_NAMES.TOOL_CALL_UPDATE, { detail: { chatId: chunk.chatId, payload } }));
+            window.dispatchEvent(
+              new CustomEvent(EVENT_NAMES.TOOL_CALL_UPDATE, { detail: { chatId: chunk.chatId, payload } })
+            );
           }
-          if (chunk.type === 'tool_call_update' && toolCallId && status && !['pending', 'running', 'in_progress', 'active'].includes(String(status).toLowerCase())) {
+          if (
+            chunk.type === 'tool_call_update' &&
+            toolCallId &&
+            status &&
+            !['pending', 'running', 'in_progress', 'active'].includes(String(status).toLowerCase())
+          ) {
             toolCallRawInputById.delete(toolCallId);
           }
         } catch (e) {
@@ -299,21 +311,23 @@ export const ACPBridge = {
     window.__onFilesResult = (filesJson) => {
       let files = [];
       try {
-        files = typeof filesJson === "string" ? JSON.parse(filesJson) : filesJson;
+        files = typeof filesJson === 'string' ? JSON.parse(filesJson) : filesJson;
       } catch (e) {
         console.warn('[bridge] Failed to parse files result', e);
       }
-      window.dispatchEvent(new CustomEvent("acp-files-result", { detail: { files } }));
+      window.dispatchEvent(new CustomEvent('acp-files-result', { detail: { files } }));
     };
 
     if (window.__notifyReady) window.__notifyReady();
   },
 
-  onContentChunk: (callback: (e: CustomEvent<ContentChunkEvent>) => void) => onBridgeEvent(EVENT_NAMES.CONTENT_CHUNK, callback),
+  onContentChunk: (callback: (e: CustomEvent<ContentChunkEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.CONTENT_CHUNK, callback),
 
   onStatus: (callback: (e: CustomEvent<StatusEvent>) => void) => onBridgeEvent(EVENT_NAMES.STATUS, callback),
 
-  onBridgeOperationResult: (callback: (e: CustomEvent<BridgeOperationResultEvent>) => void) => onBridgeEvent(EVENT_NAMES.BRIDGE_OPERATION_RESULT, callback),
+  onBridgeOperationResult: (callback: (e: CustomEvent<BridgeOperationResultEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.BRIDGE_OPERATION_RESULT, callback),
 
   onSessionId: (callback: (e: CustomEvent<SessionIdEvent>) => void) => onBridgeEvent(EVENT_NAMES.SESSION_ID, callback),
 
@@ -321,13 +335,15 @@ export const ACPBridge = {
 
   onAdapters: (callback: (e: CustomEvent<AdaptersEvent>) => void) => onBridgeEvent(EVENT_NAMES.ADAPTERS, callback),
 
-  onAvailableCommands: (callback: (e: CustomEvent<AvailableCommandsEvent>) => void) => onBridgeEvent(EVENT_NAMES.AVAILABLE_COMMANDS, callback),
+  onAvailableCommands: (callback: (e: CustomEvent<AvailableCommandsEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.AVAILABLE_COMMANDS, callback),
 
   getAvailableCommands: (adapterId: string) => {
     return availableCommandsByAdapter.get(adapterId) ?? [];
   },
 
-  onPermissionRequest: (callback: (e: CustomEvent<PermissionRequestEvent>) => void) => onBridgeEvent(EVENT_NAMES.PERMISSION, callback),
+  onPermissionRequest: (callback: (e: CustomEvent<PermissionRequestEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.PERMISSION, callback),
 
   requestAdapters: () => {
     window.__requestAdapters?.();
@@ -377,7 +393,8 @@ export const ACPBridge = {
     window.__cancelAgentInstall?.(adapterId);
   },
 
-  onUsageData: (callback: (e: CustomEvent<{ adapterId: string; json: string }>) => void) => onBridgeEvent(EVENT_NAMES.USAGE_DATA, callback),
+  onUsageData: (callback: (e: CustomEvent<{ adapterId: string; json: string }>) => void) =>
+    onBridgeEvent(EVENT_NAMES.USAGE_DATA, callback),
 
   onLog: (callback: (e: CustomEvent) => void) => onBridgeEvent(EVENT_NAMES.LOG, callback),
 
@@ -389,9 +406,11 @@ export const ACPBridge = {
     window.__syncHistoryList?.(projectPath);
   },
 
-  onHistoryList: (callback: (e: CustomEvent<HistoryListEvent>) => void) => onBridgeEvent(EVENT_NAMES.HISTORY_LIST, callback),
+  onHistoryList: (callback: (e: CustomEvent<HistoryListEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.HISTORY_LIST, callback),
 
-  onHistoryDeleteResult: (callback: (e: CustomEvent<HistoryDeleteResultEvent>) => void) => onBridgeEvent(EVENT_NAMES.HISTORY_DELETE_RESULT, callback),
+  onHistoryDeleteResult: (callback: (e: CustomEvent<HistoryDeleteResultEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.HISTORY_DELETE_RESULT, callback),
 
   loadHistoryConversation: (conversationId: string, projectPath: string, historyConversationId: string) => {
     window.__loadHistoryConversation?.(conversationId, projectPath, historyConversationId);
@@ -456,11 +475,15 @@ export const ACPBridge = {
     window.__openHistoryConversationCli?.({ projectPath, conversationId });
   },
 
-  onUndoResult: (callback: (e: CustomEvent<UndoResultEvent>) => void) => onBridgeEvent(EVENT_NAMES.UNDO_RESULT, callback),
+  onUndoResult: (callback: (e: CustomEvent<UndoResultEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.UNDO_RESULT, callback),
 
-  onChangesState: (callback: (e: CustomEvent<ChangesStateEvent>) => void) => onBridgeEvent(EVENT_NAMES.CHANGES_STATE, callback),
+  onChangesState: (callback: (e: CustomEvent<ChangesStateEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.CHANGES_STATE, callback),
 
-  computeFileChangeStats: (files: { filePath: string; status: 'A' | 'M'; operations: FileChangeOperation[] }[]): Promise<FileChangeStatsResultPayload> => {
+  computeFileChangeStats: (
+    files: { filePath: string; status: 'A' | 'M'; operations: FileChangeOperation[] }[]
+  ): Promise<FileChangeStatsResultPayload> => {
     return new Promise((resolve, reject) => {
       if (typeof window.__computeFileChangeStats !== 'function') {
         reject(new Error('File change stats bridge is not available.'));
@@ -491,23 +514,29 @@ export const ACPBridge = {
     });
   },
 
-  onToolCall: (callback: (e: CustomEvent<ToolCallBridgeEvent>) => void) => onBridgeEvent(EVENT_NAMES.TOOL_CALL, callback),
+  onToolCall: (callback: (e: CustomEvent<ToolCallBridgeEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.TOOL_CALL, callback),
 
-  onToolCallUpdate: (callback: (e: CustomEvent<ToolCallBridgeEvent>) => void) => onBridgeEvent(EVENT_NAMES.TOOL_CALL_UPDATE, callback),
+  onToolCallUpdate: (callback: (e: CustomEvent<ToolCallBridgeEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.TOOL_CALL_UPDATE, callback),
 
-  onFileChangeStats: (callback: (e: CustomEvent<FileChangeStatsEvent>) => void) => onBridgeEvent(EVENT_NAMES.FILE_CHANGE_STATS, callback),
+  onFileChangeStats: (callback: (e: CustomEvent<FileChangeStatsEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.FILE_CHANGE_STATS, callback),
 
-  onAttachmentsAdded: (callback: (e: CustomEvent<{ chatId: string; files: ChatAttachment[] }>) => void) => onBridgeEvent(EVENT_NAMES.ATTACHMENTS_ADDED, callback),
+  onAttachmentsAdded: (callback: (e: CustomEvent<{ chatId: string; files: ChatAttachment[] }>) => void) =>
+    onBridgeEvent(EVENT_NAMES.ATTACHMENTS_ADDED, callback),
 
-  onConversationTranscriptSaved: (callback: (e: CustomEvent<ConversationTranscriptSavedEvent>) => void) => onBridgeEvent(EVENT_NAMES.CONVERSATION_TRANSCRIPT_SAVED, callback),
+  onConversationTranscriptSaved: (callback: (e: CustomEvent<ConversationTranscriptSavedEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.CONVERSATION_TRANSCRIPT_SAVED, callback),
 
-  onConversationReplayLoaded: (callback: (e: CustomEvent<ConversationReplayLoadedEvent>) => void) => onBridgeEvent(EVENT_NAMES.CONVERSATION_REPLAY_LOADED, callback),
+  onConversationReplayLoaded: (callback: (e: CustomEvent<ConversationReplayLoadedEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.CONVERSATION_REPLAY_LOADED, callback),
 
   searchFiles: (query: string) => {
     window.__searchFiles?.(query);
   },
 
-  onFilesResult: (callback: (e: CustomEvent<{ files: { path: string, name: string }[] }>) => void) => {
+  onFilesResult: (callback: (e: CustomEvent<{ files: { path: string; name: string }[] }>) => void) => {
     const fn = (e: Event) => callback(e as CustomEvent);
     window.addEventListener('acp-files-result', fn);
     return () => window.removeEventListener('acp-files-result', fn);
@@ -521,7 +550,8 @@ export const ACPBridge = {
     window.__saveMcpServers?.(JSON.stringify(servers));
   },
 
-  onMcpServers: (callback: (e: CustomEvent<McpServersEvent>) => void) => onBridgeEvent(EVENT_NAMES.MCP_SERVERS, callback),
+  onMcpServers: (callback: (e: CustomEvent<McpServersEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.MCP_SERVERS, callback),
 
   loadPromptLibrary: () => {
     window.__loadPromptLibrary?.();
@@ -531,7 +561,8 @@ export const ACPBridge = {
     window.__savePromptLibrary?.(JSON.stringify(items));
   },
 
-  onPromptLibrary: (callback: (e: CustomEvent<PromptLibraryEvent>) => void) => onBridgeEvent(EVENT_NAMES.PROMPT_LIBRARY, callback),
+  onPromptLibrary: (callback: (e: CustomEvent<PromptLibraryEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.PROMPT_LIBRARY, callback),
 
   loadSystemInstructions: () => {
     window.__loadSystemInstructions?.();
@@ -541,7 +572,8 @@ export const ACPBridge = {
     window.__saveSystemInstructions?.(JSON.stringify(instructions));
   },
 
-  onSystemInstructions: (callback: (e: CustomEvent<SystemInstructionsEvent>) => void) => onBridgeEvent(EVENT_NAMES.SYSTEM_INSTRUCTIONS, callback),
+  onSystemInstructions: (callback: (e: CustomEvent<SystemInstructionsEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.SYSTEM_INSTRUCTIONS, callback),
 
   loadAudioTranscriptionFeature: () => {
     window.__loadAudioTranscriptionFeature?.();
@@ -555,7 +587,8 @@ export const ACPBridge = {
     window.__uninstallAudioTranscriptionFeature?.();
   },
 
-  onAudioTranscriptionFeature: (callback: (e: CustomEvent<AudioTranscriptionFeatureEvent>) => void) => onBridgeEvent(EVENT_NAMES.AUDIO_TRANSCRIPTION_FEATURE, callback),
+  onAudioTranscriptionFeature: (callback: (e: CustomEvent<AudioTranscriptionFeatureEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.AUDIO_TRANSCRIPTION_FEATURE, callback),
 
   transcribeAudioInput: (audioBase64: string): Promise<AudioTranscriptionResultPayload> => {
     return new Promise((resolve, reject) => {
@@ -591,7 +624,8 @@ export const ACPBridge = {
     });
   },
 
-  onAudioTranscriptionResult: (callback: (e: CustomEvent<AudioTranscriptionResultEvent>) => void) => onBridgeEvent(EVENT_NAMES.AUDIO_TRANSCRIPTION_RESULT, callback),
+  onAudioTranscriptionResult: (callback: (e: CustomEvent<AudioTranscriptionResultEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.AUDIO_TRANSCRIPTION_RESULT, callback),
 
   startAudioRecording: () => {
     window.__startAudioRecording?.();
@@ -630,7 +664,8 @@ export const ACPBridge = {
     });
   },
 
-  onAudioRecordingState: (callback: (e: CustomEvent<AudioRecordingStateEvent>) => void) => onBridgeEvent(EVENT_NAMES.AUDIO_RECORDING_STATE, callback),
+  onAudioRecordingState: (callback: (e: CustomEvent<AudioRecordingStateEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.AUDIO_RECORDING_STATE, callback),
 
   loadAudioTranscriptionSettings: () => {
     window.__loadAudioTranscriptionSettings?.();
@@ -640,7 +675,8 @@ export const ACPBridge = {
     window.__saveAudioTranscriptionSettings?.(JSON.stringify(settings));
   },
 
-  onAudioTranscriptionSettings: (callback: (e: CustomEvent<AudioTranscriptionSettingsEvent>) => void) => onBridgeEvent(EVENT_NAMES.AUDIO_TRANSCRIPTION_SETTINGS, callback),
+  onAudioTranscriptionSettings: (callback: (e: CustomEvent<AudioTranscriptionSettingsEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.AUDIO_TRANSCRIPTION_SETTINGS, callback),
 
   loadGlobalSettings: () => {
     window.__loadGlobalSettings?.();
@@ -650,7 +686,9 @@ export const ACPBridge = {
     window.__saveGlobalSettings?.(JSON.stringify(settings));
   },
 
-  onGlobalSettings: (callback: (e: CustomEvent<GlobalSettingsEvent>) => void) => onBridgeEvent(EVENT_NAMES.GLOBAL_SETTINGS, callback),
+  onGlobalSettings: (callback: (e: CustomEvent<GlobalSettingsEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.GLOBAL_SETTINGS, callback),
 
-  onAdapterDeleted: (callback: (e: CustomEvent<AdapterDeletedEvent>) => void) => onBridgeEvent(EVENT_NAMES.ADAPTER_DELETED, callback),
+  onAdapterDeleted: (callback: (e: CustomEvent<AdapterDeletedEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.ADAPTER_DELETED, callback)
 };

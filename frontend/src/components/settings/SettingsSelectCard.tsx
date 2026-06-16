@@ -15,14 +15,10 @@ export function SettingsSelectCard({
   title,
   description,
   children,
-  className = '',
+  className = ''
 }: SettingsSelectCardProps) {
   return (
-    <SettingsCardShell
-      title={title}
-      description={description}
-      className={className}
-    >
+    <SettingsCardShell title={title} description={description} className={className}>
       {children}
     </SettingsCardShell>
   );

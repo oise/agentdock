@@ -3,7 +3,8 @@ import { UsageMetricRow } from './shared/UsageMetricRow';
 import { clampPercent, formatUsagePercent } from './shared/quotaVisuals';
 import { formatResetAt, hasDisplayableQuotaResetAfterSeconds } from './shared/formatResetAt';
 
-const usageLinkClassName = 'text-link hover:underline focus:outline-none focus-visible:rounded-[3px] ' +
+const usageLinkClassName =
+  'text-link hover:underline focus:outline-none focus-visible:rounded-[3px] ' +
   'focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]';
 
 interface CodexWindow {
@@ -21,7 +22,7 @@ interface CodexUsageData {
 
 function formatResetAfterSeconds(seconds: number): string {
   if (seconds <= 0) return 'now';
-  
+
   const resetDate = new Date(Date.now() + seconds * 1000);
   return formatResetAt(resetDate.getTime()) ?? 'soon';
 }
@@ -52,9 +53,12 @@ function labelForWindow(window: CodexWindow): string {
 function labelsForWindows(primaryWindow: CodexWindow | null, secondaryWindow: CodexWindow | null) {
   const primaryLabel = primaryWindow ? labelForWindow(primaryWindow) : null;
   const secondaryBaseLabel = secondaryWindow ? labelForWindow(secondaryWindow) : null;
-  const secondaryLabel = primaryLabel && secondaryBaseLabel === primaryLabel
-    ? (primaryLabel === '5 hour limit' ? '7 day limit' : '5 hour limit')
-    : secondaryBaseLabel;
+  const secondaryLabel =
+    primaryLabel && secondaryBaseLabel === primaryLabel
+      ? primaryLabel === '5 hour limit'
+        ? '7 day limit'
+        : '5 hour limit'
+      : secondaryBaseLabel;
 
   return { primaryLabel, secondaryLabel };
 }
@@ -73,27 +77,35 @@ export function CodexUsage({ stacked = false }: { stacked?: boolean }) {
 
   const rawPrimaryWindow = usage?.rate_limit?.primary_window;
   const rawSecondaryWindow = usage?.rate_limit?.secondary_window;
-  const primaryWindow = isCodexWindow(rawPrimaryWindow) && hasDisplayableQuotaResetAfterSeconds(rawPrimaryWindow.reset_after_seconds)
-    ? rawPrimaryWindow
-    : null;
-  const secondaryWindow = isCodexWindow(rawSecondaryWindow) && hasDisplayableQuotaResetAfterSeconds(rawSecondaryWindow.reset_after_seconds)
-    ? rawSecondaryWindow
-    : null;
+  const primaryWindow =
+    isCodexWindow(rawPrimaryWindow) && hasDisplayableQuotaResetAfterSeconds(rawPrimaryWindow.reset_after_seconds)
+      ? rawPrimaryWindow
+      : null;
+  const secondaryWindow =
+    isCodexWindow(rawSecondaryWindow) && hasDisplayableQuotaResetAfterSeconds(rawSecondaryWindow.reset_after_seconds)
+      ? rawSecondaryWindow
+      : null;
   const { primaryLabel, secondaryLabel } = labelsForWindows(primaryWindow, secondaryWindow);
 
   if (!primaryWindow && !secondaryWindow) {
     if (!usage?.authType) return null;
-    const url = usage.authType === 'api_key' ? 'https://platform.openai.com/settings/organization/usage' : 'https://chatgpt.com/codex/settings/usage';
+    const url =
+      usage.authType === 'api_key'
+        ? 'https://platform.openai.com/settings/organization/usage'
+        : 'https://chatgpt.com/codex/settings/usage';
     return (
-      <div className="text-foreground-secondary">
-        Usage quotas: <button type="button" onClick={() => window.__openUrl?.(url)} className={usageLinkClassName}>{url}</button>
+      <div className='text-foreground-secondary'>
+        Usage quotas:{' '}
+        <button type='button' onClick={() => window.__openUrl?.(url)} className={usageLinkClassName}>
+          {url}
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-y-2">
-      <span className="whitespace-nowrap text-foreground-secondary">Usage quotas</span>
+    <div className='flex flex-col gap-y-2'>
+      <span className='whitespace-nowrap text-foreground-secondary'>Usage quotas</span>
       <div className={stacked ? 'flex flex-col gap-y-1.5' : 'flex flex-wrap gap-x-8 gap-y-1.5'}>
         {primaryWindow && primaryLabel && <WindowLine label={primaryLabel} window={primaryWindow} />}
         {secondaryWindow && secondaryLabel && <WindowLine label={secondaryLabel} window={secondaryWindow} />}

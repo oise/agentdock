@@ -9,13 +9,7 @@ interface FormDialogProps {
   footer?: ReactNode;
 }
 
-export function FormDialog({
-  isOpen,
-  title,
-  onClose,
-  children,
-  footer
-}: FormDialogProps) {
+export function FormDialog({ isOpen, title, onClose, children, footer }: FormDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusedElementRef = useRef<HTMLElement | null>(null);
   const titleId = useId();
@@ -23,9 +17,7 @@ export function FormDialog({
   useEffect(() => {
     if (!isOpen) return;
 
-    previousFocusedElementRef.current = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null;
+    previousFocusedElementRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
     const dialog = dialogRef.current;
     if (!dialog) return;
@@ -44,13 +36,13 @@ export function FormDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-start justify-center bg-black/20 px-3 pb-3 pt-24 animate-in fade-in duration-150"
+      className='fixed inset-0 z-[100] flex items-start justify-center bg-black/20 px-3 pb-3 pt-24 animate-in fade-in duration-150'
       onClick={onClose}
     >
       <div
         ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
+        role='dialog'
+        aria-modal='true'
         aria-labelledby={titleId}
         tabIndex={-1}
         className={`relative flex w-full max-w-[400px] flex-col overflow-hidden rounded-[8px] border border-border
@@ -63,29 +55,24 @@ export function FormDialog({
           }
         }}
       >
-        <div className="flex items-center justify-between px-3 py-2.5">
-
-          <div id={titleId} className="truncate text-foreground">{title}</div>
+        <div className='flex items-center justify-between px-3 py-2.5'>
+          <div id={titleId} className='truncate text-foreground'>
+            {title}
+          </div>
 
           <button
-            type="button"
+            type='button'
             onClick={onClose}
-            className="rounded-[4px] p-1 text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground focus:outline-none focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]"
-            aria-label="Close dialog"
+            className='rounded-[4px] p-1 text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground focus:outline-none focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]'
+            aria-label='Close dialog'
           >
             <X size={15} />
           </button>
         </div>
 
-        <div className="max-h-[70vh] overflow-y-auto px-3 py-2">
-          {children}
-        </div>
+        <div className='max-h-[70vh] overflow-y-auto px-3 py-2'>{children}</div>
 
-        {footer ? (
-          <div className="flex items-center justify-end gap-4 px-3 py-2">
-            {footer}
-          </div>
-        ) : null}
+        {footer ? <div className='flex items-center justify-end gap-4 px-3 py-2'>{footer}</div> : null}
       </div>
     </div>
   );

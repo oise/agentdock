@@ -42,7 +42,5 @@ export function getUsageBorderClass(value: number | null | undefined): string {
 export function formatUsagePercent(value: number | null | undefined, digits = 0): string {
   const percent = clampPercent(value);
   if (percent === null) return 'N/A';
-  return digits > 0
-    ? `${parseFloat(percent.toFixed(digits))}% used`
-    : `${Math.round(percent)}% used`;
+  return digits > 0 ? `${parseFloat(percent.toFixed(digits))}% used` : `${Math.round(percent)}% used`;
 }

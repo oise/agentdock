@@ -37,7 +37,7 @@ export function buildToolCallEntry(chunk: ContentChunk): ToolCallEntry {
     rawJson: chunk.toolRawJson || '',
     locations: json.locations,
     content: json.content || json.diff,
-    result: resultText ? truncateToolOutputForKind(resultText, kind).text : undefined,
+    result: resultText ? truncateToolOutputForKind(resultText, kind).text : undefined
   };
 }
 
@@ -52,41 +52,52 @@ export function extractToolCallDiffEntries(
           type: 'diff' as const,
           path: typeof item.path === 'string' ? item.path : '',
           oldText: item.oldText ?? null,
-          newText: item.newText ?? '',
+          newText: item.newText ?? ''
         }))
-    : (Array.isArray(json.diffs)
-        ? json.diffs.map((item: any) => ({
-            type: 'diff' as const,
-            path: typeof item.path === 'string' ? item.path : '',
-            oldText: item.oldText ?? null,
-            newText: item.newText ?? '',
-          }))
-        : []);
+    : Array.isArray(json.diffs)
+      ? json.diffs.map((item: any) => ({
+          type: 'diff' as const,
+          path: typeof item.path === 'string' ? item.path : '',
+          oldText: item.oldText ?? null,
+          newText: item.newText ?? ''
+        }))
+      : [];
 
   if (structuredDiffs.length > 0) {
     return structuredDiffs;
   }
 
-  const rawInput = (json.rawInput && typeof json.rawInput === 'object' ? json.rawInput : fallbackRawInput) as Record<string, any> | undefined;
-  if (!rawInput || typeof rawInput.path !== 'string' || rawInput.path.length === 0 || rawInput.file_text === undefined) {
+  const rawInput = (json.rawInput && typeof json.rawInput === 'object' ? json.rawInput : fallbackRawInput) as
+    | Record<string, any>
+    | undefined;
+  if (
+    !rawInput ||
+    typeof rawInput.path !== 'string' ||
+    rawInput.path.length === 0 ||
+    rawInput.file_text === undefined
+  ) {
     return [];
   }
 
-  return [{
-    type: 'diff',
-    path: rawInput.path,
-    oldText: null,
-    newText: typeof rawInput.file_text === 'string' ? rawInput.file_text : String(rawInput.file_text),
-  }];
+  return [
+    {
+      type: 'diff',
+      path: rawInput.path,
+      oldText: null,
+      newText: typeof rawInput.file_text === 'string' ? rawInput.file_text : String(rawInput.file_text)
+    }
+  ];
 }
 
 function isExecutePermissionPayload(json: Record<string, any>): boolean {
   if ((json.kind || '').toLowerCase() !== 'execute') return false;
   const rawInput = json.rawInput;
   if (!rawInput || typeof rawInput !== 'object') return false;
-  return Array.isArray(rawInput.available_decisions)
-    || Array.isArray(rawInput.proposed_execpolicy_amendment)
-    || typeof rawInput.reason === 'string';
+  return (
+    Array.isArray(rawInput.available_decisions) ||
+    Array.isArray(rawInput.proposed_execpolicy_amendment) ||
+    typeof rawInput.reason === 'string'
+  );
 }
 
 export function extractResultTexts(json: Record<string, any>): string | undefined {
@@ -120,7 +131,10 @@ function buildToolOutputRemovedNotice(removedCharacters: number): string {
   return `[Output removed: ${removedCharacters} characters]`;
 }
 
-export function truncateToolOutputForKind(text: string, kind?: string): { text: string; truncated: boolean; originalLength: number } {
+export function truncateToolOutputForKind(
+  text: string,
+  kind?: string
+): { text: string; truncated: boolean; originalLength: number } {
   const originalLength = text.split(/\r\n|\n|\r/).length;
   if ((kind || '').toLowerCase() === 'edit') {
     return { text, truncated: false, originalLength };
@@ -131,11 +145,20 @@ export function truncateToolOutputForKind(text: string, kind?: string): { text: 
   return { text, truncated: false, originalLength };
 }
 
-export function appendToolOutput(prev: string | undefined, next: string, _maxLines?: number, kind?: string): { text: string; truncated: boolean; originalLength: number } {
+export function appendToolOutput(
+  prev: string | undefined,
+  next: string,
+  _maxLines?: number,
+  kind?: string
+): { text: string; truncated: boolean; originalLength: number } {
   const combined = prev ? `${prev}\n\n${next}` : next;
   return truncateToolOutputForKind(combined, kind);
 }
 
-export function replaceToolOutput(next: string, _maxLines?: number, kind?: string): { text: string; truncated: boolean; originalLength: number } {
+export function replaceToolOutput(
+  next: string,
+  _maxLines?: number,
+  kind?: string
+): { text: string; truncated: boolean; originalLength: number } {
   return truncateToolOutputForKind(next, kind);
 }

@@ -4,7 +4,7 @@ import { ACPBridge } from '../../../utils/bridge';
 import {
   buildConversationHandoffFromTranscriptFile,
   buildConversationHandoffSaveFailureContext,
-  prepareConversationHandoff,
+  prepareConversationHandoff
 } from '../../../utils/conversationHandoff';
 
 interface UseAgentHandoffRequestOptions {
@@ -20,28 +20,31 @@ export function useAgentHandoffRequest({
   selectedAgentId,
   messages,
   fileChanges,
-  onAgentChangeRequest,
+  onAgentChangeRequest
 }: UseAgentHandoffRequestOptions) {
-  return useCallback(async (id: string) => {
-    if (!onAgentChangeRequest || id === selectedAgentId) return;
+  return useCallback(
+    async (id: string) => {
+      if (!onAgentChangeRequest || id === selectedAgentId) return;
 
-    const prepared = prepareConversationHandoff(messages, fileChanges);
-    let handoffText = prepared.handoffText;
+      const prepared = prepareConversationHandoff(messages, fileChanges);
+      let handoffText = prepared.handoffText;
 
-    if (prepared.exceedsInlineLimit) {
-      try {
-        const saved = await ACPBridge.saveConversationTranscript(conversationId, prepared.normalizedTranscript);
-        handoffText = buildConversationHandoffFromTranscriptFile(prepared, saved.filePath || '');
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.warn('[ChatSessionView] Failed to persist handoff transcript:', error);
-        handoffText = buildConversationHandoffSaveFailureContext(prepared, message);
+      if (prepared.exceedsInlineLimit) {
+        try {
+          const saved = await ACPBridge.saveConversationTranscript(conversationId, prepared.normalizedTranscript);
+          handoffText = buildConversationHandoffFromTranscriptFile(prepared, saved.filePath || '');
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.warn('[ChatSessionView] Failed to persist handoff transcript:', error);
+          handoffText = buildConversationHandoffSaveFailureContext(prepared, message);
+        }
       }
-    }
 
-    onAgentChangeRequest({
-      agentId: id,
-      handoffText,
-    });
-  }, [conversationId, fileChanges, messages, onAgentChangeRequest, selectedAgentId]);
+      onAgentChangeRequest({
+        agentId: id,
+        handoffText
+      });
+    },
+    [conversationId, fileChanges, messages, onAgentChangeRequest, selectedAgentId]
+  );
 }

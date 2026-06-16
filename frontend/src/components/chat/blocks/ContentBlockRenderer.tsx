@@ -38,29 +38,31 @@ export const ContentBlockRenderer: React.FC<Props> = ({ block, isActivePrompt = 
       return <PlanBlockComponent block={block} />;
     case 'image':
       return (
-        <div className="rounded-lg overflow-hidden border border-[var(--ide-Borders-color)] shadow-sm max-w-sm">
+        <div className='rounded-lg overflow-hidden border border-[var(--ide-Borders-color)] shadow-sm max-w-sm'>
           <img
             src={block.data.startsWith('data:') ? block.data : `data:${block.mimeType};base64,${block.data}`}
-            alt="AI Attachment"
-            className="w-full h-auto"
+            alt='AI Attachment'
+            className='w-full h-auto'
           />
         </div>
       );
     case 'audio':
       return (
-        <div className="rounded-lg overflow-hidden border border-[var(--ide-Borders-color)] shadow-sm max-w-md">
-          <audio controls
+        <div className='rounded-lg overflow-hidden border border-[var(--ide-Borders-color)] shadow-sm max-w-md'>
+          <audio
+            controls
             src={block.data.startsWith('data:') ? block.data : `data:${block.mimeType};base64,${block.data}`}
-            className="w-full"
+            className='w-full'
           />
         </div>
       );
     case 'video':
       return (
-        <div className="rounded-lg overflow-hidden border border-[var(--ide-Borders-color)] shadow-sm max-w-md">
-          <video controls
+        <div className='rounded-lg overflow-hidden border border-[var(--ide-Borders-color)] shadow-sm max-w-md'>
+          <video
+            controls
             src={block.data.startsWith('data:') ? block.data : `data:${block.mimeType};base64,${block.data}`}
-            className="w-full h-auto"
+            className='w-full h-auto'
           />
         </div>
       );

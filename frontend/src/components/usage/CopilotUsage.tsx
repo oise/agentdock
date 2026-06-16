@@ -3,7 +3,8 @@ import { UsageMetricRow } from './shared/UsageMetricRow';
 import { clampPercent } from './shared/quotaVisuals';
 import { formatResetAt, hasDisplayableQuotaReset } from './shared/formatResetAt';
 
-const usageLinkClassName = 'text-link hover:underline focus:outline-none focus-visible:rounded-[3px] focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]';
+const usageLinkClassName =
+  'text-link hover:underline focus:outline-none focus-visible:rounded-[3px] focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]';
 
 interface CopilotQuotaWindow {
   entitlement?: number;
@@ -27,8 +28,11 @@ export function CopilotUsage() {
   const data = useAdapterUsage(AGENT_ID);
   if (!data) {
     return (
-      <div className="text-foreground-secondary">
-        Usage quotas: <button type="button" onClick={() => window.__openUrl?.(BILLING_URL)} className={usageLinkClassName}>{BILLING_URL}</button>
+      <div className='text-foreground-secondary'>
+        Usage quotas:{' '}
+        <button type='button' onClick={() => window.__openUrl?.(BILLING_URL)} className={usageLinkClassName}>
+          {BILLING_URL}
+        </button>
       </div>
     );
   }
@@ -38,8 +42,11 @@ export function CopilotUsage() {
     usage = JSON.parse(data);
   } catch {
     return (
-      <div className="text-foreground-secondary">
-        Usage quotas: <button type="button" onClick={() => window.__openUrl?.(BILLING_URL)} className={usageLinkClassName}>{BILLING_URL}</button>
+      <div className='text-foreground-secondary'>
+        Usage quotas:{' '}
+        <button type='button' onClick={() => window.__openUrl?.(BILLING_URL)} className={usageLinkClassName}>
+          {BILLING_URL}
+        </button>
       </div>
     );
   }
@@ -47,8 +54,11 @@ export function CopilotUsage() {
   const premium = usage?.quota_snapshots?.premium_interactions;
   if (!premium) {
     return (
-      <div className="text-foreground-secondary">
-        Usage quotas: <button type="button" onClick={() => window.__openUrl?.(BILLING_URL)} className={usageLinkClassName}>{BILLING_URL}</button>
+      <div className='text-foreground-secondary'>
+        Usage quotas:{' '}
+        <button type='button' onClick={() => window.__openUrl?.(BILLING_URL)} className={usageLinkClassName}>
+          {BILLING_URL}
+        </button>
       </div>
     );
   }
@@ -60,8 +70,11 @@ export function CopilotUsage() {
   const resetAt = usage?.quota_reset_date_utc ?? usage?.quota_reset_date;
   if (!hasDisplayableQuotaReset(resetAt)) {
     return (
-      <div className="text-foreground-secondary">
-        Usage quotas: <button type="button" onClick={() => window.__openUrl?.(BILLING_URL)} className={usageLinkClassName}>{BILLING_URL}</button>
+      <div className='text-foreground-secondary'>
+        Usage quotas:{' '}
+        <button type='button' onClick={() => window.__openUrl?.(BILLING_URL)} className={usageLinkClassName}>
+          {BILLING_URL}
+        </button>
       </div>
     );
   }
@@ -74,14 +87,14 @@ export function CopilotUsage() {
   const resetLabel = formatResetAt(resetAt);
   const metaParts = [
     remaining !== null ? `${remaining} left` : null,
-    resetLabel ? `Resets: ${resetLabel}` : null,
+    resetLabel ? `Resets: ${resetLabel}` : null
   ].filter(Boolean);
 
   return (
-    <div className="flex flex-col gap-y-2">
-      <span className="whitespace-nowrap text-foreground-secondary">Usage quotas</span>
+    <div className='flex flex-col gap-y-2'>
+      <span className='whitespace-nowrap text-foreground-secondary'>Usage quotas</span>
       <UsageMetricRow
-        label="Premium requests"
+        label='Premium requests'
         percent={percentUsed}
         valueLabel={used !== null && entitlement !== null ? `${used} / ${entitlement} used` : 'N/A'}
         meta={metaParts.length > 0 ? metaParts.join(' · ') : undefined}

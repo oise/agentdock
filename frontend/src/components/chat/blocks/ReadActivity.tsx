@@ -10,9 +10,18 @@ interface Props {
 }
 
 const FileIcon = ({ size = 13 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
-    <polyline points="13 2 13 9 20 9"></polyline>
+  <svg
+    width={size}
+    height={size}
+    viewBox='0 0 24 24'
+    fill='none'
+    stroke='currentColor'
+    strokeWidth='2'
+    strokeLinecap='round'
+    strokeLinejoin='round'
+  >
+    <path d='M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z'></path>
+    <polyline points='13 2 13 9 20 9'></polyline>
   </svg>
 );
 
@@ -35,12 +44,12 @@ export const ReadActivity: React.FC<Props> = ({ entry, onOpenFile }) => {
   const cleanTitle = entry.title?.replace(/^"(.*)"$/, '$1') || entry.title;
   if (!filePath || !fileName) {
     return (
-      <div className="flex items-center gap-1.5 py-0.5 min-w-0 w-full">
-        <span className=" flex-shrink-0"><FileIcon size={13} /></span>
-        <span className="text-foreground truncate min-w-0 flex-1 block">{cleanTitle || entry.kind}</span>
-        {hasError && (
-          <div className="w-1.5 h-1.5 rounded-full bg-error flex-shrink-0" />
-        )}
+      <div className='flex items-center gap-1.5 py-0.5 min-w-0 w-full'>
+        <span className=' flex-shrink-0'>
+          <FileIcon size={13} />
+        </span>
+        <span className='text-foreground truncate min-w-0 flex-1 block'>{cleanTitle || entry.kind}</span>
+        {hasError && <div className='w-1.5 h-1.5 rounded-full bg-error flex-shrink-0' />}
       </div>
     );
   }
@@ -63,28 +72,25 @@ export const ReadActivity: React.FC<Props> = ({ entry, onOpenFile }) => {
     if (limit) endLine = startLine + limit;
   }
 
-  const lineRange = startLine !== null
-    ? ` L${startLine}${endLine !== null ? `-${endLine}` : ''}`
-    : '';
-  const pattern = typeof rawInput?.pattern === 'string' && rawInput.pattern.trim().length > 0
-    ? rawInput.pattern.trim()
-    : null;
+  const lineRange = startLine !== null ? ` L${startLine}${endLine !== null ? `-${endLine}` : ''}` : '';
+  const pattern =
+    typeof rawInput?.pattern === 'string' && rawInput.pattern.trim().length > 0 ? rawInput.pattern.trim() : null;
 
   return (
-    <Tooltip variant="minimal" content={`Read ${filePath}${lineRange}`}>
-      <div className="flex items-center gap-1.5 min-w-0 group/activity cursor-help pr-2">
-        <div className="flex-shrink-0 transition-opacity">
+    <Tooltip variant='minimal' content={`Read ${filePath}${lineRange}`}>
+      <div className='flex items-center gap-1.5 min-w-0 group/activity cursor-help pr-2'>
+        <div className='flex-shrink-0 transition-opacity'>
           <FileIcon size={13} />
         </div>
         <button
           onClick={() => onOpenFile(filePath, startLine || undefined)}
           className={`text-foreground-secondary hover:underline text-left truncate min-w-0 flex-1 ${chatFocusClassName}`}
         >
-          Read {fileName}{lineRange}{pattern ? ` | Pattern: ${pattern}` : ''}
+          Read {fileName}
+          {lineRange}
+          {pattern ? ` | Pattern: ${pattern}` : ''}
         </button>
-        {hasError && (
-          <div className="w-1.5 h-1.5 rounded-full bg-error flex-shrink-0" />
-        )}
+        {hasError && <div className='w-1.5 h-1.5 rounded-full bg-error flex-shrink-0' />}
       </div>
     </Tooltip>
   );

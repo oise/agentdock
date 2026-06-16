@@ -24,7 +24,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
   showOnFocus = true,
   contentClassName,
   variant = 'default',
-  position = 'top',
+  position = 'top'
 }) => {
   const [visible, setVisible] = useState(false);
   const [coords, setCoords] = useState({ x: 0, y: 0 });
@@ -98,7 +98,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
   }, []);
 
   return (
-    <div 
+    <div
       ref={triggerRef}
       className={cx('block w-fit max-w-full align-middle', className)}
       onMouseEnter={handleMouseEnter}
@@ -108,34 +108,37 @@ export const Tooltip: React.FC<TooltipProps> = ({
       onBlur={handleBlur}
     >
       {children}
-      {visible && content && createPortal(
-        <div 
-          ref={tooltipRef}
-          className="fixed z-[9999] pointer-events-none"
-          style={{ 
-            left: coords.x, 
-            top: position === 'bottom' ? coords.y + 6 : coords.y,
-            transform: position === 'bottom'
-              ? `translate(calc(-50% + ${offset}px), 0px)`
-              : `translate(calc(-50% + ${offset}px), calc(-100% - 6px))`,
-            animation: 'tooltip-in 250ms ease-out forwards',
-          }}
-        >
+      {visible &&
+        content &&
+        createPortal(
           <div
-            className={cx(
-              'max-w-[calc(100vw-16px)] border border-[var(--ide-Button-startBorderColor)] ' +
-              'bg-background-secondary text-foreground rounded-md',
-              variant === 'minimal'
-                ? 'overflow-hidden px-2 py-1 text-xs whitespace-nowrap text-ellipsis'
-                : 'max-w-[300px] p-3 pt-2 text-ide-small whitespace-normal break-words',
-              contentClassName
-            )}
+            ref={tooltipRef}
+            className='fixed z-[9999] pointer-events-none'
+            style={{
+              left: coords.x,
+              top: position === 'bottom' ? coords.y + 6 : coords.y,
+              transform:
+                position === 'bottom'
+                  ? `translate(calc(-50% + ${offset}px), 0px)`
+                  : `translate(calc(-50% + ${offset}px), calc(-100% - 6px))`,
+              animation: 'tooltip-in 250ms ease-out forwards'
+            }}
           >
-            {content}
-          </div>
-        </div>,
-        document.body
-      )}
+            <div
+              className={cx(
+                'max-w-[calc(100vw-16px)] border border-[var(--ide-Button-startBorderColor)] ' +
+                  'bg-background-secondary text-foreground rounded-md',
+                variant === 'minimal'
+                  ? 'overflow-hidden px-2 py-1 text-xs whitespace-nowrap text-ellipsis'
+                  : 'max-w-[300px] p-3 pt-2 text-ide-small whitespace-normal break-words',
+                contentClassName
+              )}
+            >
+              {content}
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 };

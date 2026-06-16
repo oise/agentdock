@@ -4,21 +4,19 @@ import { ACPBridge } from '../../utils/bridge';
 import type { AgentOption, HistorySessionMeta } from '../../types/chat';
 
 function getItemAgents(item: HistorySessionMeta): string[] {
-  return item.allAdapterNames && item.allAdapterNames.length > 0
-    ? item.allAdapterNames
-    : [item.adapterName];
+  return item.allAdapterNames && item.allAdapterNames.length > 0 ? item.allAdapterNames : [item.adapterName];
 }
 
 function formatDate(ms: number) {
   const d = new Date(ms);
   const now = new Date();
-  const isToday = d.getDate() === now.getDate() &&
-    d.getMonth() === now.getMonth() &&
-    d.getFullYear() === now.getFullYear();
+  const isToday =
+    d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
 
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
-  const isYesterday = d.getDate() === yesterday.getDate() &&
+  const isYesterday =
+    d.getDate() === yesterday.getDate() &&
     d.getMonth() === yesterday.getMonth() &&
     d.getFullYear() === yesterday.getFullYear();
 
@@ -28,7 +26,7 @@ function formatDate(ms: number) {
 
   if (isToday) return `Today ${timeStr}`;
   if (isYesterday) return `Yesterday ${timeStr}`;
-  
+
   const day = String(d.getDate()).padStart(2, '0');
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const year = d.getFullYear();
@@ -60,9 +58,11 @@ export function useHistoryPanelController(availableAgents: AgentOption[]) {
       const list = Array.isArray(e.detail.list) ? e.detail.list : [];
       setHistoryList(list);
       setSelectedConversationIds((prev) => prev.filter((id) => list.some((item) => item.conversationId === id)));
-      setDeleteErrors((prev) => Object.fromEntries(
-        Object.entries(prev).filter(([conversationId]) => list.some((item) => item.conversationId === conversationId))
-      ));
+      setDeleteErrors((prev) =>
+        Object.fromEntries(
+          Object.entries(prev).filter(([conversationId]) => list.some((item) => item.conversationId === conversationId))
+        )
+      );
       setIsLoading(false);
     });
 
@@ -134,7 +134,8 @@ export function useHistoryPanelController(availableAgents: AgentOption[]) {
 
   const selectedCount = selectedConversationIds.length;
   const filteredConversationIds = filteredHistoryList.map((item) => item.conversationId);
-  const areAllFilteredSelected = filteredConversationIds.length > 0 &&
+  const areAllFilteredSelected =
+    filteredConversationIds.length > 0 &&
     filteredConversationIds.every((conversationId) => selectedConversationIds.includes(conversationId));
 
   const toggleSelection = (conversationId: string) => {
@@ -196,11 +197,11 @@ export function useHistoryPanelController(availableAgents: AgentOption[]) {
       setEditingId(null);
       return;
     }
-    
-    setHistoryList(prev => prev.map(item => 
-      item.conversationId === conversationId ? { ...item, title: editTitle.trim() } : item
-    ));
-    
+
+    setHistoryList((prev) =>
+      prev.map((item) => (item.conversationId === conversationId ? { ...item, title: editTitle.trim() } : item))
+    );
+
     ACPBridge.renameHistoryConversation(projectPath, conversationId, editTitle.trim());
     setEditingId(null);
   };
@@ -232,11 +233,7 @@ export function useHistoryPanelController(availableAgents: AgentOption[]) {
     setIsFilterOpen(true);
   };
 
-  const handleFilterOptionKeyDown = (
-    event: KeyboardEvent<HTMLButtonElement>,
-    agentId: string,
-    index: number
-  ) => {
+  const handleFilterOptionKeyDown = (event: KeyboardEvent<HTMLButtonElement>, agentId: string, index: number) => {
     if (event.key === 'Escape') {
       event.preventDefault();
       closeFilter(true);
@@ -316,6 +313,6 @@ export function useHistoryPanelController(availableAgents: AgentOption[]) {
     handleFilterButtonKeyDown,
     handleFilterOptionKeyDown,
     toggleSelection,
-    cancelDelete,
+    cancelDelete
   };
 }

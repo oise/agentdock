@@ -87,7 +87,7 @@ export default function TabBar({
       window.removeEventListener('mousedown', onPointerDown);
       window.removeEventListener('keydown', onKeyDown);
     };
-}, []);
+  }, []);
 
   useEffect(() => {
     const element = tabsListRef.current;
@@ -133,12 +133,17 @@ export default function TabBar({
 
   const averageTabWidth = tabs.length > 0 ? tabsViewportWidth / tabs.length : Number.POSITIVE_INFINITY;
   const titleClassName =
-    averageTabWidth < 76 ? 'hidden' :
-    averageTabWidth < 92 ? 'max-w-[20px]' :
-    averageTabWidth < 125 ? 'max-w-[35px]' :
-    averageTabWidth < 140 ? 'max-w-[68px]' :
-    averageTabWidth < 170 ? 'max-w-[80px]' :
-    'max-w-[120px]';
+    averageTabWidth < 76
+      ? 'hidden'
+      : averageTabWidth < 92
+        ? 'max-w-[20px]'
+        : averageTabWidth < 125
+          ? 'max-w-[35px]'
+          : averageTabWidth < 140
+            ? 'max-w-[68px]'
+            : averageTabWidth < 170
+              ? 'max-w-[80px]'
+              : 'max-w-[120px]';
 
   const findDropTarget = (sourceId: string, clientX: number, clientY: number) => {
     const tabElements = Array.from(tabsListRef.current?.querySelectorAll<HTMLElement>('[data-tab-id]') ?? []);
@@ -153,7 +158,7 @@ export default function TabBar({
       }
       return {
         id,
-        position: clientX < rect.left + rect.width / 2 ? 'before' as const : 'after' as const,
+        position: clientX < rect.left + rect.width / 2 ? ('before' as const) : ('after' as const)
       };
     }
     return null;
@@ -208,11 +213,15 @@ export default function TabBar({
   };
 
   return (
-    <div className="relative z-30 flex h-[40px] bg-background border-t border-b
-      border-[var(--ide-Borders-ContrastBorderColor)] select-none shadow-[0_2px_8px_rgba(0,0,0,0.05)]">
+    <div
+      className='relative z-30 flex h-[40px] bg-background border-t border-b
+      border-[var(--ide-Borders-ContrastBorderColor)] select-none shadow-[0_2px_8px_rgba(0,0,0,0.05)]'
+    >
       {/* Tabs List */}
-      <div ref={tabsListRef} role="tablist"
-        className="flex min-w-0 flex-1 overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5"
+      <div
+        ref={tabsListRef}
+        role='tablist'
+        className='flex min-w-0 flex-1 overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:h-1.5'
       >
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
@@ -236,7 +245,7 @@ export default function TabBar({
               shouldSuppressClick={(id) => suppressClickTabIdRef.current === id}
               onCloseTab={onCloseTab}
               onFocusTab={(id) => setFocusedTabId(lastInteractionWasTabRef.current ? id : null)}
-              onBlurTab={(id) => setFocusedTabId((current) => current === id ? null : current)}
+              onBlurTab={(id) => setFocusedTabId((current) => (current === id ? null : current))}
               dropIndicator={dropTarget?.id === tab.id ? dropTarget.position : null}
             />
           );
@@ -244,21 +253,21 @@ export default function TabBar({
       </div>
 
       {/* Controls: +, More (chevron), Hamburger */}
-      <div className="flex items-center bg-background pl-1 pr-2 gap-0.5 z-10 shadow-[-10px_0_10px_-5px_var(--background)]">
+      <div className='flex items-center bg-background pl-1 pr-2 gap-0.5 z-10 shadow-[-10px_0_10px_-5px_var(--background)]'>
         {/* New Tab (+ matches default agent) */}
         <button
           onClick={onNewTab}
           onFocus={() => setTabFocusedControl(lastInteractionWasTabRef.current ? 'new' : null)}
-          onBlur={() => setTabFocusedControl((current) => current === 'new' ? null : current)}
+          onBlur={() => setTabFocusedControl((current) => (current === 'new' ? null : current))}
           className={`flex items-center justify-center w-[28px] h-[24px] rounded bg-background hover:text-foreground 
             hover:bg-hover transition-[filter,color] focus:outline-none 
             ${tabFocusedControl === 'new' ? 'shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]' : ''}`}
         >
-          <Plus size={14} strokeWidth={2.5} aria-hidden="true" />
+          <Plus size={14} strokeWidth={2.5} aria-hidden='true' />
         </button>
 
         {/* More/Menu (Chevron dropdown) */}
-        <div className="relative" ref={menuRef}>
+        <div className='relative' ref={menuRef}>
           <button
             ref={menuButtonRef}
             onClick={() => {
@@ -272,7 +281,7 @@ export default function TabBar({
               });
             }}
             onFocus={() => setTabFocusedControl(lastInteractionWasTabRef.current ? 'menu' : null)}
-            onBlur={() => setTabFocusedControl((current) => current === 'menu' ? null : current)}
+            onBlur={() => setTabFocusedControl((current) => (current === 'menu' ? null : current))}
             onKeyDown={(event) => {
               if ((event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') && !menuOpen) {
                 event.preventDefault();
@@ -285,10 +294,10 @@ export default function TabBar({
               hover:text-foreground hover:bg-hover transition-colors focus:outline-none 
               ${menuOpen ? 'bg-hover text-foreground' : ''} 
               ${tabFocusedControl === 'menu' ? 'shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]' : ''}`}
-            aria-haspopup="menu"
+            aria-haspopup='menu'
             aria-expanded={menuOpen}
           >
-            <ChevronDown size={12} aria-hidden="true" />
+            <ChevronDown size={12} aria-hidden='true' />
           </button>
 
           {menuOpen && (
@@ -310,7 +319,7 @@ export default function TabBar({
         </div>
 
         {/* Hamburger Menu */}
-        <div className="relative" ref={hamburgerRef}>
+        <div className='relative' ref={hamburgerRef}>
           <button
             ref={hamburgerButtonRef}
             onClick={() => {
@@ -324,7 +333,7 @@ export default function TabBar({
               });
             }}
             onFocus={() => setTabFocusedControl(lastInteractionWasTabRef.current ? 'hamburger' : null)}
-            onBlur={() => setTabFocusedControl((current) => current === 'hamburger' ? null : current)}
+            onBlur={() => setTabFocusedControl((current) => (current === 'hamburger' ? null : current))}
             onKeyDown={(event) => {
               if ((event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') && !hamburgerMenuOpen) {
                 event.preventDefault();
@@ -336,10 +345,10 @@ export default function TabBar({
             className={`flex items-center justify-center w-[28px] h-[24px] rounded bg-background transition-colors 
               focus:outline-none ${hamburgerMenuOpen ? 'bg-hover text-foreground' : 'hover:text-foreground hover:bg-hover'} 
               ${tabFocusedControl === 'hamburger' ? 'shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]' : ''}`}
-            aria-haspopup="menu"
+            aria-haspopup='menu'
             aria-expanded={hamburgerMenuOpen}
           >
-            <Menu size={16} aria-hidden="true" />
+            <Menu size={16} aria-hidden='true' />
           </button>
 
           {hamburgerMenuOpen && (

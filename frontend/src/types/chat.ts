@@ -24,11 +24,38 @@ export interface ChatAttachment {
   endLine?: number;
 }
 
-export interface TextBlock { type: 'text'; text: string; }
-export interface ImageBlock { type: 'image'; data: string; mimeType: string; isInline?: boolean; }
-export interface AudioBlock { type: 'audio'; data: string; mimeType: string; isInline?: boolean; }
-export interface VideoBlock { type: 'video'; data: string; mimeType: string; name?: string; path?: string; isInline?: boolean; }
-export interface FileBlock { type: 'file'; name: string; mimeType: string; data?: string; path?: string; isInline?: boolean; }
+export interface TextBlock {
+  type: 'text';
+  text: string;
+}
+export interface ImageBlock {
+  type: 'image';
+  data: string;
+  mimeType: string;
+  isInline?: boolean;
+}
+export interface AudioBlock {
+  type: 'audio';
+  data: string;
+  mimeType: string;
+  isInline?: boolean;
+}
+export interface VideoBlock {
+  type: 'video';
+  data: string;
+  mimeType: string;
+  name?: string;
+  path?: string;
+  isInline?: boolean;
+}
+export interface FileBlock {
+  type: 'file';
+  name: string;
+  mimeType: string;
+  data?: string;
+  path?: string;
+  isInline?: boolean;
+}
 export interface CodeReferenceBlock {
   type: 'code_ref';
   id?: string;
@@ -51,19 +78,39 @@ export interface ToolCallEntry {
   // For thinking entries
   text?: string;
 }
-export interface ExploringBlock { type: 'exploring'; isStreaming: boolean; isReplay?: boolean; entries: ToolCallEntry[]; }
-export interface ToolCallBlock { type: 'tool_call'; entry: ToolCallEntry; isReplay?: boolean; }
+export interface ExploringBlock {
+  type: 'exploring';
+  isStreaming: boolean;
+  isReplay?: boolean;
+  entries: ToolCallEntry[];
+}
+export interface ToolCallBlock {
+  type: 'tool_call';
+  entry: ToolCallEntry;
+  isReplay?: boolean;
+}
 export interface PlanEntry {
   content: string;
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled' | 'failed';
   priority?: string;
 }
 
-export interface PlanBlock { type: 'plan'; entries: PlanEntry[]; isReplay?: boolean; }
+export interface PlanBlock {
+  type: 'plan';
+  entries: PlanEntry[];
+  isReplay?: boolean;
+}
 
-export type RichContentBlock = TextBlock | ImageBlock | AudioBlock | VideoBlock | FileBlock | CodeReferenceBlock | ExploringBlock | ToolCallBlock | PlanBlock;
-
-
+export type RichContentBlock =
+  | TextBlock
+  | ImageBlock
+  | AudioBlock
+  | VideoBlock
+  | FileBlock
+  | CodeReferenceBlock
+  | ExploringBlock
+  | ToolCallBlock
+  | PlanBlock;
 
 export interface Message {
   id: string;
@@ -175,7 +222,15 @@ export interface TabUiFlags {
   processing: boolean;
 }
 
-export type TabType = 'chat' | 'management' | 'design' | 'history' | 'mcp' | 'system-instructions' | 'prompt-library' | 'settings';
+export type TabType =
+  | 'chat'
+  | 'management'
+  | 'design'
+  | 'history'
+  | 'mcp'
+  | 'system-instructions'
+  | 'prompt-library'
+  | 'settings';
 
 export interface ChatTab {
   id: string;
@@ -220,7 +275,17 @@ export interface HistorySessionMeta {
 export interface ContentChunk {
   chatId: string;
   role: 'user' | 'assistant';
-  type: 'text' | 'thinking' | 'image' | 'audio' | 'video' | 'file' | 'tool_call' | 'tool_call_update' | 'plan' | 'prompt_done';
+  type:
+    | 'text'
+    | 'thinking'
+    | 'image'
+    | 'audio'
+    | 'video'
+    | 'file'
+    | 'tool_call'
+    | 'tool_call_update'
+    | 'plan'
+    | 'prompt_done';
   text?: string;
   data?: string;
   path?: string;
@@ -300,7 +365,6 @@ export interface ConversationReplayLoadedPayload {
   chatId: string;
   data: ConversationReplayData;
 }
-
 
 export interface ToolCallDiff {
   path: string;
@@ -454,7 +518,15 @@ export interface GitCommitGenerationSettings {
 export interface GlobalSettings {
   audioNotificationsEnabled: boolean;
   uiFontSizeOffsetPx: number;
-  userMessageBackgroundStyle: 'default' | 'blue' | 'background-secondary' | 'primary' | 'secondary' | 'accent' | 'input' | 'editor-bg';
+  userMessageBackgroundStyle:
+    | 'default'
+    | 'blue'
+    | 'background-secondary'
+    | 'primary'
+    | 'secondary'
+    | 'accent'
+    | 'input'
+    | 'editor-bg';
   audioTranscription: AudioTranscriptionSettings;
   gitCommitGeneration: GitCommitGenerationSettings;
   quotaWidgetEnabled: boolean;
@@ -564,9 +636,3 @@ declare global {
     __settingsBridgeReady?: boolean;
   }
 }
-
-
-
-
-
-

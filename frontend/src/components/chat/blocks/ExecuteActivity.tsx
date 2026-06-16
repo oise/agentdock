@@ -41,18 +41,12 @@ export const ExecuteActivity: React.FC<Props> = ({ entry, isActivePrompt = false
   const showPending = isPending && isActivePrompt;
 
   return (
-    <Tooltip variant="minimal" content={command}>
-      <div className="flex items-center gap-1.5 min-w-0 cursor-help pr-2">
-        <SquareTerminal size={13} className="text-foreground-secondary flex-shrink-0 relative" />
-        <span className="text-foreground-secondary font-mono truncate min-w-0 flex-1 block">
-          {command}
-        </span>
-        {showPending && (
-          <div className="w-1.5 h-1.5 rounded-full bg-warning animate-pulse flex-shrink-0" />
-        )}
-        {isError && (
-          <div className="w-1.5 h-1.5 rounded-full bg-error flex-shrink-0" />
-        )}
+    <Tooltip variant='minimal' content={command}>
+      <div className='flex items-center gap-1.5 min-w-0 cursor-help pr-2'>
+        <SquareTerminal size={13} className='text-foreground-secondary flex-shrink-0 relative' />
+        <span className='text-foreground-secondary font-mono truncate min-w-0 flex-1 block'>{command}</span>
+        {showPending && <div className='w-1.5 h-1.5 rounded-full bg-warning animate-pulse flex-shrink-0' />}
+        {isError && <div className='w-1.5 h-1.5 rounded-full bg-error flex-shrink-0' />}
       </div>
     </Tooltip>
   );

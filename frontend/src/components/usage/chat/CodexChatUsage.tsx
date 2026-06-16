@@ -16,11 +16,13 @@ export function CodexChatUsage() {
         const primary = parsed.rate_limit.primary_window;
         const secondary = parsed.rate_limit.secondary_window;
 
-        const hasPrimary = primary &&
+        const hasPrimary =
+          primary &&
           typeof primary.used_percent === 'number' &&
           typeof primary.reset_after_seconds === 'number' &&
           hasDisplayableQuotaResetAfterSeconds(primary.reset_after_seconds);
-        const hasSecondary = secondary &&
+        const hasSecondary =
+          secondary &&
           typeof secondary.used_percent === 'number' &&
           typeof secondary.reset_after_seconds === 'number' &&
           hasDisplayableQuotaResetAfterSeconds(secondary.reset_after_seconds);

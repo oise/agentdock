@@ -41,6 +41,7 @@ import {
   PromptLibraryEvent,
   SessionIdEvent,
   StatusEvent,
+  SubagentThreadsEvent,
   SystemInstructionsEvent,
   ToolCallBridgeEvent,
   UndoResultEvent,
@@ -159,6 +160,10 @@ export const ACPBridge = {
 
     window.__onStatus = (chatId, status) => {
       window.dispatchEvent(new CustomEvent(EVENT_NAMES.STATUS, { detail: { chatId, status } }));
+    };
+
+    window.__onSubagentThreads = (chatId, threads) => {
+      window.dispatchEvent(new CustomEvent(EVENT_NAMES.SUBAGENT_THREADS, { detail: { chatId, threads } }));
     };
 
     window.__onBridgeOperationResult = (payload) => {
@@ -312,6 +317,8 @@ export const ACPBridge = {
   onContentChunk: (callback: (e: CustomEvent<ContentChunkEvent>) => void) => onBridgeEvent(EVENT_NAMES.CONTENT_CHUNK, callback),
 
   onStatus: (callback: (e: CustomEvent<StatusEvent>) => void) => onBridgeEvent(EVENT_NAMES.STATUS, callback),
+
+  onSubagentThreads: (callback: (e: CustomEvent<SubagentThreadsEvent>) => void) => onBridgeEvent(EVENT_NAMES.SUBAGENT_THREADS, callback),
 
   onBridgeOperationResult: (callback: (e: CustomEvent<BridgeOperationResultEvent>) => void) => onBridgeEvent(EVENT_NAMES.BRIDGE_OPERATION_RESULT, callback),
 

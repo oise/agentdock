@@ -6,7 +6,8 @@ import {
   HistorySessionMeta,
   ChatAttachment,
   PendingHandoffContext,
-  ForkConversationBase
+  ForkConversationBase,
+  SubagentThread,
 } from '../types/chat';
 import { ACPBridge } from '../utils/bridge';
 import { buildReplayMessages } from '../utils/replay';
@@ -56,6 +57,7 @@ export function useChatSession(
   const permissionRequest = permissionQueue[0] ?? null;
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [acpSessionId, setAcpSessionId] = useState<string>('');
+  const [subagentThreads, setSubagentThreads] = useState<SubagentThread[]>([]);
   const messages = useMemo(() => [...historyMessages, ...liveMessages], [historyMessages, liveMessages]);
   const selectedAgentId = initialAgentId || '';
 
@@ -401,6 +403,11 @@ export function useChatSession(
       lastMetadataFingerprintRef.current = '';
     });
 
+    const unsubSubagentThreads = ACPBridge.onSubagentThreads((e) => {
+      if (e.detail.chatId !== conversationId) return;
+      setSubagentThreads(e.detail.threads);
+    });
+
     const unsubMode = ACPBridge.onMode((e) => {
       if (e.detail.chatId !== conversationId) return;
       startedModeIdRef.current = e.detail.modeId;
@@ -418,6 +425,7 @@ export function useChatSession(
       unsubConversationReplayLoaded();
       unsubStatus();
       unsubSessionId();
+      unsubSubagentThreads();
       unsubMode();
       unsubPermission();
     };
@@ -629,6 +637,7 @@ export function useChatSession(
     status,
     isSending,
     isHistoryReplaying,
+    subagentThreads,
     selectedAgentId,
     agentOptions,
     selectedModelId,

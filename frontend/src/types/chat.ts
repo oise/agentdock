@@ -95,22 +95,24 @@ export interface PlanEntry {
   priority?: string;
 }
 
-export interface PlanBlock {
-  type: 'plan';
-  entries: PlanEntry[];
-  isReplay?: boolean;
+export interface PlanBlock { type: 'plan'; entries: PlanEntry[]; isReplay?: boolean; }
+
+export type RichContentBlock = TextBlock | ImageBlock | AudioBlock | VideoBlock | FileBlock | CodeReferenceBlock | ExploringBlock | ToolCallBlock | PlanBlock;
+
+export interface SubagentThread {
+  id: string;
+  agentName: string;
+  title: string;
+  status: 'running' | 'done' | 'error';
+  output?: string;
 }
 
-export type RichContentBlock =
-  | TextBlock
-  | ImageBlock
-  | AudioBlock
-  | VideoBlock
-  | FileBlock
-  | CodeReferenceBlock
-  | ExploringBlock
-  | ToolCallBlock
-  | PlanBlock;
+export interface QueuedPrompt {
+  id: string;
+  text: string;
+  blocks: RichContentBlock[];
+  attachments: ChatAttachment[];
+}
 
 export interface Message {
   id: string;
@@ -589,6 +591,8 @@ declare global {
     __onAcpLog?: (payload: AcpLogEntryPayload) => void;
     __onContentChunk?: (chunk: ContentChunk) => void;
     __onStatus?: (chatId: string, status: string) => void;
+__onPromptIdle?: (chatId: string) => void;
+    __onSubagentThreads?: (chatId: string, threads: SubagentThread[]) => void;
     __onSessionId?: (chatId: string, id: string) => void;
     __onAdapters?: (adapters: AgentOption[]) => void;
     __onAvailableCommands?: (adapterId: string, commands: AvailableCommand[]) => void;
@@ -607,10 +611,12 @@ declare global {
     __onFileChangeStats?: (payload: FileChangeStatsResultPayload) => void;
 
     __onMcpServers?: (servers: unknown) => void;
+    __onMcpStatus?: (update: unknown) => void;
     __onFilesResult?: (filesJson: unknown) => void;
     __searchFiles?: (query: string) => void;
     __loadMcpServers?: () => void;
     __saveMcpServers?: (json: string) => void;
+    __checkMcpStatus?: () => void;
     __onPromptLibrary?: (items: unknown) => void;
     __loadPromptLibrary?: () => void;
     __savePromptLibrary?: (json: string) => void;

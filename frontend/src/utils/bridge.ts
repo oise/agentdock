@@ -36,11 +36,14 @@ import {
   HistoryDeleteResultEvent,
   HistoryListEvent,
   McpServersEvent,
+  McpStatusEvent,
   ModeEvent,
   PermissionRequestEvent,
+  PromptIdleEvent,
   PromptLibraryEvent,
   SessionIdEvent,
   StatusEvent,
+  SubagentThreadsEvent,
   SystemInstructionsEvent,
   ToolCallBridgeEvent,
   UndoResultEvent,
@@ -173,6 +176,13 @@ export const ACPBridge = {
       window.dispatchEvent(new CustomEvent(EVENT_NAMES.STATUS, { detail: { chatId, status } }));
     };
 
+window.__onPromptIdle = (chatId) => {
+      window.dispatchEvent(new CustomEvent(EVENT_NAMES.PROMPT_IDLE, { detail: { chatId } }));
+    };
+    window.__onSubagentThreads = (chatId, threads) => {
+      window.dispatchEvent(new CustomEvent(EVENT_NAMES.SUBAGENT_THREADS, { detail: { chatId, threads } }));
+    };
+
     window.__onBridgeOperationResult = (payload) => {
       window.dispatchEvent(new CustomEvent(EVENT_NAMES.BRIDGE_OPERATION_RESULT, { detail: { payload } }));
     };
@@ -276,6 +286,10 @@ export const ACPBridge = {
       window.dispatchEvent(new CustomEvent(EVENT_NAMES.MCP_SERVERS, { detail: { servers } }));
     };
 
+    window.__onMcpStatus = (update) => {
+      window.dispatchEvent(new CustomEvent(EVENT_NAMES.MCP_STATUS, { detail: { update } }));
+    };
+
     window.__onPromptLibrary = (items) => {
       window.dispatchEvent(new CustomEvent(EVENT_NAMES.PROMPT_LIBRARY, { detail: { items } }));
     };
@@ -326,8 +340,10 @@ export const ACPBridge = {
 
   onStatus: (callback: (e: CustomEvent<StatusEvent>) => void) => onBridgeEvent(EVENT_NAMES.STATUS, callback),
 
-  onBridgeOperationResult: (callback: (e: CustomEvent<BridgeOperationResultEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.BRIDGE_OPERATION_RESULT, callback),
+onPromptIdle: (callback: (e: CustomEvent<PromptIdleEvent>) => void) => onBridgeEvent(EVENT_NAMES.PROMPT_IDLE, callback),
+  onSubagentThreads: (callback: (e: CustomEvent<SubagentThreadsEvent>) => void) => onBridgeEvent(EVENT_NAMES.SUBAGENT_THREADS, callback),
+
+  onBridgeOperationResult: (callback: (e: CustomEvent<BridgeOperationResultEvent>) => void) => onBridgeEvent(EVENT_NAMES.BRIDGE_OPERATION_RESULT, callback),
 
   onSessionId: (callback: (e: CustomEvent<SessionIdEvent>) => void) => onBridgeEvent(EVENT_NAMES.SESSION_ID, callback),
 
@@ -552,6 +568,12 @@ export const ACPBridge = {
 
   onMcpServers: (callback: (e: CustomEvent<McpServersEvent>) => void) =>
     onBridgeEvent(EVENT_NAMES.MCP_SERVERS, callback),
+
+  checkMcpStatus: () => {
+    window.__checkMcpStatus?.();
+  },
+
+  onMcpStatus: (callback: (e: CustomEvent<McpStatusEvent>) => void) => onBridgeEvent(EVENT_NAMES.MCP_STATUS, callback),
 
   loadPromptLibrary: () => {
     window.__loadPromptLibrary?.();

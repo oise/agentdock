@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useChatSession } from '../../hooks/useChatSession';
 import { useFileChanges } from '../../hooks/useFileChanges';
 import {
@@ -19,6 +19,9 @@ import {
 import { ACPBridge } from '../../utils/bridge';
 import MessageList from './MessageList';
 import ChatInput from './ChatInput';
+import { QueueList } from './input/QueueList';
+import { SubagentDropdown } from './input/SubagentDropdown';
+import { SubagentModal } from './input/SubagentModal';
 import PermissionBar from './PermissionBar';
 import FileChangesPanel from './FileChangesPanel';
 import ConfirmationModal from '../ConfirmationModal';
@@ -80,6 +83,7 @@ export default function ChatSessionView({
     status,
     isSending,
     isHistoryReplaying,
+    subagentThreads,
     agentOptions,
     selectedAgentId,
     selectedModelId,
@@ -93,6 +97,10 @@ export default function ChatSessionView({
     permissionRequest,
     handleSend,
     handleStop,
+    queuedPrompts,
+    removeQueuedPrompt,
+    updateQueuedPromptText,
+    sendQueuedPromptNow,
     handlePermissionDecision,
     hasSelectedAgent,
     attachments,
@@ -172,7 +180,12 @@ export default function ChatSessionView({
     handleCopyImage
   } = useImageOverlayActions();
 
-  const { handleAtBottomChange, handleCanMarkReadChange } = useChatSessionNotifications({
+const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null);
+  const selectedSubagent = subagentThreads.find((thread) => thread.id === selectedSubagentId) ?? null;
+  const {
+    handleAtBottomChange,
+    handleCanMarkReadChange,
+  } = useChatSessionNotifications({
     messages,
     isSending,
     isHistoryReplaying,
@@ -241,7 +254,13 @@ export default function ChatSessionView({
   );
 
   return (
-    <div className='flex flex-col h-full relative overflow-hidden bg-background'>
+    <div className="flex flex-col h-full relative overflow-hidden bg-background">
+      {/* Subagent threads dropdown */}
+      {subagentThreads.length > 0 && (
+        <div className="absolute left-3 top-3 z-30">
+          <SubagentDropdown threads={subagentThreads} onSelectThread={(thread) => setSelectedSubagentId(thread.id)} />
+        </div>
+      )}
       {/* Message List Area with Scoped Overlay */}
       <div className='flex-1 flex flex-col min-h-0 relative'>
         <div className={`flex-1 flex flex-col min-h-0`}>
@@ -296,7 +315,20 @@ export default function ChatSessionView({
           />
         </div>
 
-        <div style={{ height: `${inputHeight}px` }} className='flex flex-col'>
+{queuedPrompts.length > 0 && (
+          <div className="px-4 pb-2">
+            <div className="mx-auto w-full max-w-[1200px] rounded-ide border border-[var(--ide-Button-startBorderColor)] bg-editor-bg">
+              <QueueList
+                items={queuedPrompts}
+                onRemove={removeQueuedPrompt}
+                onChangeText={updateQueuedPromptText}
+                onSendNow={sendQueuedPromptNow}
+              />
+            </div>
+          </div>
+        )}
+
+        <div style={{ height: `${inputHeight}px` }} className="flex flex-col">
           <ChatInput
             conversationId={conversationId}
             contextTokensUsed={lastAssistantMsgWithContext?.contextTokensUsed}
@@ -331,6 +363,11 @@ export default function ChatSessionView({
           />
         </div>
       </div>
+
+      {/* Subagent output modal */}
+      {selectedSubagent && (
+        <SubagentModal thread={selectedSubagent} onClose={() => setSelectedSubagentId(null)} />
+      )}
 
       {/* Full-size Image Overlay */}
       {selectedImage && (

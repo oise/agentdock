@@ -1,5 +1,6 @@
 package agentdock.acp
 
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -32,6 +33,25 @@ class AcpPlatformCompatibilityTest {
         val command = buildAdapterLaunchCommand("/tmp/agent", adapter, "/tmp/project", AcpExecutionTarget.LOCAL)
 
         assertEquals("node", command.first())
+    }
+
+    @Test
+    fun `process environment appends fallback path entries and removes duplicates`() {
+        val merged = AcpProcessEnvironment.mergedPath(
+            existingPath = listOf("/usr/bin", "/bin").joinToString(File.pathSeparator),
+            extraEntries = listOf(File("/usr/bin"), File("/bin"))
+        )
+
+        assertEquals(
+            listOf("/usr/bin", "/bin").joinToString(File.pathSeparator),
+            merged
+        )
+    }
+
+    @Test
+    fun `process environment detects path key case insensitively`() {
+        assertEquals("Path", AcpProcessEnvironment.pathKey(mapOf("Path" to "/usr/bin")))
+        assertEquals("PATH", AcpProcessEnvironment.pathKey(emptyMap()))
     }
 
     private fun npmAdapter(): AcpAdapterConfig.AdapterInfo {

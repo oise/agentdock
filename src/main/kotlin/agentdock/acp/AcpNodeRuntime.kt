@@ -49,7 +49,7 @@ internal object AcpNodeRuntimeResolver {
     }
 
     fun applyTo(commandLine: GeneralCommandLine, runtime: AcpNodeRuntime): GeneralCommandLine {
-        val env = System.getenv().toMutableMap()
+        val env = AcpProcessEnvironment.baseEnvironment().toMutableMap()
         val path = mergedPath(runtime.pathEntries, env)
         if (path.isNotBlank()) env[pathKey(env)] = path
         return commandLine.withEnvironment(env)

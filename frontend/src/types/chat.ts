@@ -95,11 +95,7 @@ export interface PlanEntry {
   priority?: string;
 }
 
-export interface PlanBlock {
-  type: 'plan';
-  entries: PlanEntry[];
-  isReplay?: boolean;
-}
+export interface PlanBlock { type: 'plan'; entries: PlanEntry[]; isReplay?: boolean; }
 
 export type RichContentBlock =
   | TextBlock
@@ -111,6 +107,13 @@ export type RichContentBlock =
   | ExploringBlock
   | ToolCallBlock
   | PlanBlock;
+
+export interface QueuedPrompt {
+  id: string;
+  text: string;
+  blocks: RichContentBlock[];
+  attachments: ChatAttachment[];
+}
 
 export interface Message {
   id: string;
@@ -589,6 +592,7 @@ declare global {
     __onAcpLog?: (payload: AcpLogEntryPayload) => void;
     __onContentChunk?: (chunk: ContentChunk) => void;
     __onStatus?: (chatId: string, status: string) => void;
+    __onPromptIdle?: (chatId: string) => void;
     __onSessionId?: (chatId: string, id: string) => void;
     __onAdapters?: (adapters: AgentOption[]) => void;
     __onAvailableCommands?: (adapterId: string, commands: AvailableCommand[]) => void;

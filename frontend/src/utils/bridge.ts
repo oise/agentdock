@@ -39,6 +39,7 @@ import {
   McpStatusEvent,
   ModeEvent,
   PermissionRequestEvent,
+  PromptIdleEvent,
   PromptLibraryEvent,
   SessionIdEvent,
   StatusEvent,
@@ -172,6 +173,10 @@ export const ACPBridge = {
 
     window.__onStatus = (chatId, status) => {
       window.dispatchEvent(new CustomEvent(EVENT_NAMES.STATUS, { detail: { chatId, status } }));
+    };
+
+    window.__onPromptIdle = (chatId) => {
+      window.dispatchEvent(new CustomEvent(EVENT_NAMES.PROMPT_IDLE, { detail: { chatId } }));
     };
 
     window.__onBridgeOperationResult = (payload) => {
@@ -331,8 +336,9 @@ export const ACPBridge = {
 
   onStatus: (callback: (e: CustomEvent<StatusEvent>) => void) => onBridgeEvent(EVENT_NAMES.STATUS, callback),
 
-  onBridgeOperationResult: (callback: (e: CustomEvent<BridgeOperationResultEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.BRIDGE_OPERATION_RESULT, callback),
+onPromptIdle: (callback: (e: CustomEvent<PromptIdleEvent>) => void) => onBridgeEvent(EVENT_NAMES.PROMPT_IDLE, callback),
+
+  onBridgeOperationResult: (callback: (e: CustomEvent<BridgeOperationResultEvent>) => void) => onBridgeEvent(EVENT_NAMES.BRIDGE_OPERATION_RESULT, callback),
 
   onSessionId: (callback: (e: CustomEvent<SessionIdEvent>) => void) => onBridgeEvent(EVENT_NAMES.SESSION_ID, callback),
 

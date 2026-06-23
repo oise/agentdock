@@ -19,6 +19,7 @@ import {
 import { ACPBridge } from '../../utils/bridge';
 import MessageList from './MessageList';
 import ChatInput from './ChatInput';
+import { QueueList } from './input/QueueList';
 import PermissionBar from './PermissionBar';
 import FileChangesPanel from './FileChangesPanel';
 import ConfirmationModal from '../ConfirmationModal';
@@ -93,6 +94,10 @@ export default function ChatSessionView({
     permissionRequest,
     handleSend,
     handleStop,
+    queuedPrompts,
+    removeQueuedPrompt,
+    updateQueuedPromptText,
+    sendQueuedPromptNow,
     handlePermissionDecision,
     hasSelectedAgent,
     attachments,
@@ -296,7 +301,20 @@ export default function ChatSessionView({
           />
         </div>
 
-        <div style={{ height: `${inputHeight}px` }} className='flex flex-col'>
+{queuedPrompts.length > 0 && (
+          <div className="px-4 pb-2">
+            <div className="mx-auto w-full max-w-[1200px] rounded-ide border border-[var(--ide-Button-startBorderColor)] bg-editor-bg">
+              <QueueList
+                items={queuedPrompts}
+                onRemove={removeQueuedPrompt}
+                onChangeText={updateQueuedPromptText}
+                onSendNow={sendQueuedPromptNow}
+              />
+            </div>
+          </div>
+        )}
+
+        <div style={{ height: `${inputHeight}px` }} className="flex flex-col">
           <ChatInput
             conversationId={conversationId}
             contextTokensUsed={lastAssistantMsgWithContext?.contextTokensUsed}

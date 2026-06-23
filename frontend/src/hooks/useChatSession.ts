@@ -6,9 +6,10 @@ import {
   HistorySessionMeta,
   Message,
   PendingHandoffContext,
-  PermissionRequest,
+PermissionRequest,
   QueuedPrompt,
   RichContentBlock,
+  SubagentThread,
 } from '../types/chat';
 import {ACPBridge} from '../utils/bridge';
 import {buildReplayMessages} from '../utils/replay';
@@ -59,6 +60,7 @@ export function useChatSession(
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [queuedPrompts, setQueuedPromptsState] = useState<QueuedPrompt[]>([]);
   const [acpSessionId, setAcpSessionId] = useState<string>('');
+  const [subagentThreads, setSubagentThreads] = useState<SubagentThread[]>([]);
   const messages = useMemo(() => [...historyMessages, ...liveMessages], [historyMessages, liveMessages]);
   const selectedAgentId = initialAgentId || '';
 
@@ -422,6 +424,11 @@ export function useChatSession(
       lastMetadataFingerprintRef.current = '';
     });
 
+    const unsubSubagentThreads = ACPBridge.onSubagentThreads((e) => {
+      if (e.detail.chatId !== conversationId) return;
+      setSubagentThreads(e.detail.threads);
+    });
+
     const unsubMode = ACPBridge.onMode((e) => {
       if (e.detail.chatId !== conversationId) return;
       startedModeIdRef.current = e.detail.modeId;
@@ -440,6 +447,7 @@ export function useChatSession(
       unsubStatus();
       unsubPromptIdle();
       unsubSessionId();
+      unsubSubagentThreads();
       unsubMode();
       unsubPermission();
     };
@@ -712,10 +720,11 @@ export function useChatSession(
     status,
     isSending,
     isHistoryReplaying,
-    queuedPrompts,
+queuedPrompts,
     removeQueuedPrompt,
     updateQueuedPromptText,
     sendQueuedPromptNow,
+    subagentThreads,
     selectedAgentId,
     agentOptions,
     selectedModelId,

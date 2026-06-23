@@ -84,6 +84,9 @@ internal fun AcpBridge.installServiceCallbacks() {
                         markLivePromptVisibleAssistantOutput(chatId)
                     }
                     pushToolCallChunk(chatId, json, isReplay)
+                    if (!isReplay) {
+                        updateSubagentThreads(chatId, update.toolCallId.value, json, isStart = true)
+                    }
                 }
             }
             is SessionUpdate.ToolCallUpdate -> {
@@ -105,6 +108,9 @@ internal fun AcpBridge.installServiceCallbacks() {
                         markLivePromptVisibleAssistantOutput(chatId)
                     }
                     pushToolCallUpdateChunk(chatId, update.toolCallId.value, json, isReplay)
+                    if (!isReplay) {
+                        updateSubagentThreads(chatId, update.toolCallId.value, json, isStart = false)
+                    }
                 }
             }
             else -> {
@@ -122,6 +128,18 @@ internal fun AcpBridge.installServiceCallbacks() {
                 }
             }
         }
+    }
+}
+
+private fun AcpBridge.updateSubagentThreads(chatId: String, toolCallId: String, rawJson: String, isStart: Boolean) {
+    val registry = if (isStart) {
+        subagentRegistries.computeIfAbsent(chatId) { SubagentThreadRegistry() }
+    } else {
+        subagentRegistries[chatId] ?: return
+    }
+    val updated = if (isStart) registry.onToolCall(toolCallId, rawJson) else registry.onToolCallUpdate(toolCallId, rawJson)
+    if (updated.isNotEmpty()) {
+        pushSubagentThreads(chatId, updated.toJsonArrayString())
     }
 }
 

@@ -265,6 +265,17 @@ internal fun AcpBridge.pushMode(chatId: String, modeId: String?) {
     }
 }
 
+internal fun AcpBridge.pushSubagentThreads(chatId: String, threadsJson: String) {
+    val escapedChatId = jsStringLiteral(chatId)
+    val escapedThreads = jsStringLiteral(threadsJson)
+    runOnEdt {
+        browser.cefBrowser.executeJavaScript(
+            "if(window.__onSubagentThreads) window.__onSubagentThreads($escapedChatId, JSON.parse($escapedThreads));",
+            browser.cefBrowser.url, 0
+        )
+    }
+}
+
 internal fun AcpBridge.pushAvailableCommands(adapterId: String, commands: List<AvailableCommandPayload>) {
     val payloadJson = adapterJson.encodeToString(commands)
     val escapedAdapterId = jsStringLiteral(adapterId)

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Network, Pencil, Plus, Trash2 } from 'lucide-react';
-import { McpServerConfig, McpTransport } from '../types/mcp';
+import { Network, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { McpServerConfig, McpStatus, McpStatusUpdate, McpTransport } from '../types/mcp';
 import { ACPBridge } from '../utils/bridge';
 import { Button } from './ui/Button';
 import { Checkbox } from './ui/Checkbox';
@@ -68,21 +68,56 @@ function nextId(): string {
   return `mcp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+interface StatusVisual {
+  dotClass: string;
+  pulse: boolean;
+  defaultLabel: string;
+}
+
+const STATUS_VISUALS: Record<McpStatus, StatusVisual> = {
+  connected: { dotClass: 'bg-success', pulse: false, defaultLabel: 'Running' },
+  loading: { dotClass: 'bg-warning', pulse: true, defaultLabel: 'Checking…' },
+  error: { dotClass: 'bg-error', pulse: false, defaultLabel: 'Error' },
+  disabled: { dotClass: 'bg-foreground-secondary', pulse: false, defaultLabel: 'Disabled' },
+  unknown: { dotClass: 'bg-foreground-secondary', pulse: false, defaultLabel: 'Unknown' },
+};
+
+function McpStatusDot({ status, message }: { status: McpStatus; message?: string }) {
+  const visual = STATUS_VISUALS[status];
+  const label = message || visual.defaultLabel;
+  return (
+    <Tooltip variant="minimal" content={label}>
+      <span
+        role="img"
+        aria-label={label}
+        className={`inline-block h-2.5 w-2.5 flex-shrink-0 rounded-full ${visual.dotClass}${visual.pulse ? ' animate-pulse' : ''}`}
+      />
+    </Tooltip>
+  );
+}
+
 export function McpServersView() {
   const [servers, setServers] = useState<McpServerConfig[]>([]);
+  const [statusMap, setStatusMap] = useState<Record<string, McpStatusUpdate>>({});
   const [form, setForm] = useState<FormState | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<McpServerConfig | null>(null);
 
   useEffect(() => {
-    const cleanup = ACPBridge.onMcpServers((e) => setServers(e.detail.servers));
+    const cleanupServers = ACPBridge.onMcpServers(e => setServers(e.detail.servers));
+    const cleanupStatus = ACPBridge.onMcpStatus(e => {
+      const update = e.detail.update;
+      setStatusMap(prev => ({ ...prev, [update.id]: update }));
+    });
     ACPBridge.loadMcpServers();
-    return cleanup;
+    ACPBridge.checkMcpStatus();
+    return () => { cleanupServers(); cleanupStatus(); };
   }, []);
 
   const save = (updated: McpServerConfig[]) => {
     setServers(updated);
     ACPBridge.saveMcpServers(updated);
+    ACPBridge.checkMcpStatus();
   };
 
   const toggle = (id: string) => save(servers.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s)));
@@ -122,9 +157,22 @@ export function McpServersView() {
   };
 
   return (
-    <div className='h-full flex flex-col bg-background text-foreground text-ide-small'>
-      <div className='flex items-center justify-end px-2 min-h-12 border-b border-border flex-shrink-0'>
-        <Button onClick={openAdd} variant='primary' leftIcon={<Plus size={14} />} className='max-h-8'>
+    <div className="h-full flex flex-col bg-background text-foreground text-ide-small">
+      <div className="flex items-center justify-end gap-2 px-2 min-h-12 border-b border-border flex-shrink-0">
+        <Button
+          onClick={() => ACPBridge.checkMcpStatus()}
+          variant="secondary"
+          leftIcon={<RefreshCw size={14} />}
+          className="max-h-8"
+        >
+          Refresh
+        </Button>
+        <Button
+          onClick={openAdd}
+          variant="primary"
+          leftIcon={<Plus size={14} />}
+          className="max-h-8"
+        >
           Add
         </Button>
       </div>
@@ -141,47 +189,62 @@ export function McpServersView() {
             </div>
           )}
 
-          {servers.map((s) => (
-            <div key={s.id} className='flex items-center gap-3 px-4 py-2.5 border-b border-border'>
-              <Tooltip variant='minimal' content={s.enabled ? 'Enabled' : 'Disabled'}>
+          {servers.map(s => {
+            const statusUpdate = statusMap[s.id];
+            const status: McpStatus = statusUpdate?.status ?? 'unknown';
+            const statusMessage = statusUpdate?.message;
+            return (
+            <div
+              key={s.id}
+              className="flex items-center gap-3 px-4 py-2.5 border-b border-border"
+            >
+              <Tooltip variant="minimal" content={s.enabled ? 'Enabled' : 'Disabled'}>
                 <Checkbox
                   checked={s.enabled}
                   onCheckedChange={() => toggle(s.id)}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                  }}
+                  onClick={e => { e.stopPropagation(); }}
                 />
               </Tooltip>
 
-              <div className='flex-1 min-w-0'>
-                <div className='truncate'>{s.name}</div>
+              <McpStatusDot status={status} message={statusMessage} />
+
+              <div className="flex-1 min-w-0">
+                <div className="truncate">
+                  {s.name}
+                </div>
                 <div className='mt-1 text-xs text-foreground-secondary truncate'>{s.transport}</div>
               </div>
 
-              <div className='flex items-center gap-1'>
-                <Tooltip variant='minimal' content='Edit'>
+              <div className="flex items-center gap-1">
+                <Tooltip variant="minimal" content="Edit">
                   <button
-                    type='button'
+                    type="button"
                     onClick={() => openEdit(s)}
-                    className='rounded p-1 text-foreground-secondary transition-colors hover:text-foreground focus-visible:outline-none focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]'
+                    className="rounded p-1 text-foreground-secondary transition-colors hover:text-foreground focus-visible:outline-none focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]"
                     aria-label={`Edit ${s.name}`}
                   >
                     <Pencil size={13} />
                   </button>
                 </Tooltip>
-                <Tooltip variant='minimal' content='Delete'>
+                <Tooltip variant="minimal" content="Delete">
                   <button
-                    type='button'
+                    type="button"
                     onClick={() => setDeleteTarget(s)}
-                    className='rounded p-1 text-foreground-secondary transition-colors hover:text-error focus-visible:outline-none focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]'
+                    className="rounded p-1 text-foreground-secondary transition-colors hover:text-error focus-visible:outline-none focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]"
                     aria-label={`Delete ${s.name}`}
                   >
                     <Trash2 size={13} />
                   </button>
                 </Tooltip>
               </div>
+              {status === 'error' && statusMessage && (
+                <div className="mt-1 text-xs text-error truncate" title={statusMessage}>
+                  {statusMessage}
+                </div>
+              )}
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

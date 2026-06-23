@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>agentdock</id>
     <name>Agent Dock</name>
-    <version>0.0.0-dev</version>
+    <version>9999.0.0-dev</version>
     <update-url></update-url>
     <vendor url="https://github.com/edgarsr/agentdock">EdgarsR</vendor>
 

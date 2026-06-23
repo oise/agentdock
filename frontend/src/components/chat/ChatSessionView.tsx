@@ -254,7 +254,6 @@ const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null
   );
 
   return (
-return (
     <div className="flex flex-col h-full relative overflow-hidden bg-background">
       {/* Subagent threads dropdown */}
       {subagentThreads.length > 0 && (

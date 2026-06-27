@@ -22,6 +22,15 @@ object AgentDockHistoryService {
         )
     }
 
+    fun removeEphemeralSession(projectPath: String?, adapterName: String, sessionId: String) {
+        val cleanProjectPath = canonicalHistoryProjectPath(projectPath)
+        val cleanAdapterName = adapterName.trim()
+        val cleanSessionId = sessionId.trim()
+        if (cleanProjectPath.isBlank() || cleanAdapterName.isBlank() || cleanSessionId.isBlank()) return
+
+        HistoryStorage.removeEphemeralSession(cleanProjectPath, cleanAdapterName, cleanSessionId)
+    }
+
     fun startBackgroundHistorySync(projectPath: String?) {
         HistorySyncService.startBackgroundHistorySync(projectPath)
     }

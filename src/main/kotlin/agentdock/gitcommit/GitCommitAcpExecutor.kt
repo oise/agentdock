@@ -12,6 +12,7 @@ import com.agentclientprotocol.model.RequestPermissionOutcome
 import com.agentclientprotocol.model.RequestPermissionResponse
 import com.agentclientprotocol.model.SessionId
 import com.agentclientprotocol.model.SessionUpdate
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vcs.changes.Change
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +42,7 @@ internal class GitCommitAcpExecutor(
     private val acpService: AcpClientService = AcpClientService.getInstance(project)
 ) {
     companion object {
+        private val log = Logger.getInstance(GitCommitAcpExecutor::class.java)
         private const val GENERATION_TIMEOUT_MS = 120_000L
     }
 
@@ -142,6 +144,14 @@ internal class GitCommitAcpExecutor(
                 acpService.scope.launch {
                     runCatching {
                         AgentDockHistoryService.deleteSessionImmediately(projectBasePath, sessionId, adapterId)
+                    }.onSuccess { deleted ->
+                        if (deleted) {
+                            AgentDockHistoryService.removeEphemeralSession(projectBasePath, adapterId, sessionId)
+                        } else {
+                            log.warn("Failed to delete ephemeral git commit history session $adapterId:$sessionId")
+                        }
+                    }.onFailure { error ->
+                        log.warn("Error while deleting ephemeral git commit history session $adapterId:$sessionId", error)
                     }
                 }
             }

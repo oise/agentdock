@@ -83,11 +83,7 @@ internal object HistoryDeletionService {
             changes = null
         )
 
-        val deletedArtifacts = if (sourceMeta != null || !sessionEntry.sourceFilePath.isNullOrBlank()) {
-            deleteSessionArtifacts(cleanProjectPath, sessionEntry)
-        } else {
-            true
-        }
+        val deletedArtifacts = deleteSessionArtifacts(cleanProjectPath, sessionEntry)
 
         val indexFile = HistoryStorage.ensureProjectIndexFile(cleanProjectPath)
         val existing = HistoryStorage.readProjectIndex(indexFile)

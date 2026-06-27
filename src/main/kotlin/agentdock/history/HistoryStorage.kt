@@ -113,9 +113,10 @@ internal object HistoryStorage {
     }
 
     fun removeEphemeralSession(projectPath: String, adapterName: String, sessionId: String) {
-        if (projectPath.isBlank() || adapterName.isBlank() || sessionId.isBlank()) return
-        val remaining = readEphemeralSessions(projectPath)
+        val cleanProjectPath = canonicalHistoryProjectPath(projectPath)
+        if (cleanProjectPath.isBlank() || adapterName.isBlank() || sessionId.isBlank()) return
+        val remaining = readEphemeralSessions(cleanProjectPath)
             .filterNot { it.adapterName == adapterName && it.sessionId == sessionId }
-        writeEphemeralSessions(projectPath, remaining)
+        writeEphemeralSessions(cleanProjectPath, remaining)
     }
 }

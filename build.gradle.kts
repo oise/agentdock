@@ -22,7 +22,7 @@ dependencies {
         jetbrainsRuntime()
         bundledPlugin("org.jetbrains.plugins.terminal")
     }
-    implementation("com.agentclientprotocol:acp:0.18.0") {
+    implementation("com.agentclientprotocol:acp:0.24.0") {
         exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib")
         exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-bom")
         exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core")

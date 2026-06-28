@@ -517,6 +517,11 @@ internal fun AcpBridge.installAdapterQueries() {
                                 }
                             }
                         }
+                    } catch (_: CancellationException) {
+                        downloadStatuses.remove(adapterId)
+                    } catch (e: Exception) {
+                        val message = e.message?.takeIf { it.isNotBlank() } ?: "Login failed"
+                        downloadStatuses[adapterId] = "Error: $message"
                     } finally {
                         AcpAuthService.decrementActive(adapterId)
                         authActionJobs.remove(adapterId)

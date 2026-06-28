@@ -1,6 +1,7 @@
 package agentdock.acp
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -148,6 +149,8 @@ object AcpAuthService {
 
             process.destroyForcibly()
             throw Exception("Login timed out")
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             val msg = e.message ?: ""
             if (msg.isNotBlank() && msg != "null") throw Exception("Login failed: $msg")

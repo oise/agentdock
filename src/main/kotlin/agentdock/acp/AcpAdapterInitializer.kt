@@ -18,13 +18,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
-import kotlinx.io.asSource
-import kotlinx.io.buffered
-import kotlinx.io.asSink
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -293,25 +292,27 @@ internal suspend fun AcpClientService.initializeSharedProcessAtStartup(
             }
         }.apply { isDaemon = true; start() }
 
-        val input = if (BuildConfig.IS_DEV) {
+        val inputStream = if (BuildConfig.IS_DEV) {
             LineLoggingInputStream(proc.inputStream) { line ->
                 startupOutput.add(line)
                 onLogEntry(AcpLogEntry(AcpLogEntry.Direction.RECEIVED, line))
-            }.asSource().buffered()
+            }
         } else {
-            proc.inputStream.asSource().buffered()
+            proc.inputStream
         }
-        val output = if (BuildConfig.IS_DEV) {
+        val outputStream = if (BuildConfig.IS_DEV) {
             LineLoggingOutputStream(proc.outputStream) { line ->
                 onLogEntry(AcpLogEntry(AcpLogEntry.Direction.SENT, line))
-            }.asSink().buffered()
+            }
         } else {
-            proc.outputStream.asSink().buffered()
+            proc.outputStream
         }
+        val input = inputStream.bufferedReader(Charsets.UTF_8)
+        val output = outputStream.bufferedWriter(Charsets.UTF_8)
 
         val protocolScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         sharedProc.protocolScope = protocolScope
-        val transport = StdioTransport(protocolScope, Dispatchers.IO, input, output)
+        val transport = StdioTransport(protocolScope, Dispatchers.IO, input.asLineFlow(), output.asLineWriter())
         val prot = Protocol(protocolScope, transport)
         sharedProc.protocol = prot
 
@@ -553,6 +554,25 @@ internal fun AcpClientService.ensureAsyncSessionUpdates(sharedProc: AcpClientSer
             sharedProc.sessionUpdateWrapped = false
         }
     }
+}
+
+private fun java.io.BufferedReader.asLineFlow() = flow {
+    while (true) {
+        val line = try {
+            readLine()
+        } catch (_: java.io.IOException) {
+            break
+        } ?: break
+        emit(line)
+    }
+}.onCompletion {
+    runCatching { close() }
+}
+
+private fun java.io.BufferedWriter.asLineWriter(): suspend (String) -> Unit = { line ->
+    write(line)
+    newLine()
+    flush()
 }
 
 private fun AcpClientService.updateRuntimeMetadataFromConfigOptionsNotification(

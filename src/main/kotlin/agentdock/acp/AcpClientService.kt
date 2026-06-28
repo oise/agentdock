@@ -361,13 +361,7 @@ class AcpClientService private constructor(val project: Project) {
             sessionUpdateHandler?.invoke(primaryCtx.chatId, toolCall, false, _meta)
 
             val requestId = java.util.UUID.randomUUID().toString()
-            // FRAGILE: ACP SDK 0.18.0 does not expose a title field directly on
-            // SessionUpdate.ToolCallUpdate, so we extract it from the data class toString().
-            // The regex assumes the format "title=<value>," which matches Kotlin's default
-            // toString() output. Revisit when upgrading com.agentclientprotocol:acp —
-            // check if a direct accessor (e.g. toolCall.title) becomes available.
-            val str = toolCall.toString()
-            val title = Regex("title=([^,)]+)").find(str)?.groupValues?.get(1) ?: "Action"
+            val title = toolCall.title ?: "Action"
 
             val request = PermissionRequest(
                 requestId,

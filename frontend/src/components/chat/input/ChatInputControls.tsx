@@ -7,7 +7,7 @@ import {
   Square,
   ArrowUp,
 } from 'lucide-react';
-import { DropdownOption } from '../../../types/chat';
+import { ApprovalMode, DropdownOption } from '../../../types/chat';
 import { SlashCommandItem } from './slashCommands';
 import ChatDropdown from '../ChatDropdown';
 import { ChatUsageIndicator } from '../../usage/chat/ChatUsageIndicator';
@@ -28,6 +28,7 @@ interface ChatInputControlsProps {
   modeOptions: DropdownOption[];
   selectedReasoningEffortId: string;
   reasoningEffortOptions: DropdownOption[];
+  approvalMode: ApprovalMode;
   isSending: boolean;
   hasSelectedAgent: boolean;
   status: string;
@@ -48,6 +49,7 @@ interface ChatInputControlsProps {
   onModelChange: (id: string, targetAgentId?: string) => void;
   onModeChange: (id: string) => void;
   onReasoningEffortChange: (id: string) => void;
+  onApprovalModeChange: (mode: ApprovalMode) => void;
   onSend: () => void;
   onStop: () => void;
 }
@@ -65,6 +67,7 @@ export function ChatInputControls({
   modeOptions,
   selectedReasoningEffortId,
   reasoningEffortOptions,
+  approvalMode,
   isSending,
   hasSelectedAgent,
   status,
@@ -85,6 +88,7 @@ export function ChatInputControls({
   onModelChange,
   onModeChange,
   onReasoningEffortChange,
+  onApprovalModeChange,
   onSend,
   onStop,
 }: ChatInputControlsProps) {
@@ -96,6 +100,7 @@ export function ChatInputControls({
         <ChatDropdown
           value="send-mode"
           subValue={sendMode}
+          subValues={{ 'send-mode': sendMode, approvals: approvalMode }}
           options={plusMenuOptions}
           placeholder=""
           disabled={false}
@@ -115,6 +120,11 @@ export function ChatInputControls({
             if (parentId === 'send-mode') {
               setSendMode(subId as 'enter' | 'ctrl-enter');
               localStorage.setItem('chat-send-mode', subId);
+              return;
+            }
+
+            if (parentId === 'approvals') {
+              onApprovalModeChange(subId as ApprovalMode);
               return;
             }
 

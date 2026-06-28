@@ -2,6 +2,7 @@ package agentdock.history
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
+import com.intellij.openapi.diagnostic.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -13,6 +14,7 @@ import agentdock.acp.listHistorySessions
 import java.util.concurrent.ConcurrentHashMap
 
 internal object HistorySyncService {
+    private val log = Logger.getInstance(HistorySyncService::class.java)
     private val backgroundScope = CoroutineScope(Dispatchers.IO)
     private val ephemeralDeletionJobs = ConcurrentHashMap<String, Boolean>()
 
@@ -268,7 +270,6 @@ internal object HistorySyncService {
             val sourceFilePath = sessionsByKey[key]?.filePath?.takeIf { it.isNotBlank() }
             scheduleEphemeralSessionDeletion(projectPath, entry.adapterName, entry.sessionId, sourceFilePath)
         }
-        HistoryStorage.writeEphemeralSessions(projectPath, emptyList())
     }
 
     private fun scheduleEphemeralSessionDeletion(
@@ -282,12 +283,19 @@ internal object HistorySyncService {
 
         backgroundScope.launch {
             try {
-                SessionListDeleteSupport.deleteSession(
+                val deleted = SessionListDeleteSupport.deleteSession(
                     projectPath = projectPath,
                     adapterName = adapterName,
                     sessionId = sessionId,
                     sourceFilePath = sourceFilePath
                 )
+                if (deleted) {
+                    HistoryStorage.removeEphemeralSession(projectPath, adapterName, sessionId)
+                } else {
+                    log.warn("Failed to delete ephemeral history session $adapterName:$sessionId")
+                }
+            } catch (e: Exception) {
+                log.warn("Error while deleting ephemeral history session $adapterName:$sessionId", e)
             } finally {
                 ephemeralDeletionJobs.remove(jobKey)
             }

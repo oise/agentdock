@@ -1,9 +1,11 @@
 package agentdock.acp
 
 import java.io.File
+import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class AcpPlatformCompatibilityTest {
     @Test
@@ -36,22 +38,179 @@ class AcpPlatformCompatibilityTest {
     }
 
     @Test
-    fun `process environment appends fallback path entries and removes duplicates`() {
-        val merged = AcpProcessEnvironment.mergedPath(
-            existingPath = listOf("/usr/bin", "/bin").joinToString(File.pathSeparator),
-            extraEntries = listOf(File("/usr/bin"), File("/bin"))
+    fun `process environment appends common executable dirs and removes duplicates`() {
+        val existing = createTempDirectory("agentdock-existing").toFile()
+        val common = createTempDirectory("agentdock-common").toFile()
+        val path = listOf(existing.absolutePath, common.absolutePath).joinToString(File.pathSeparator)
+
+        val env = AcpProcessEnvironment.enrichedEnvironment(
+            source = mapOf("PATH" to path),
+            commonExecutableDirs = listOf(common)
+        )
+
+        assertEquals(path, env["PATH"])
+    }
+
+    @Test
+    fun `process environment keeps current values and adds missing shell values`() {
+        val currentPath = createTempDirectory("agentdock-current-path").toFile()
+        val shellPath = createTempDirectory("agentdock-shell-path").toFile()
+
+        val env = AcpProcessEnvironment.mergedBaseEnvironment(
+            current = mapOf(
+                "PATH" to currentPath.absolutePath,
+                "TOKEN" to "current-token"
+            ),
+            shell = mapOf(
+                "PATH" to shellPath.absolutePath,
+                "TOKEN" to "shell-token",
+                "SHELL_ONLY" to "shell-value"
+            ),
+            commonExecutableDirs = emptyList()
+        )
+
+        assertEquals("current-token", env["TOKEN"])
+        assertEquals("shell-value", env["SHELL_ONLY"])
+        assertEquals(
+            listOf(currentPath.absolutePath, shellPath.absolutePath).joinToString(File.pathSeparator),
+            env["PATH"]
+        )
+    }
+
+    @Test
+    fun `process environment prepends runtime path entries before base path`() {
+        val existing = createTempDirectory("agentdock-existing").toFile()
+        val runtime = createTempDirectory("agentdock-runtime").toFile()
+
+        val env = AcpProcessEnvironment.withPrependedPathEntries(
+            source = mapOf("PATH" to existing.absolutePath),
+            extraEntries = listOf(runtime)
         )
 
         assertEquals(
-            listOf("/usr/bin", "/bin").joinToString(File.pathSeparator),
-            merged
+            listOf(runtime.absolutePath, existing.absolutePath).joinToString(File.pathSeparator),
+            env["PATH"]
         )
+    }
+
+    @Test
+    fun `process builder environment keeps existing variables while prepending runtime path`() {
+        val existing = createTempDirectory("agentdock-existing").toFile()
+        val runtime = createTempDirectory("agentdock-runtime").toFile()
+        val builder = ProcessBuilder("node")
+        val environment = builder.environment()
+        environment.clear()
+        environment["AGENTDOCK_CUSTOM"] = "keep-me"
+        environment["PATH"] = existing.absolutePath
+
+        AcpProcessEnvironment.applyTo(builder, listOf(runtime))
+
+        assertEquals("keep-me", environment["AGENTDOCK_CUSTOM"])
+        assertEquals(runtime.absolutePath, environment["PATH"]?.split(File.pathSeparator)?.firstOrNull())
+        assertEquals(existing.absolutePath, environment["PATH"]?.split(File.pathSeparator)?.getOrNull(1))
     }
 
     @Test
     fun `process environment detects path key case insensitively`() {
         assertEquals("Path", AcpProcessEnvironment.pathKey(mapOf("Path" to "/usr/bin")))
         assertEquals("PATH", AcpProcessEnvironment.pathKey(emptyMap()))
+    }
+
+    @Test
+    fun `process environment does not append unix executable dirs on windows hosts`() = withOsName("Windows 11") {
+        val env = AcpProcessEnvironment.enrichedEnvironment(source = mapOf("Path" to "base-path"))
+
+        assertEquals("base-path", env["Path"])
+    }
+
+    @Test
+    fun `process registry keeps adapter root cleanup disabled while another owner is alive`() {
+        val baseDir = createTempDirectory("agentdock-registry").toFile()
+        val destroyedPids = mutableListOf<Long>()
+        val cleanedRoots = mutableListOf<String>()
+        val alivePids = mutableSetOf(1L, 2L, 11L, 22L)
+
+        val first = registryStore(baseDir, ownerPid = 1L, ownerId = "owner-1", alivePids, destroyedPids, cleanedRoots)
+        val second = registryStore(baseDir, ownerPid = 2L, ownerId = "owner-2", alivePids, destroyedPids, cleanedRoots)
+
+        first.registerOwner()
+        first.registerProcess("tool", "/tmp/shared-tool", 11L)
+        second.registerOwner()
+        second.registerProcess("tool", "/tmp/shared-tool", 22L)
+
+        first.closeOwnerAndCleanupIfLast()
+
+        assertTrue(cleanedRoots.isEmpty())
+        assertTrue(destroyedPids.isEmpty())
+    }
+
+    @Test
+    fun `process registry cleans adapter roots when the last owner closes`() {
+        val baseDir = createTempDirectory("agentdock-registry").toFile()
+        val destroyedPids = mutableListOf<Long>()
+        val cleanedRoots = mutableListOf<String>()
+        val alivePids = mutableSetOf(1L, 11L)
+
+        val store = registryStore(baseDir, ownerPid = 1L, ownerId = "owner-1", alivePids, destroyedPids, cleanedRoots)
+
+        store.registerOwner()
+        store.registerProcess("tool", "/tmp/shared-tool", 11L)
+        store.unregisterProcess(11L)
+        store.closeOwnerAndCleanupIfLast()
+
+        assertEquals(listOf(File("/tmp/shared-tool").absoluteFile.normalize().path.replace('\\', '/')), cleanedRoots)
+        assertTrue(destroyedPids.isEmpty())
+    }
+
+    @Test
+    fun `process registry removes dead owners without adapter root cleanup while another owner is alive`() {
+        val baseDir = createTempDirectory("agentdock-registry").toFile()
+        val destroyedPids = mutableListOf<Long>()
+        val cleanedRoots = mutableListOf<String>()
+        val alivePids = mutableSetOf(1L, 3L, 33L)
+
+        val dead = registryStore(baseDir, ownerPid = 2L, ownerId = "owner-2", alivePids + 2L + 22L, destroyedPids, cleanedRoots)
+        dead.registerOwner()
+        dead.registerProcess("tool", "/tmp/shared-tool", 22L)
+
+        val current = registryStore(baseDir, ownerPid = 1L, ownerId = "owner-1", alivePids, destroyedPids, cleanedRoots)
+        val otherLive = registryStore(baseDir, ownerPid = 3L, ownerId = "owner-3", alivePids, destroyedPids, cleanedRoots)
+        current.registerOwner()
+        otherLive.registerOwner()
+        otherLive.registerProcess("tool", "/tmp/shared-tool", 33L)
+
+        current.closeOwnerAndCleanupIfLast()
+
+        assertEquals(listOf(22L), destroyedPids)
+        assertTrue(cleanedRoots.isEmpty())
+    }
+
+    @Test
+    fun `process registry remembers roots from closed owners for final cleanup`() {
+        val baseDir = createTempDirectory("agentdock-registry").toFile()
+        val destroyedPids = mutableListOf<Long>()
+        val cleanedRoots = mutableListOf<String>()
+        val alivePids = mutableSetOf(1L, 2L, 11L, 22L)
+
+        val first = registryStore(baseDir, ownerPid = 1L, ownerId = "owner-1", alivePids, destroyedPids, cleanedRoots)
+        val second = registryStore(baseDir, ownerPid = 2L, ownerId = "owner-2", alivePids, destroyedPids, cleanedRoots)
+
+        first.registerOwner()
+        first.registerProcess("tool-a", "/tmp/tool-a", 11L)
+        second.registerOwner()
+        second.registerProcess("tool-b", "/tmp/tool-b", 22L)
+
+        first.closeOwnerAndCleanupIfLast()
+        alivePids.remove(1L)
+        second.closeOwnerAndCleanupIfLast()
+
+        assertEquals(
+            setOf(
+                File("/tmp/tool-a").absoluteFile.normalize().path.replace('\\', '/'),
+                File("/tmp/tool-b").absoluteFile.normalize().path.replace('\\', '/')
+            ),
+            cleanedRoots.toSet()
+        )
     }
 
     private fun npmAdapter(): AcpAdapterConfig.AdapterInfo {
@@ -78,5 +237,23 @@ class AcpPlatformCompatibilityTest {
         } finally {
             System.setProperty("os.name", previous)
         }
+    }
+
+    private fun registryStore(
+        baseDir: File,
+        ownerPid: Long,
+        ownerId: String,
+        alivePids: Set<Long>,
+        destroyedPids: MutableList<Long>,
+        cleanedRoots: MutableList<String>
+    ): AcpProcessRegistryStore {
+        return AcpProcessRegistryStore(
+            baseDir = baseDir,
+            currentOwnerPid = ownerPid,
+            currentOwnerId = ownerId,
+            isProcessAlive = { pid -> pid in alivePids },
+            destroyRegisteredProcess = { pid, _ -> destroyedPids.add(pid) },
+            stopProcessesUsingRoot = { root -> cleanedRoots.add(root) }
+        )
     }
 }

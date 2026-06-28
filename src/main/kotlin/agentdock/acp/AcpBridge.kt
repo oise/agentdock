@@ -76,12 +76,14 @@ class AcpBridge(
     internal val historyReplayCaptures = ConcurrentHashMap<String, HistoryReplayCapture>()
     internal val suppressReplayForChatIds: MutableSet<String> = ConcurrentHashMap.newKeySet<String>()
     internal val subagentRegistries = ConcurrentHashMap<String, SubagentThreadRegistry>()
+    internal val todoToolCallKeys: MutableSet<String> = ConcurrentHashMap.newKeySet<String>()
+    internal val emittedTodoPlanKeys: MutableSet<String> = ConcurrentHashMap.newKeySet<String>()
 
     internal val cli = AcpBridgeCli(service.project) { action -> runOnEdt(action) }
     internal val audio = AcpAudioPlayer(scope)
 
     companion object {
-        // Keep this aligned with the service startup budget. Cold Gemini starts can exceed 45s.
+        // Keep this aligned with the service startup budget. Cold agent starts can exceed 45s.
         const val START_AGENT_TIMEOUT_MS = 300_000L
     }
 

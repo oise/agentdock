@@ -83,11 +83,7 @@ internal object HistoryDeletionService {
             changes = null
         )
 
-        val deletedArtifacts = if (sourceMeta != null || !sessionEntry.sourceFilePath.isNullOrBlank()) {
-            deleteSessionArtifacts(cleanProjectPath, sessionEntry)
-        } else {
-            true
-        }
+        val deletedArtifacts = deleteSessionArtifacts(cleanProjectPath, sessionEntry)
 
         val indexFile = HistoryStorage.ensureProjectIndexFile(cleanProjectPath)
         val existing = HistoryStorage.readProjectIndex(indexFile)
@@ -117,6 +113,9 @@ internal object HistoryDeletionService {
     }
 
     private fun deleteSessionArtifacts(projectPath: String, session: HistorySessionIndexEntry): Boolean {
+        if (runCatching { AcpAdapterConfig.getAdapterInfo(session.adapterName) }.isFailure) {
+            return true
+        }
         val sourceMeta = HistorySessionSourceResolver.findSessionSourceMeta(projectPath, session.sessionId, session.adapterName)
         val sourceFilePath = session.sourceFilePath?.takeIf { it.isNotBlank() }
             ?: sourceMeta?.filePath?.takeIf { it.isNotBlank() }

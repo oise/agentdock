@@ -14,7 +14,7 @@ import kotlinx.coroutines.withTimeout
 import agentdock.history.SessionMeta
 
 // Max time to wait for the agent process to start and respond to ACP initialize.
-// The retry loop in initializeSharedProcessAtStartup can take up to this long for slow agents (e.g. Gemini).
+// The retry loop in initializeSharedProcessAtStartup can take up to this long for slow agents.
 private const val PROCESS_STARTUP_TIMEOUT_MS = 300_000L
 
 internal fun AcpClientService.processKey(adapterName: String): String {
@@ -382,7 +382,8 @@ private suspend fun AcpClientService.applyRequestedSessionPreferences(
             val protocol = context.sharedProcess?.protocol
             val sessionId = context.sessionIdRef.get()
             if (!configId.isNullOrBlank() && protocol != null && !sessionId.isNullOrBlank()) {
-                protocol.setSessionConfigOptionRaw(sessionId, configId, currentModeId)
+                val response = protocol.setSessionConfigOptionRaw(sessionId, configId, currentModeId)
+                updateMetadataFromConfigOptionResponse(adapterName, response, context)
             } else {
                 session.setMode(SessionModeId(currentModeId))
             }
@@ -412,7 +413,8 @@ private suspend fun AcpClientService.applyRequestedSessionPreferences(
             val protocol = context.sharedProcess?.protocol
             val sessionId = context.sessionIdRef.get()
             if (configId.isNullOrBlank() || protocol == null || sessionId.isNullOrBlank()) return@runCatching false
-            protocol.setSessionConfigOptionRaw(sessionId, configId, currentReasoningEffortId)
+            val response = protocol.setSessionConfigOptionRaw(sessionId, configId, currentReasoningEffortId)
+            updateMetadataFromConfigOptionResponse(adapterName, response, context)
             context.activeReasoningEffortIdRef.set(currentReasoningEffortId)
             AcpAgentPreferencesStore.rememberReasoningEffort(adapterName, currentReasoningEffortId)
             true

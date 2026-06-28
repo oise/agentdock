@@ -25,7 +25,6 @@ Currently supported AI agents:
 - Claude Code
 - Codex
 - Cursor
-- Gemini CLI
 - GitHub Copilot
 - Kilo
 - OpenCode

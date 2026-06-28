@@ -20,7 +20,7 @@ dependencies {
         jetbrainsRuntime()
         bundledPlugin("org.jetbrains.plugins.terminal")
     }
-    implementation("com.agentclientprotocol:acp:0.18.0") {
+    implementation("com.agentclientprotocol:acp:0.24.0") {
         exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib")
         exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-bom")
         exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core")
@@ -28,7 +28,7 @@ dependencies {
     }
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation("io.github.java-diff-utils:java-diff-utils:4.15")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+    compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
     testImplementation(kotlin("test-junit"))
 }
 

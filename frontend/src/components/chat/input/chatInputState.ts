@@ -1,4 +1,10 @@
-import { AudioTranscriptionFeatureState, AvailableCommand, ChatAttachment, DropdownOption } from '../../../types/chat';
+import {
+  ApprovalMode,
+  AudioTranscriptionFeatureState,
+  AvailableCommand,
+  ChatAttachment,
+  DropdownOption
+} from '../../../types/chat';
 
 export interface ChatInputProps {
   conversationId: string;
@@ -22,6 +28,8 @@ export interface ChatInputProps {
   reasoningEffortOptions: DropdownOption[];
   selectedReasoningEffortId: string;
   onReasoningEffortChange: (id: string) => void;
+  approvalMode: ApprovalMode;
+  onApprovalModeChange: (mode: ApprovalMode) => void;
   hasSelectedAgent: boolean;
   availableCommands: AvailableCommand[];
   attachments: ChatAttachment[];

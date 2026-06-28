@@ -5,14 +5,67 @@ import java.io.File
 
 internal object AcpProcessEnvironment {
     fun baseEnvironment(): Map<String, String> =
-        enrichedEnvironment(runCatching { EnvironmentUtil.getEnvironmentMap() }.getOrElse { System.getenv() })
+        mergedBaseEnvironment(
+            current = System.getenv(),
+            shell = EnvironmentUtil.getEnvironmentMap()
+        )
 
-    internal fun enrichedEnvironment(source: Map<String, String>): Map<String, String> {
+    fun withPrependedPathEntries(extraEntries: List<File>): Map<String, String> =
+        withPrependedPathEntries(baseEnvironment(), extraEntries)
+
+    fun applyTo(builder: ProcessBuilder, extraPathEntries: List<File> = emptyList()) {
+        val environment = builder.environment()
+        val base = baseEnvironment()
+        val merged = withPrependedPathEntries(
+            source = environment,
+            extraEntries = extraPathEntries,
+            fallbackPath = base[pathKey(base)].orEmpty()
+        )
+        environment.putAll(merged)
+    }
+
+    internal fun enrichedEnvironment(
+        source: Map<String, String>,
+        commonExecutableDirs: List<File> = commonExecutableDirectories()
+    ): Map<String, String> {
+        return enrichedEnvironment(
+            source = source,
+            suffixPath = "",
+            commonExecutableDirs = commonExecutableDirs
+        )
+    }
+
+    internal fun mergedBaseEnvironment(
+        current: Map<String, String>,
+        shell: Map<String, String>,
+        commonExecutableDirs: List<File> = commonExecutableDirectories()
+    ): Map<String, String> {
+        val env = current.toMutableMap()
+        shell.forEach { (key, value) ->
+            if (value.isNotBlank() && env.keys.none { it.equals(key, ignoreCase = true) }) {
+                env[key] = value
+            }
+        }
+        val shellPath = shell[pathKey(shell)].orEmpty()
+        return enrichedEnvironment(
+            source = env,
+            suffixPath = shellPath,
+            commonExecutableDirs = commonExecutableDirs
+        )
+    }
+
+    private fun enrichedEnvironment(
+        source: Map<String, String>,
+        suffixPath: String,
+        commonExecutableDirs: List<File>
+    ): Map<String, String> {
         val env = source.toMutableMap()
         val key = pathKey(env)
         val merged = mergedPath(
+            prefixEntries = emptyList(),
             existingPath = env[key].orEmpty(),
-            extraEntries = commonExecutableDirectories()
+            suffixPath = suffixPath,
+            suffixEntries = commonExecutableDirs
         )
         if (merged.isNotBlank()) {
             env[key] = merged
@@ -20,31 +73,68 @@ internal object AcpProcessEnvironment {
         return env
     }
 
-    internal fun mergedPath(
-        existingPath: String,
+    internal fun withPrependedPathEntries(
+        source: Map<String, String>,
         extraEntries: List<File>
+    ): Map<String, String> =
+        withPrependedPathEntries(source, extraEntries, fallbackPath = "")
+
+    private fun withPrependedPathEntries(
+        source: Map<String, String>,
+        extraEntries: List<File>,
+        fallbackPath: String
+    ): Map<String, String> {
+        val env = source.toMutableMap()
+        val key = pathKey(env)
+        val merged = mergedPath(
+            prefixEntries = extraEntries,
+            existingPath = env[key].orEmpty(),
+            suffixPath = fallbackPath,
+            suffixEntries = emptyList()
+        )
+        if (merged.isNotBlank()) {
+            env[key] = merged
+        }
+        return env
+    }
+
+    internal fun pathKey(env: Map<String, String>): String =
+        env.keys.firstOrNull { it.equals("PATH", ignoreCase = true) } ?: "PATH"
+
+    internal fun mergedPath(
+        prefixEntries: List<File>,
+        existingPath: String,
+        suffixPath: String = "",
+        suffixEntries: List<File>
     ): String {
         val entries = mutableListOf<String>()
-        fun addPath(path: String?) {
-            path.orEmpty()
-                .split(File.pathSeparator)
-                .map { it.trim() }
-                .filterTo(entries) { it.isNotBlank() }
+
+        fun addEntry(path: String) {
+            val trimmed = path.trim()
+            if (trimmed.isNotBlank()) entries += trimmed
         }
 
-        addPath(existingPath)
-        entries += extraEntries
+        prefixEntries
             .filter { it.isDirectory }
-            .map { it.absolutePath }
+            .forEach { addEntry(it.absolutePath) }
+
+        existingPath
+            .split(File.pathSeparator)
+            .forEach(::addEntry)
+
+        suffixPath
+            .split(File.pathSeparator)
+            .forEach(::addEntry)
+
+        suffixEntries
+            .filter { it.isDirectory }
+            .forEach { addEntry(it.absolutePath) }
 
         val seen = linkedSetOf<String>()
         return entries
             .filter { seen.add(normalizePathEntry(it)) }
             .joinToString(File.pathSeparator)
     }
-
-    internal fun pathKey(env: Map<String, String>): String =
-        env.keys.firstOrNull { it.equals("PATH", ignoreCase = true) } ?: "PATH"
 
     private fun commonExecutableDirectories(): List<File> {
         if (AcpExecutionMode.isWindowsHost()) return emptyList()
@@ -65,5 +155,5 @@ internal object AcpProcessEnvironment {
     }
 
     private fun normalizePathEntry(path: String): String =
-        runCatching { File(path).absoluteFile.normalize().path }.getOrDefault(path)
+        File(path).absoluteFile.normalize().path
 }

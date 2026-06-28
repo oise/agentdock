@@ -94,6 +94,8 @@ export default function ChatSessionView({
     reasoningEffortOptions,
     selectedReasoningEffortId,
     handleReasoningEffortChange,
+    approvalMode,
+    setApprovalMode,
     permissionRequest,
     handleSend,
     handleStop,
@@ -351,6 +353,8 @@ const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null
             reasoningEffortOptions={reasoningEffortOptions}
             selectedReasoningEffortId={selectedReasoningEffortId}
             onReasoningEffortChange={handleReasoningEffortChange}
+            approvalMode={approvalMode}
+            onApprovalModeChange={setApprovalMode}
             hasSelectedAgent={hasSelectedAgent}
             availableCommands={availableCommands}
             attachments={attachments}

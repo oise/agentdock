@@ -70,22 +70,31 @@ internal fun AcpBridge.installServiceCallbacks() {
                 var json = try { Json.encodeToString(update) } catch (_: Exception) { update.toString() }
                 json = convertBrokenOtherPatchToolCallJson(json)
                 val isPermissionRequest = update.toolCallId.value.endsWith("-permission")
+                val todoToolCallKey = todoToolCallKey(chatId, sessionId, update.toolCallId.value)
+                val todoPlanEntries = if (!isPermissionRequest) extractTodoPlanEntriesFromToolRawJson(json) else null
+                val isTodoWrite = !isPermissionRequest && (todoPlanEntries != null || isTodoWriteToolCallJson(json))
+                if (isTodoWrite) {
+                    todoToolCallKeys.add(todoToolCallKey)
+                }
+                val shouldEmitTodoPlan = todoPlanEntries != null && emittedTodoPlanKeys.add(todoToolCallKey)
                 if (!isPermissionRequest) {
-                    recordStoredEvent(
-                        chatId,
-                        sessionId,
-                        adapterName,
-                        buildStoredToolCallChunk(json),
-                        isReplay
-                    )
+                    if (shouldEmitTodoPlan) {
+                        recordStoredEvent(chatId, sessionId, adapterName, buildStoredPlanChunk(todoPlanEntries), isReplay)
+                    } else if (!isTodoWrite) {
+                        recordStoredEvent(chatId, sessionId, adapterName, buildStoredToolCallChunk(json), isReplay)
+                    }
                 }
                 if (!isPermissionRequest && !captureOnlyReplay) {
-                    if (!isReplay) {
+                    if (!isReplay && (!isTodoWrite || shouldEmitTodoPlan)) {
                         markLivePromptVisibleAssistantOutput(chatId)
                     }
-                    pushToolCallChunk(chatId, json, isReplay)
-                    if (!isReplay) {
-                        updateSubagentThreads(chatId, update.toolCallId.value, json, isStart = true)
+                    if (shouldEmitTodoPlan) {
+                        pushPlanChunk(chatId, todoPlanEntries, isReplay)
+                    } else if (!isTodoWrite) {
+                        pushToolCallChunk(chatId, json, isReplay)
+                        if (!isReplay) {
+                            updateSubagentThreads(chatId, update.toolCallId.value, json, isStart = true)
+                        }
                     }
                 }
             }
@@ -94,22 +103,31 @@ internal fun AcpBridge.installServiceCallbacks() {
                 var json = try { Json.encodeToString(update) } catch (_: Exception) { update.toString() }
                 json = convertBrokenOtherPatchToolCallJson(json)
                 val isPermissionRequest = update.toolCallId.value.endsWith("-permission")
+                val todoToolCallKey = todoToolCallKey(chatId, sessionId, update.toolCallId.value)
+                val todoPlanEntries = if (!isPermissionRequest) extractTodoPlanEntriesFromToolRawJson(json) else null
+                val isTodoWrite = !isPermissionRequest && (todoPlanEntries != null || todoToolCallKeys.contains(todoToolCallKey) || isTodoWriteToolCallJson(json))
+                if (isTodoWrite) {
+                    todoToolCallKeys.add(todoToolCallKey)
+                }
+                val shouldEmitTodoPlan = todoPlanEntries != null && emittedTodoPlanKeys.add(todoToolCallKey)
                 if (!isPermissionRequest) {
-                    recordStoredEvent(
-                        chatId,
-                        sessionId,
-                        adapterName,
-                        buildStoredToolCallUpdateChunk(update.toolCallId.value, json),
-                        isReplay
-                    )
+                    if (shouldEmitTodoPlan) {
+                        recordStoredEvent(chatId, sessionId, adapterName, buildStoredPlanChunk(todoPlanEntries), isReplay)
+                    } else if (!isTodoWrite) {
+                        recordStoredEvent(chatId, sessionId, adapterName, buildStoredToolCallUpdateChunk(update.toolCallId.value, json), isReplay)
+                    }
                 }
                 if (!isPermissionRequest && !captureOnlyReplay) {
-                    if (!isReplay) {
+                    if (!isReplay && (!isTodoWrite || shouldEmitTodoPlan)) {
                         markLivePromptVisibleAssistantOutput(chatId)
                     }
-                    pushToolCallUpdateChunk(chatId, update.toolCallId.value, json, isReplay)
-                    if (!isReplay) {
-                        updateSubagentThreads(chatId, update.toolCallId.value, json, isStart = false)
+                    if (shouldEmitTodoPlan) {
+                        pushPlanChunk(chatId, todoPlanEntries, isReplay)
+                    } else if (!isTodoWrite) {
+                        pushToolCallUpdateChunk(chatId, update.toolCallId.value, json, isReplay)
+                        if (!isReplay) {
+                            updateSubagentThreads(chatId, update.toolCallId.value, json, isStart = false)
+                        }
                     }
                 }
             }
@@ -142,6 +160,9 @@ private fun AcpBridge.updateSubagentThreads(chatId: String, toolCallId: String, 
         pushSubagentThreads(chatId, updated.toJsonArrayString())
     }
 }
+
+private fun todoToolCallKey(chatId: String, sessionId: String, toolCallId: String): String =
+    listOf(chatId, sessionId, toolCallId).joinToString("|")
 
 private data class PatchDiff(val path: String, val oldText: String?, val newText: String)
 
@@ -514,6 +535,11 @@ internal fun AcpBridge.installAdapterQueries() {
                                 }
                             }
                         }
+                    } catch (_: CancellationException) {
+                        downloadStatuses.remove(adapterId)
+                    } catch (e: Exception) {
+                        val message = e.message?.takeIf { it.isNotBlank() } ?: "Login failed"
+                        downloadStatuses[adapterId] = "Error: $message"
                     } finally {
                         AcpAuthService.decrementActive(adapterId)
                         authActionJobs.remove(adapterId)
@@ -558,7 +584,6 @@ internal fun AcpBridge.installAdapterQueries() {
                 val result = when (adapterId) {
                     "claude-code" -> AcpUsageDataFetcher.fetchClaudeUsageData()
                     "codex" -> AcpUsageDataFetcher.fetchCodexUsageData()
-                    "gemini-cli" -> AcpUsageDataFetcher.fetchGeminiUsageData(adapterId)
                     "github-copilot-cli" -> AcpUsageDataFetcher.fetchCopilotUsageData(adapterId)
                     else -> ""
                 }

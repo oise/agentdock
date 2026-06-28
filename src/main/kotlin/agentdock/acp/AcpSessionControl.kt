@@ -118,7 +118,7 @@ internal fun AcpClientService.stopSharedProcess(adapterName: String) {
     adapterInitializationJobs.remove(adapterName)?.cancel()
     adapterInitializationScopes.remove(adapterName)?.coroutineContext?.cancel()
     val shared = activeProcesses.remove(processKey(adapterName))
-    teardownAdapterProcess(adapterName, shared)
+    teardownAdapterProcess(shared)
     updateAdapterInitializationState(adapterName, AcpClientService.AdapterInitializationStatus.NotStarted)
     adapterInitialization.remove(adapterName)
     adapterRuntimeMetadataMap.remove(adapterName)
@@ -129,12 +129,11 @@ internal fun AcpClientService.stopSharedProcess(adapterName: String) {
 internal fun AcpClientService.replaceSharedProcess(adapterName: String): AcpClientService.SharedProcess {
     ensureExecutionTargetCurrent()
     val previous = activeProcesses.remove(processKey(adapterName))
-    teardownAdapterProcess(adapterName, previous)
+    teardownAdapterProcess(previous)
     return createSharedProcess(adapterName).also { activeProcesses[processKey(adapterName)] = it }
 }
 
 internal fun AcpClientService.teardownAdapterProcess(
-    _adapterName: String,
     shared: AcpClientService.SharedProcess?
 ) {
     runCatching { shared?.stop() }
@@ -165,7 +164,7 @@ internal fun AcpClientService.resetExecutionEnvironment(
     val processes = activeProcesses.values.toList()
     activeProcesses.clear()
     processes.forEach { shared ->
-        runCatching { teardownAdapterProcess(shared.adapterName, shared) }
+        runCatching { teardownAdapterProcess(shared) }
     }
 
     startupInitializationStarted.set(false)

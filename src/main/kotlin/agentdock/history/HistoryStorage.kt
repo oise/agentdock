@@ -19,7 +19,7 @@ internal object HistoryStorage {
 
     fun projectIndexFile(projectPath: String): File {
         val baseDir = File(AcpAdapterPaths.getBaseRuntimeDir(), "projects")
-        val slug = agentDockProjectSlug(projectPath)
+        val slug = agentDockProjectSlug(canonicalHistoryProjectPath(projectPath).ifBlank { projectPath })
         return File(File(baseDir, slug), "index.json")
     }
 
@@ -113,9 +113,10 @@ internal object HistoryStorage {
     }
 
     fun removeEphemeralSession(projectPath: String, adapterName: String, sessionId: String) {
-        if (projectPath.isBlank() || adapterName.isBlank() || sessionId.isBlank()) return
-        val remaining = readEphemeralSessions(projectPath)
+        val cleanProjectPath = canonicalHistoryProjectPath(projectPath)
+        if (cleanProjectPath.isBlank() || adapterName.isBlank() || sessionId.isBlank()) return
+        val remaining = readEphemeralSessions(cleanProjectPath)
             .filterNot { it.adapterName == adapterName && it.sessionId == sessionId }
-        writeEphemeralSessions(projectPath, remaining)
+        writeEphemeralSessions(cleanProjectPath, remaining)
     }
 }

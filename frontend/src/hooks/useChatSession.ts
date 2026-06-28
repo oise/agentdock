@@ -4,6 +4,7 @@ import {
   ChatAttachment,
   ForkConversationBase,
   HistorySessionMeta,
+  ApprovalMode,
   Message,
   PendingHandoffContext,
 PermissionRequest,
@@ -35,6 +36,57 @@ import {useAvailableCommands} from './chatSession/useAvailableCommands';
 import {useBufferedMessageChunks} from './chatSession/useBufferedMessageChunks';
 
 const EMPTY_ADAPTER_NAMES: string[] = [];
+const APPROVAL_MODE_STORAGE_KEY = 'chat-approval-mode';
+
+function loadApprovalMode(): ApprovalMode {
+  return localStorage.getItem(APPROVAL_MODE_STORAGE_KEY) === 'auto' ? 'auto' : 'ask';
+}
+
+function saveApprovalMode(mode: ApprovalMode) {
+  localStorage.setItem(APPROVAL_MODE_STORAGE_KEY, mode);
+}
+
+function normalizePermissionText(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function isDenyPermissionOption(option: PermissionRequest['options'][number]): boolean {
+  const text = normalizePermissionText(`${option.optionId} ${option.label}`);
+  return /\b(deny|reject|cancel|no|block|disallow)\b/.test(text);
+}
+
+function isPersistentPermissionOption(option: PermissionRequest['options'][number]): boolean {
+  const text = normalizePermissionText(`${option.optionId} ${option.label}`);
+  return /\b(always|forever|permanent|persist|remember)\b/.test(text);
+}
+
+function isPositivePermissionOption(option: PermissionRequest['options'][number]): boolean {
+  const text = normalizePermissionText(`${option.optionId} ${option.label}`);
+  return /\b(allow|approve|accept|yes|ok|continue|proceed|run|execute|apply)\b/.test(text);
+}
+
+function findAutoApproveOption(request: PermissionRequest): PermissionRequest['options'][number] | null {
+  const transientOptions = request.options.filter((option) =>
+    !isDenyPermissionOption(option) && !isPersistentPermissionOption(option)
+  );
+
+  const positiveOption = transientOptions.find(isPositivePermissionOption);
+  if (positiveOption) return positiveOption;
+
+  const hasDenyOption = request.options.some(isDenyPermissionOption);
+  const firstOption = request.options[0];
+  if (hasDenyOption && firstOption && transientOptions[0] === firstOption) {
+    return firstOption;
+  }
+
+  return null;
+}
+
+function respondToPermission(request: PermissionRequest, decision: string): boolean {
+  if (!window.__respondPermission) return false;
+  window.__respondPermission(request.requestId, decision);
+  return true;
+}
 
 export function useChatSession(
   conversationId: string,
@@ -56,6 +108,7 @@ export function useChatSession(
   const [isSending, setIsSending] = useState(false);
   const [isHistoryReplaying, setIsHistoryReplaying] = useState(!!historySession);
   const [permissionQueue, setPermissionQueue] = useState<PermissionRequest[]>([]);
+  const [approvalMode, setApprovalModeState] = useState<ApprovalMode>(loadApprovalMode);
   const permissionRequest = permissionQueue[0] ?? null;
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [queuedPrompts, setQueuedPromptsState] = useState<QueuedPrompt[]>([]);
@@ -98,6 +151,11 @@ export function useChatSession(
     queuedPromptsRef.current = next;
     setQueuedPromptsState(next);
     return next;
+  }, []);
+
+  const setApprovalMode = useCallback((mode: ApprovalMode) => {
+    setApprovalModeState(mode);
+    saveApprovalMode(mode);
   }, []);
 
   const finishActivePromptAfterError = useCallback(() => {
@@ -438,6 +496,12 @@ export function useChatSession(
     const unsubPermission = ACPBridge.onPermissionRequest((e) => {
       const req = e.detail.request as PermissionRequest;
       if (req.chatId && req.chatId !== conversationId) return;
+      if (approvalMode === 'auto') {
+        const approveOption = findAutoApproveOption(req);
+        if (approveOption && respondToPermission(req, approveOption.optionId)) {
+          return;
+        }
+      }
       setPermissionQueue((prev) => [...prev, req]);
     });
 
@@ -453,6 +517,7 @@ export function useChatSession(
     };
   }, [
     conversationId,
+    approvalMode,
     enqueueChunk,
     applyBufferedChunks,
     clearBufferedChunks,
@@ -700,12 +765,25 @@ export function useChatSession(
     });
   }, [status, conversationId, dispatchPrompt, updateQueuedPrompts]);
 
+  useEffect(() => {
+    if (approvalMode !== 'auto' || !permissionRequest) return;
+
+    const approveOption = findAutoApproveOption(permissionRequest);
+    if (!approveOption) return;
+
+    try {
+      if (respondToPermission(permissionRequest, approveOption.optionId)) {
+        setPermissionQueue((prev) => prev.filter((request) => request.requestId !== permissionRequest.requestId));
+      }
+    } catch (e) {
+      console.warn('[useChatSession] Failed to auto-respond to permission:', e);
+    }
+  }, [approvalMode, permissionRequest]);
+
   const handlePermissionDecision = (decision: string) => {
     if (!permissionRequest) return;
     try {
-      if (window.__respondPermission) {
-        window.__respondPermission(permissionRequest.requestId, decision);
-      }
+      respondToPermission(permissionRequest, decision);
       // Dequeue the answered request; if more are pending the next one becomes visible automatically.
       setPermissionQueue((prev) => prev.slice(1));
     } catch (e) {
@@ -735,6 +813,8 @@ queuedPrompts,
     selectedReasoningEffortId,
     reasoningEffortOptions,
     handleReasoningEffortChange,
+    approvalMode,
+    setApprovalMode,
     permissionRequest,
     handleSend,
     handleStop,

@@ -104,6 +104,89 @@ class AcpRuntimeMetadataTest {
     }
 
     @Test
+    fun `runtime metadata picks up reasoning effort from dynamic config option response`() {
+        val initialResponse = Json.parseToJsonElement(
+            """
+            {
+              "sessionId": "session-1",
+              "configOptions": [
+                {
+                  "id": "model",
+                  "category": "model",
+                  "type": "select",
+                  "currentValue": "opencode/big-pickle",
+                  "options": [
+                    { "value": "opencode/big-pickle", "name": "OpenCode Zen/Big Pickle" },
+                    { "value": "openai/gpt-5.4", "name": "OpenAI/GPT-5.4" }
+                  ]
+                },
+                {
+                  "id": "mode",
+                  "category": "mode",
+                  "type": "select",
+                  "currentValue": "build",
+                  "options": [
+                    { "value": "build", "name": "build" },
+                    { "value": "plan", "name": "plan" }
+                  ]
+                }
+              ]
+            }
+            """.trimIndent()
+        ).jsonObject
+        val modelChangeResponse = Json.parseToJsonElement(
+            """
+            {
+              "configOptions": [
+                {
+                  "id": "model",
+                  "category": "model",
+                  "type": "select",
+                  "currentValue": "openai/gpt-5.4",
+                  "options": [
+                    { "value": "opencode/big-pickle", "name": "OpenCode Zen/Big Pickle" },
+                    { "value": "openai/gpt-5.4", "name": "OpenAI/GPT-5.4" }
+                  ]
+                },
+                {
+                  "id": "mode",
+                  "category": "mode",
+                  "type": "select",
+                  "currentValue": "build",
+                  "options": [
+                    { "value": "build", "name": "build" },
+                    { "value": "plan", "name": "plan" }
+                  ]
+                },
+                {
+                  "id": "reasoning_effort",
+                  "category": "thought_level",
+                  "type": "select",
+                  "currentValue": "low",
+                  "options": [
+                    { "value": "none", "name": "None" },
+                    { "value": "low", "name": "Low" },
+                    { "value": "medium", "name": "Medium" },
+                    { "value": "high", "name": "High" },
+                    { "value": "xhigh", "name": "Xhigh" }
+                  ]
+                }
+              ]
+            }
+            """.trimIndent()
+        ).jsonObject
+
+        val initialMetadata = runtimeMetadataFromSessionResponseJson(initialResponse, adapterInfo())
+        val changedMetadata = runtimeMetadataFromConfigOptionsJson(modelChangeResponse["configOptions"], adapterInfo())
+
+        assertEquals(emptyList(), initialMetadata.availableReasoningEfforts)
+        assertEquals("openai/gpt-5.4", changedMetadata.currentModelId)
+        assertEquals("reasoning_effort", changedMetadata.reasoningEffortConfigId)
+        assertEquals("low", changedMetadata.currentReasoningEffortId)
+        assertEquals(listOf("none", "low", "medium", "high", "xhigh"), changedMetadata.availableReasoningEfforts.map { it.id })
+    }
+
+    @Test
     fun `config option update extractor returns session id and config options`() {
         val params = Json.parseToJsonElement(
             """

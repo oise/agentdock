@@ -5,6 +5,7 @@ import { Tooltip } from './shared/Tooltip';
 export default function ChatDropdown({
   value,
   subValue,
+  subValues,
   options,
   placeholder,
   disabled,
@@ -19,6 +20,7 @@ export default function ChatDropdown({
 }: {
   value: string;
   subValue?: string;
+  subValues?: Record<string, string | undefined>;
   options: DropdownOption[];
   placeholder: string;
   disabled: boolean;
@@ -88,7 +90,8 @@ export default function ChatDropdown({
   };
 
   const selectedOption = options.find((option) => option.id === value);
-  const selectedSub = selectedOption?.subOptions?.find((sub) => sub.id === subValue);
+  const selectedSubValue = subValues?.[value] ?? subValue;
+  const selectedSub = selectedOption?.subOptions?.find((sub) => sub.id === selectedSubValue);
   const hoveredOption = options.find((option) => option.id === hoveredOptionId && option.subOptions?.length);
   const renderIcon = (option?: DropdownOption, className: string = 'w-4 h-4') => {
     if (!option) return null;
@@ -106,7 +109,7 @@ export default function ChatDropdown({
   };
 
   const selectedText =
-    (showSubValueInTrigger ? selectedSub?.label || subValue : undefined) || selectedOption?.label || placeholder;
+    (showSubValueInTrigger ? selectedSub?.label || selectedSubValue : undefined) || selectedOption?.label || placeholder;
 
   useEffect(() => {
     const updateSize = () => {
@@ -400,7 +403,7 @@ export default function ChatDropdown({
                         setHoveredOptionId(null);
                       }}
                       className={`flex items-center w-full my-0.5 px-2 min-h-8 text-left transition-colors rounded outline-none focus-visible:shadow-[inset_0_0_0_1px_var(--ide-Button-default-focusColor)] ${
-                        hoveredOption.id === value && sub.id === subValue
+                        sub.id === (subValues?.[hoveredOption.id] ?? (hoveredOption.id === value ? subValue : undefined))
                           ? 'bg-accent text-accent-foreground'
                           : 'text-foreground hover:bg-accent hover:text-accent-foreground'
                       }`}

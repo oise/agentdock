@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { $getRoot, $getSelection, $isRangeSelection, LexicalEditor } from 'lexical';
-import { Bookmark, CornerDownLeft, Keyboard as KeyboardIcon, Paperclip, SquareTerminal } from 'lucide-react';
+import {
+  Bookmark,
+  CornerDownLeft,
+  Keyboard as KeyboardIcon,
+  Paperclip,
+  ShieldCheck,
+  ShieldQuestion,
+  SquareTerminal
+} from 'lucide-react';
 
 import { AudioRecordingStatePayload, DropdownOption } from '../../../types/chat';
 import { PromptLibraryItem } from '../../../types/promptLibrary';
@@ -24,6 +32,7 @@ export function useChatInputController({
   status,
   modeOptions,
   selectedModeId,
+  approvalMode,
   availableCommands,
   attachments,
   onAttachmentsChange,
@@ -142,6 +151,12 @@ export function useChatInputController({
     [sendMode]
   );
 
+  const approvalModeIcon = useMemo(() => (
+    approvalMode === 'auto'
+      ? <ShieldCheck className="w-4 h-4" />
+      : <ShieldQuestion className="w-4 h-4" />
+  ), [approvalMode]);
+
   const plusMenuOptions: DropdownOption[] = useMemo(() => {
     const options: DropdownOption[] = [
       { id: 'add-files', label: 'Attach file', icon: <Paperclip className='w-4 h-4' /> }
@@ -183,8 +198,28 @@ export function useChatInputController({
       ]
     });
 
+    options.push({
+      id: 'approvals',
+      label: 'Approvals',
+      icon: approvalModeIcon,
+      subOptions: [
+        {
+          id: 'ask',
+          label: 'Ask approvals',
+          description: 'Show agent approval prompts',
+          icon: <ShieldQuestion className="w-4 h-4" />,
+        },
+        {
+          id: 'auto',
+          label: 'Auto approve',
+          description: 'Automatically approve tool requests when a normal approve option is available',
+          icon: <ShieldCheck className="w-4 h-4" />,
+        },
+      ]
+    });
+
     return options;
-  }, [agentSlashItems, promptLibrarySlashItems, sendModeIcon]);
+  }, [agentSlashItems, approvalModeIcon, promptLibrarySlashItems, sendModeIcon]);
 
   const handleImagePaste = useCallback(
     (file: File, editor: LexicalEditor) => {

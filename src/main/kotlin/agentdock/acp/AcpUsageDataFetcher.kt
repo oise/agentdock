@@ -106,7 +106,7 @@ internal object AcpUsageDataFetcher {
         }
         var commandLine = com.intellij.execution.configurations.GeneralCommandLine(exe)
             .withParameters(allArgs)
-            .withEnvironment(System.getenv())
+            .withEnvironment(AcpProcessEnvironment.baseEnvironment())
             .withParentEnvironmentType(com.intellij.execution.configurations.GeneralCommandLine.ParentEnvironmentType.CONSOLE)
         AcpNodeRuntimeResolver.resolveAvailable()?.let { runtime ->
             commandLine = AcpNodeRuntimeResolver.applyTo(commandLine, runtime)

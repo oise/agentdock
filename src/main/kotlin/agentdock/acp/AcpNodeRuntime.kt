@@ -42,17 +42,11 @@ internal object AcpNodeRuntimeResolver {
     }
 
     fun applyTo(builder: ProcessBuilder, runtime: AcpNodeRuntime) {
-        val path = mergedPath(runtime.pathEntries, builder.environment())
-        if (path.isNotBlank()) {
-            builder.environment()[pathKey(builder.environment())] = path
-        }
+        AcpProcessEnvironment.applyTo(builder, runtime.pathEntries)
     }
 
     fun applyTo(commandLine: GeneralCommandLine, runtime: AcpNodeRuntime): GeneralCommandLine {
-        val env = System.getenv().toMutableMap()
-        val path = mergedPath(runtime.pathEntries, env)
-        if (path.isNotBlank()) env[pathKey(env)] = path
-        return commandLine.withEnvironment(env)
+        return commandLine.withEnvironment(AcpProcessEnvironment.withPrependedPathEntries(runtime.pathEntries))
     }
 
     fun resolveManaged(): AcpNodeRuntime? {
@@ -337,19 +331,4 @@ internal object AcpNodeRuntimeResolver {
         return File(File(home, ".nvmd"), "bin")
     }
 
-    private fun pathKey(env: Map<String, String>): String =
-        env.keys.firstOrNull { it.equals("PATH", ignoreCase = true) } ?: "PATH"
-
-    private fun mergedPath(extraEntries: List<File>, env: Map<String, String>): String {
-        val key = pathKey(env)
-        val existing = env[key].orEmpty()
-        val prefix = extraEntries
-            .filter { it.isDirectory }
-            .joinToString(File.pathSeparator) { it.absolutePath }
-        return when {
-            prefix.isBlank() -> existing
-            existing.isBlank() -> prefix
-            else -> "$prefix${File.pathSeparator}$existing"
-        }
-    }
 }

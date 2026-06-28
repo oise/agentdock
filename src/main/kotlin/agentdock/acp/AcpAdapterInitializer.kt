@@ -266,7 +266,7 @@ internal suspend fun AcpClientService.initializeSharedProcessAtStartup(
 
         var commandLine = com.intellij.execution.configurations.GeneralCommandLine(command)
             .withWorkDirectory(resolveAdapterProcessWorkingDirectory(File(adapterRoot)))
-            .withEnvironment(System.getenv())
+            .withEnvironment(AcpProcessEnvironment.baseEnvironment())
             .withRedirectErrorStream(false)
         AcpNodeRuntimeResolver.resolveAvailable()?.let { runtime ->
             commandLine = AcpNodeRuntimeResolver.applyTo(commandLine, runtime)

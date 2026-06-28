@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>agentdock</id>
     <name>Agent Dock</name>
-    <version>1.2.3</version>
+    <version>1.3.0</version>
     <vendor url="https://github.com/edgarsr/agentdock">EdgarsR</vendor>
 
     <description><![CDATA[
@@ -47,9 +47,14 @@
 
     <change-notes><![CDATA[
         <ul>
-            <li>Fixed ACP runtime option discovery by supporting configOptions for models, modes, and reasoning effort.</li>
-            <li>Added a separate reasoning effort selector for ACP agents that expose it independently from model selection.</li>
-            <li>Removed deprecated JetBrains Terminal API usage from IDE terminal command launch handling.</li>
+            <li>Removed Gemini CLI because the project has been discontinued.</li>
+            <li>Fixed OpenCode todo list rendering.</li>
+            <li>Added MCP server status indicators.</li>
+            <li>Updated the Kotlin ACP SDK.</li>
+            <li>Improved commit message generation.</li>
+            <li>Fixed the OpenCode reasoning effort selector.</li>
+            <li>Fixed status bar quota usage display.</li>
+            <li>Fixed cross-IDE ACP process cleanup.</li>
         </ul>
     ]]></change-notes>
 

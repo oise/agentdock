@@ -158,6 +158,8 @@ export interface PermissionRequest {
   options: { optionId: string; label: string }[];
 }
 
+export type ApprovalMode = 'ask' | 'auto';
+
 export interface DropdownOption {
   id: string;
   label: string;

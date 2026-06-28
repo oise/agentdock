@@ -1,4 +1,5 @@
 import {
+  ApprovalMode,
   AudioTranscriptionFeatureState,
   AvailableCommand,
   ChatAttachment,
@@ -27,6 +28,8 @@ export interface ChatInputProps {
   reasoningEffortOptions: DropdownOption[];
   selectedReasoningEffortId: string;
   onReasoningEffortChange: (id: string) => void;
+  approvalMode: ApprovalMode;
+  onApprovalModeChange: (mode: ApprovalMode) => void;
   hasSelectedAgent: boolean;
   availableCommands: AvailableCommand[];
   attachments: ChatAttachment[];

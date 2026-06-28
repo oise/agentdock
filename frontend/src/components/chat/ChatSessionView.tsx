@@ -83,6 +83,8 @@ export default function ChatSessionView({
     reasoningEffortOptions,
     selectedReasoningEffortId,
     handleReasoningEffortChange,
+    approvalMode,
+    setApprovalMode,
     permissionRequest,
     handleSend,
     handleStop,
@@ -320,6 +322,9 @@ export default function ChatSessionView({
             reasoningEffortOptions={reasoningEffortOptions}
             selectedReasoningEffortId={selectedReasoningEffortId}
             onReasoningEffortChange={handleReasoningEffortChange}
+
+            approvalMode={approvalMode}
+            onApprovalModeChange={setApprovalMode}
             
             hasSelectedAgent={hasSelectedAgent}
             availableCommands={availableCommands}

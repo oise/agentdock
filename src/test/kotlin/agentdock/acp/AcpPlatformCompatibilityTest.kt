@@ -5,6 +5,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class AcpPlatformCompatibilityTest {
     @Test
@@ -122,6 +123,96 @@ class AcpPlatformCompatibilityTest {
         assertEquals("base-path", env["Path"])
     }
 
+    @Test
+    fun `process registry keeps adapter root cleanup disabled while another owner is alive`() {
+        val baseDir = createTempDirectory("agentdock-registry").toFile()
+        val destroyedPids = mutableListOf<Long>()
+        val cleanedRoots = mutableListOf<String>()
+        val alivePids = mutableSetOf(1L, 2L, 11L, 22L)
+
+        val first = registryStore(baseDir, ownerPid = 1L, ownerId = "owner-1", alivePids, destroyedPids, cleanedRoots)
+        val second = registryStore(baseDir, ownerPid = 2L, ownerId = "owner-2", alivePids, destroyedPids, cleanedRoots)
+
+        first.registerOwner()
+        first.registerProcess("tool", "/tmp/shared-tool", 11L)
+        second.registerOwner()
+        second.registerProcess("tool", "/tmp/shared-tool", 22L)
+
+        first.closeOwnerAndCleanupIfLast()
+
+        assertTrue(cleanedRoots.isEmpty())
+        assertTrue(destroyedPids.isEmpty())
+    }
+
+    @Test
+    fun `process registry cleans adapter roots when the last owner closes`() {
+        val baseDir = createTempDirectory("agentdock-registry").toFile()
+        val destroyedPids = mutableListOf<Long>()
+        val cleanedRoots = mutableListOf<String>()
+        val alivePids = mutableSetOf(1L, 11L)
+
+        val store = registryStore(baseDir, ownerPid = 1L, ownerId = "owner-1", alivePids, destroyedPids, cleanedRoots)
+
+        store.registerOwner()
+        store.registerProcess("tool", "/tmp/shared-tool", 11L)
+        store.unregisterProcess(11L)
+        store.closeOwnerAndCleanupIfLast()
+
+        assertEquals(listOf(File("/tmp/shared-tool").absoluteFile.normalize().path.replace('\\', '/')), cleanedRoots)
+        assertTrue(destroyedPids.isEmpty())
+    }
+
+    @Test
+    fun `process registry removes dead owners without adapter root cleanup while another owner is alive`() {
+        val baseDir = createTempDirectory("agentdock-registry").toFile()
+        val destroyedPids = mutableListOf<Long>()
+        val cleanedRoots = mutableListOf<String>()
+        val alivePids = mutableSetOf(1L, 3L, 33L)
+
+        val dead = registryStore(baseDir, ownerPid = 2L, ownerId = "owner-2", alivePids + 2L + 22L, destroyedPids, cleanedRoots)
+        dead.registerOwner()
+        dead.registerProcess("tool", "/tmp/shared-tool", 22L)
+
+        val current = registryStore(baseDir, ownerPid = 1L, ownerId = "owner-1", alivePids, destroyedPids, cleanedRoots)
+        val otherLive = registryStore(baseDir, ownerPid = 3L, ownerId = "owner-3", alivePids, destroyedPids, cleanedRoots)
+        current.registerOwner()
+        otherLive.registerOwner()
+        otherLive.registerProcess("tool", "/tmp/shared-tool", 33L)
+
+        current.closeOwnerAndCleanupIfLast()
+
+        assertEquals(listOf(22L), destroyedPids)
+        assertTrue(cleanedRoots.isEmpty())
+    }
+
+    @Test
+    fun `process registry remembers roots from closed owners for final cleanup`() {
+        val baseDir = createTempDirectory("agentdock-registry").toFile()
+        val destroyedPids = mutableListOf<Long>()
+        val cleanedRoots = mutableListOf<String>()
+        val alivePids = mutableSetOf(1L, 2L, 11L, 22L)
+
+        val first = registryStore(baseDir, ownerPid = 1L, ownerId = "owner-1", alivePids, destroyedPids, cleanedRoots)
+        val second = registryStore(baseDir, ownerPid = 2L, ownerId = "owner-2", alivePids, destroyedPids, cleanedRoots)
+
+        first.registerOwner()
+        first.registerProcess("tool-a", "/tmp/tool-a", 11L)
+        second.registerOwner()
+        second.registerProcess("tool-b", "/tmp/tool-b", 22L)
+
+        first.closeOwnerAndCleanupIfLast()
+        alivePids.remove(1L)
+        second.closeOwnerAndCleanupIfLast()
+
+        assertEquals(
+            setOf(
+                File("/tmp/tool-a").absoluteFile.normalize().path.replace('\\', '/'),
+                File("/tmp/tool-b").absoluteFile.normalize().path.replace('\\', '/')
+            ),
+            cleanedRoots.toSet()
+        )
+    }
+
     private fun npmAdapter(): AcpAdapterConfig.AdapterInfo {
         return AcpAdapterConfig.AdapterInfo(
             id = "tool",
@@ -146,5 +237,23 @@ class AcpPlatformCompatibilityTest {
         } finally {
             System.setProperty("os.name", previous)
         }
+    }
+
+    private fun registryStore(
+        baseDir: File,
+        ownerPid: Long,
+        ownerId: String,
+        alivePids: Set<Long>,
+        destroyedPids: MutableList<Long>,
+        cleanedRoots: MutableList<String>
+    ): AcpProcessRegistryStore {
+        return AcpProcessRegistryStore(
+            baseDir = baseDir,
+            currentOwnerPid = ownerPid,
+            currentOwnerId = ownerId,
+            isProcessAlive = { pid -> pid in alivePids },
+            destroyRegisteredProcess = { pid, _ -> destroyedPids.add(pid) },
+            stopProcessesUsingRoot = { root -> cleanedRoots.add(root) }
+        )
     }
 }

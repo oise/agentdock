@@ -274,6 +274,7 @@ internal suspend fun AcpClientService.initializeSharedProcessAtStartup(
 
         val proc = withContext(Dispatchers.IO) { commandLine.createProcess() }
         sharedProc.process = proc
+        AcpProcessRegistry.registerProcess(adapterInfo.id, adapterRoot, proc)
         updateAdapterInitializationState(
             requestedAdapterName,
             AcpClientService.AdapterInitializationStatus.Initializing,

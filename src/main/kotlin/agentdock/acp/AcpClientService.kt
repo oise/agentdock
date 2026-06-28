@@ -53,11 +53,15 @@ class AcpClientService private constructor(val project: Project) {
         private val instances = ConcurrentHashMap<Project, AcpClientService>()
 
         fun getInstance(project: Project): AcpClientService {
+            AcpProcessRegistry.registerOwner()
             val service = instances.computeIfAbsent(project) { p ->
                 val created = AcpClientService(p)
                 Disposer.register(p, Disposable {
                     created.shutdown()
                     instances.remove(p)
+                    if (instances.isEmpty()) {
+                        AcpProcessRegistry.closeOwnerAndCleanupIfLast()
+                    }
                 })
                 created
             }
@@ -148,6 +152,7 @@ class AcpClientService private constructor(val project: Project) {
                     runningProcess?.waitFor(2, TimeUnit.SECONDS)
                 }
             }
+            AcpProcessRegistry.unregisterProcess(runningProcess)
             process = null
             client = null
             protocol = null

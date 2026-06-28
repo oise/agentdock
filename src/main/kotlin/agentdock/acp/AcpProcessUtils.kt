@@ -12,6 +12,10 @@ internal object AcpProcessUtils {
             File(AcpAdapterPaths.getDownloadPath(adapterName, target))
         }.getOrNull() ?: return
 
+        stopProcessesUsingAdapterRootPath(adapterRoot)
+    }
+
+    fun stopProcessesUsingAdapterRootPath(adapterRoot: File) {
         val normalizedRoot = adapterRoot.absoluteFile.normalize().path.replace('\\', '/').lowercase().trimEnd('/')
         if (normalizedRoot.isBlank()) return
 
@@ -35,6 +39,15 @@ internal object AcpProcessUtils {
             handle.destroyForcibly()
             handle.onExit().get(2, java.util.concurrent.TimeUnit.SECONDS)
         } catch (_: Exception) {
+        }
+    }
+
+    fun destroyProcessTreeIfUsingAdapterRoot(pid: Long, adapterRoot: File) {
+        val normalizedRoot = adapterRoot.absoluteFile.normalize().path.replace('\\', '/').lowercase().trimEnd('/')
+        if (normalizedRoot.isBlank()) return
+        val handle = ProcessHandle.of(pid).orElse(null) ?: return
+        if (processBelongsToAdapterRoot(handle, normalizedRoot)) {
+            destroyProcessTree(handle)
         }
     }
 

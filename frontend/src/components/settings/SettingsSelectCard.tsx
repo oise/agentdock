@@ -17,9 +17,5 @@ export function SettingsSelectCard({
   children,
   className = ''
 }: SettingsSelectCardProps) {
-  return (
-    <SettingsCardShell title={title} description={description} className={className}>
-      {children}
-    </SettingsCardShell>
-  );
+  return <SettingsCardShell title={title} description={description} control={children} className={className} />;
 }

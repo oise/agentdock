@@ -11,7 +11,7 @@ import {
   ForkConversationBase,
   GlobalSettingsPayload,
   SessionMetadataUpdatePayload,
-  ToolCallEvent,
+  ToolCallEvent
 } from '../types/chat';
 import { extractToolCallDiffEntries } from './toolCallUtils';
 import { McpServerConfig } from '../types/mcp';
@@ -19,7 +19,6 @@ import { PromptLibraryItem } from '../types/promptLibrary';
 import { SystemInstruction } from '../types/systemInstructions';
 import {
   AdapterDeletedEvent,
-  AdapterRefreshStateEvent,
   AdaptersEvent,
   AudioRecordingStateEvent,
   AudioTranscriptionFeatureEvent,
@@ -42,12 +41,11 @@ import {
   PermissionRequestEvent,
   PromptLibraryEvent,
   SessionIdEvent,
-  SessionConfigOptionsEvent,
   StatusEvent,
   SystemInstructionsEvent,
   ToolCallBridgeEvent,
   UndoResultEvent,
-  onBridgeEvent,
+  onBridgeEvent
 } from './bridgeEvents';
 
 let saveTranscriptCounter = 0;
@@ -84,7 +82,7 @@ function nextBridgeOperationRequestId(operation: string): string {
 function awaitBridgeOperation(
   operation: BridgeOperationResultPayload['operation'],
   invoke: (requestId: string) => void,
-  timeoutMs = BRIDGE_OPERATION_TIMEOUT_MS,
+  timeoutMs = BRIDGE_OPERATION_TIMEOUT_MS
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const requestId = nextBridgeOperationRequestId(operation);
@@ -116,6 +114,15 @@ function awaitBridgeOperation(
   });
 }
 
+const FILE_ICON_REQUEST_TIMEOUT_MS = 5_000;
+const fileIconCache = new Map<string, string>();
+const pendingFileIconRequests = new Map<string, Promise<string | null>>();
+let fileIconCacheEpoch = 0;
+
+function fileIconCacheKey(path: string): string {
+  return `path:${path.replace(/\\/g, '/')}`;
+}
+
 export const ACPBridge = {
   initialize: () => {
     if (typeof window === 'undefined') return;
@@ -130,8 +137,10 @@ export const ACPBridge = {
           if (chunk.type === 'tool_call' && toolCallId && raw.rawInput && typeof raw.rawInput === 'object') {
             toolCallRawInputById.set(toolCallId, raw.rawInput);
           }
-          const diffs = extractToolCallDiffEntries(raw, toolCallId ? toolCallRawInputById.get(toolCallId) : undefined)
-            .map((diff) => ({ path: diff.path, oldText: diff.oldText, newText: diff.newText }));
+          const diffs = extractToolCallDiffEntries(
+            raw,
+            toolCallId ? toolCallRawInputById.get(toolCallId) : undefined
+          ).map((diff) => ({ path: diff.path, oldText: diff.oldText, newText: diff.newText }));
           const status = chunk.toolStatus || raw.status;
           if (diffs.length > 0) {
             const payload: ToolCallEvent = {
@@ -141,7 +150,7 @@ export const ACPBridge = {
               status,
               isReplay: chunk.isReplay,
               diffs,
-              locations: raw.locations,
+              locations: raw.locations
             };
             const eventName = chunk.type === 'tool_call' ? EVENT_NAMES.TOOL_CALL : EVENT_NAMES.TOOL_CALL_UPDATE;
             window.dispatchEvent(new CustomEvent(eventName, { detail: { chatId: chunk.chatId, payload } }));
@@ -152,11 +161,18 @@ export const ACPBridge = {
               kind: chunk.toolKind || raw.kind,
               status,
               isReplay: chunk.isReplay,
-              diffs: [],
+              diffs: []
             };
-            window.dispatchEvent(new CustomEvent(EVENT_NAMES.TOOL_CALL_UPDATE, { detail: { chatId: chunk.chatId, payload } }));
+            window.dispatchEvent(
+              new CustomEvent(EVENT_NAMES.TOOL_CALL_UPDATE, { detail: { chatId: chunk.chatId, payload } })
+            );
           }
-          if (chunk.type === 'tool_call_update' && toolCallId && status && !['pending', 'running', 'in_progress', 'active'].includes(String(status).toLowerCase())) {
+          if (
+            chunk.type === 'tool_call_update' &&
+            toolCallId &&
+            status &&
+            !['pending', 'running', 'in_progress', 'active'].includes(String(status).toLowerCase())
+          ) {
             toolCallRawInputById.delete(toolCallId);
           }
         } catch (e) {
@@ -181,16 +197,8 @@ export const ACPBridge = {
       window.dispatchEvent(new CustomEvent(EVENT_NAMES.MODE, { detail: { chatId, modeId } }));
     };
 
-    window.__onSessionConfigOptions = (payload) => {
-      window.dispatchEvent(new CustomEvent(EVENT_NAMES.SESSION_CONFIG_OPTIONS, { detail: { payload } }));
-    };
-
     window.__onAdapters = (adapters) => {
       window.dispatchEvent(new CustomEvent(EVENT_NAMES.ADAPTERS, { detail: { adapters } }));
-    };
-
-    window.__onAdapterRefreshState = (refreshing) => {
-      window.dispatchEvent(new CustomEvent(EVENT_NAMES.ADAPTER_REFRESH_STATE, { detail: { refreshing } }));
     };
 
     window.__onAvailableCommands = (adapterId, commands) => {
@@ -319,51 +327,67 @@ export const ACPBridge = {
     window.__onFilesResult = (filesJson) => {
       let files = [];
       try {
-        files = typeof filesJson === "string" ? JSON.parse(filesJson) : filesJson;
+        files = typeof filesJson === 'string' ? JSON.parse(filesJson) : filesJson;
       } catch (e) {
         console.warn('[bridge] Failed to parse files result', e);
       }
-      window.dispatchEvent(new CustomEvent("acp-files-result", { detail: { files } }));
+      window.dispatchEvent(new CustomEvent('acp-files-result', { detail: { files } }));
+    };
+
+    window.__onFileIconResult = (result) => {
+      window.dispatchEvent(new CustomEvent('acp-file-icon-result', { detail: result }));
+    };
+
+    window.__onThemeChanged = () => {
+      fileIconCacheEpoch += 1;
+      fileIconCache.clear();
+      pendingFileIconRequests.clear();
+      window.dispatchEvent(new CustomEvent('acp-theme-changed'));
     };
 
     if (window.__notifyReady) window.__notifyReady();
   },
 
-  onContentChunk: (callback: (e: CustomEvent<ContentChunkEvent>) => void) => onBridgeEvent(EVENT_NAMES.CONTENT_CHUNK, callback),
+  onContentChunk: (callback: (e: CustomEvent<ContentChunkEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.CONTENT_CHUNK, callback),
 
   onStatus: (callback: (e: CustomEvent<StatusEvent>) => void) => onBridgeEvent(EVENT_NAMES.STATUS, callback),
 
-  onBridgeOperationResult: (callback: (e: CustomEvent<BridgeOperationResultEvent>) => void) => onBridgeEvent(EVENT_NAMES.BRIDGE_OPERATION_RESULT, callback),
+  onBridgeOperationResult: (callback: (e: CustomEvent<BridgeOperationResultEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.BRIDGE_OPERATION_RESULT, callback),
 
   onSessionId: (callback: (e: CustomEvent<SessionIdEvent>) => void) => onBridgeEvent(EVENT_NAMES.SESSION_ID, callback),
 
   onMode: (callback: (e: CustomEvent<ModeEvent>) => void) => onBridgeEvent(EVENT_NAMES.MODE, callback),
-  onSessionConfigOptions: (callback: (e: CustomEvent<SessionConfigOptionsEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.SESSION_CONFIG_OPTIONS, callback),
 
   onAdapters: (callback: (e: CustomEvent<AdaptersEvent>) => void) => onBridgeEvent(EVENT_NAMES.ADAPTERS, callback),
 
-  onAdapterRefreshState: (callback: (e: CustomEvent<AdapterRefreshStateEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.ADAPTER_REFRESH_STATE, callback),
-
-  onAvailableCommands: (callback: (e: CustomEvent<AvailableCommandsEvent>) => void) => onBridgeEvent(EVENT_NAMES.AVAILABLE_COMMANDS, callback),
+  onAvailableCommands: (callback: (e: CustomEvent<AvailableCommandsEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.AVAILABLE_COMMANDS, callback),
 
   getAvailableCommands: (adapterId: string) => {
     return availableCommandsByAdapter.get(adapterId) ?? [];
   },
 
-  onPermissionRequest: (callback: (e: CustomEvent<PermissionRequestEvent>) => void) => onBridgeEvent(EVENT_NAMES.PERMISSION, callback),
+  onPermissionRequest: (callback: (e: CustomEvent<PermissionRequestEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.PERMISSION, callback),
 
-  requestAdapters: (forceRefresh = false) => {
-    window.__requestAdapters?.(forceRefresh);
+  requestAdapters: () => {
+    window.__requestAdapters?.();
   },
 
-  startAgent: (conversationId: string, adapterId?: string, configValues?: Record<string, string>) => {
+  startAgent: (
+    conversationId: string,
+    adapterId?: string,
+    modelId?: string,
+    modeId?: string,
+    reasoningEffortId?: string
+  ) => {
     if (typeof window.__startAgent !== 'function') {
       return Promise.reject(new Error('Start agent bridge is not available.'));
     }
     return awaitBridgeOperation('start_agent', (requestId) => {
-      window.__startAgent?.(conversationId, adapterId, configValues, requestId);
+      window.__startAgent?.(conversationId, adapterId, modelId, modeId, requestId, reasoningEffortId);
     });
   },
 
@@ -372,13 +396,24 @@ export const ACPBridge = {
     message: string,
     forkBase?: ForkConversationBase,
     adapterId?: string,
-    configValues?: Record<string, string>
+    modelId?: string,
+    modeId?: string,
+    reasoningEffortId?: string
   ) => {
     if (typeof window.__sendPrompt !== 'function') {
       return Promise.reject(new Error('Send prompt bridge is not available.'));
     }
     return awaitBridgeOperation('send_prompt', (requestId) => {
-      window.__sendPrompt?.(conversationId, message, requestId, forkBase, adapterId, configValues);
+      window.__sendPrompt?.(
+        conversationId,
+        message,
+        requestId,
+        forkBase,
+        adapterId,
+        modelId,
+        modeId,
+        reasoningEffortId
+      );
     });
   },
 
@@ -391,7 +426,7 @@ export const ACPBridge = {
       (requestId) => {
         window.__cancelPrompt?.(conversationId, requestId);
       },
-      CANCEL_PROMPT_OPERATION_TIMEOUT_MS,
+      CANCEL_PROMPT_OPERATION_TIMEOUT_MS
     );
   },
 
@@ -412,7 +447,8 @@ export const ACPBridge = {
     window.__cancelAgentInstall?.(adapterId);
   },
 
-  onUsageData: (callback: (e: CustomEvent<{ adapterId: string; json: string }>) => void) => onBridgeEvent(EVENT_NAMES.USAGE_DATA, callback),
+  onUsageData: (callback: (e: CustomEvent<{ adapterId: string; json: string }>) => void) =>
+    onBridgeEvent(EVENT_NAMES.USAGE_DATA, callback),
 
   onLog: (callback: (e: CustomEvent) => void) => onBridgeEvent(EVENT_NAMES.LOG, callback),
 
@@ -424,9 +460,11 @@ export const ACPBridge = {
     window.__syncHistoryList?.(projectPath);
   },
 
-  onHistoryList: (callback: (e: CustomEvent<HistoryListEvent>) => void) => onBridgeEvent(EVENT_NAMES.HISTORY_LIST, callback),
+  onHistoryList: (callback: (e: CustomEvent<HistoryListEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.HISTORY_LIST, callback),
 
-  onHistoryDeleteResult: (callback: (e: CustomEvent<HistoryDeleteResultEvent>) => void) => onBridgeEvent(EVENT_NAMES.HISTORY_DELETE_RESULT, callback),
+  onHistoryDeleteResult: (callback: (e: CustomEvent<HistoryDeleteResultEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.HISTORY_DELETE_RESULT, callback),
 
   loadHistoryConversation: (conversationId: string, projectPath: string, historyConversationId: string) => {
     window.__loadHistoryConversation?.(conversationId, projectPath, historyConversationId);
@@ -491,11 +529,15 @@ export const ACPBridge = {
     window.__openHistoryConversationCli?.({ projectPath, conversationId });
   },
 
-  onUndoResult: (callback: (e: CustomEvent<UndoResultEvent>) => void) => onBridgeEvent(EVENT_NAMES.UNDO_RESULT, callback),
+  onUndoResult: (callback: (e: CustomEvent<UndoResultEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.UNDO_RESULT, callback),
 
-  onChangesState: (callback: (e: CustomEvent<ChangesStateEvent>) => void) => onBridgeEvent(EVENT_NAMES.CHANGES_STATE, callback),
+  onChangesState: (callback: (e: CustomEvent<ChangesStateEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.CHANGES_STATE, callback),
 
-  computeFileChangeStats: (files: { filePath: string; status: 'A' | 'M'; operations: FileChangeOperation[] }[]): Promise<FileChangeStatsResultPayload> => {
+  computeFileChangeStats: (
+    files: { filePath: string; status: 'A' | 'M'; operations: FileChangeOperation[] }[]
+  ): Promise<FileChangeStatsResultPayload> => {
     return new Promise((resolve, reject) => {
       if (typeof window.__computeFileChangeStats !== 'function') {
         reject(new Error('File change stats bridge is not available.'));
@@ -526,26 +568,75 @@ export const ACPBridge = {
     });
   },
 
-  onToolCall: (callback: (e: CustomEvent<ToolCallBridgeEvent>) => void) => onBridgeEvent(EVENT_NAMES.TOOL_CALL, callback),
+  onToolCall: (callback: (e: CustomEvent<ToolCallBridgeEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.TOOL_CALL, callback),
 
-  onToolCallUpdate: (callback: (e: CustomEvent<ToolCallBridgeEvent>) => void) => onBridgeEvent(EVENT_NAMES.TOOL_CALL_UPDATE, callback),
+  onToolCallUpdate: (callback: (e: CustomEvent<ToolCallBridgeEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.TOOL_CALL_UPDATE, callback),
 
-  onFileChangeStats: (callback: (e: CustomEvent<FileChangeStatsEvent>) => void) => onBridgeEvent(EVENT_NAMES.FILE_CHANGE_STATS, callback),
+  onFileChangeStats: (callback: (e: CustomEvent<FileChangeStatsEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.FILE_CHANGE_STATS, callback),
 
-  onAttachmentsAdded: (callback: (e: CustomEvent<{ chatId: string; files: ChatAttachment[] }>) => void) => onBridgeEvent(EVENT_NAMES.ATTACHMENTS_ADDED, callback),
+  onAttachmentsAdded: (callback: (e: CustomEvent<{ chatId: string; files: ChatAttachment[] }>) => void) =>
+    onBridgeEvent(EVENT_NAMES.ATTACHMENTS_ADDED, callback),
 
-  onConversationTranscriptSaved: (callback: (e: CustomEvent<ConversationTranscriptSavedEvent>) => void) => onBridgeEvent(EVENT_NAMES.CONVERSATION_TRANSCRIPT_SAVED, callback),
+  onConversationTranscriptSaved: (callback: (e: CustomEvent<ConversationTranscriptSavedEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.CONVERSATION_TRANSCRIPT_SAVED, callback),
 
-  onConversationReplayLoaded: (callback: (e: CustomEvent<ConversationReplayLoadedEvent>) => void) => onBridgeEvent(EVENT_NAMES.CONVERSATION_REPLAY_LOADED, callback),
+  onConversationReplayLoaded: (callback: (e: CustomEvent<ConversationReplayLoadedEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.CONVERSATION_REPLAY_LOADED, callback),
 
   searchFiles: (query: string) => {
     window.__searchFiles?.(query);
   },
 
-  onFilesResult: (callback: (e: CustomEvent<{ files: { path: string, name: string }[] }>) => void) => {
+  onFilesResult: (callback: (e: CustomEvent<{ files: { path: string; name: string; icon: string }[] }>) => void) => {
     const fn = (e: Event) => callback(e as CustomEvent);
     window.addEventListener('acp-files-result', fn);
     return () => window.removeEventListener('acp-files-result', fn);
+  },
+
+  requestFileIcon: (path: string): Promise<string | null> => {
+    const cacheKey = fileIconCacheKey(path);
+    const cachedIcon = fileIconCache.get(cacheKey);
+    if (cachedIcon) return Promise.resolve(cachedIcon);
+
+    const pendingRequest = pendingFileIconRequests.get(cacheKey);
+    if (pendingRequest) return pendingRequest;
+
+    const requestEpoch = fileIconCacheEpoch;
+    const request = new Promise<string | null>((resolve) => {
+      let timeout: number | undefined;
+      const handler = (e: Event) => {
+        const detail = (e as CustomEvent).detail as { path: string; icon: string };
+        if (!detail || detail.path !== path) return;
+        finish(requestEpoch === fileIconCacheEpoch ? detail.icon || null : null);
+      };
+
+      const finish = (icon: string | null) => {
+        if (timeout !== undefined) window.clearTimeout(timeout);
+        window.removeEventListener('acp-file-icon-result', handler);
+        if (icon && requestEpoch === fileIconCacheEpoch) fileIconCache.set(cacheKey, icon);
+        resolve(icon);
+      };
+
+      window.addEventListener('acp-file-icon-result', handler);
+      timeout = window.setTimeout(() => finish(null), FILE_ICON_REQUEST_TIMEOUT_MS);
+      if (typeof window.__requestFileIcon !== 'function') finish(null);
+      else window.__requestFileIcon(path);
+    });
+
+    pendingFileIconRequests.set(cacheKey, request);
+    void request.then(() => {
+      if (pendingFileIconRequests.get(cacheKey) === request) pendingFileIconRequests.delete(cacheKey);
+    });
+    return request;
+  },
+
+  onThemeChanged: (callback: () => void) => {
+    const fn = () => callback();
+    window.addEventListener('acp-theme-changed', fn);
+    return () => window.removeEventListener('acp-theme-changed', fn);
   },
 
   loadMcpServers: () => {
@@ -556,7 +647,8 @@ export const ACPBridge = {
     window.__saveMcpServers?.(JSON.stringify(servers));
   },
 
-  onMcpServers: (callback: (e: CustomEvent<McpServersEvent>) => void) => onBridgeEvent(EVENT_NAMES.MCP_SERVERS, callback),
+  onMcpServers: (callback: (e: CustomEvent<McpServersEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.MCP_SERVERS, callback),
 
   checkMcpStatus: () => {
     window.__checkMcpStatus?.();
@@ -572,7 +664,8 @@ export const ACPBridge = {
     window.__savePromptLibrary?.(JSON.stringify(items));
   },
 
-  onPromptLibrary: (callback: (e: CustomEvent<PromptLibraryEvent>) => void) => onBridgeEvent(EVENT_NAMES.PROMPT_LIBRARY, callback),
+  onPromptLibrary: (callback: (e: CustomEvent<PromptLibraryEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.PROMPT_LIBRARY, callback),
 
   loadSystemInstructions: () => {
     window.__loadSystemInstructions?.();
@@ -582,7 +675,8 @@ export const ACPBridge = {
     window.__saveSystemInstructions?.(JSON.stringify(instructions));
   },
 
-  onSystemInstructions: (callback: (e: CustomEvent<SystemInstructionsEvent>) => void) => onBridgeEvent(EVENT_NAMES.SYSTEM_INSTRUCTIONS, callback),
+  onSystemInstructions: (callback: (e: CustomEvent<SystemInstructionsEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.SYSTEM_INSTRUCTIONS, callback),
 
   loadAudioTranscriptionFeature: () => {
     window.__loadAudioTranscriptionFeature?.();
@@ -596,7 +690,8 @@ export const ACPBridge = {
     window.__uninstallAudioTranscriptionFeature?.();
   },
 
-  onAudioTranscriptionFeature: (callback: (e: CustomEvent<AudioTranscriptionFeatureEvent>) => void) => onBridgeEvent(EVENT_NAMES.AUDIO_TRANSCRIPTION_FEATURE, callback),
+  onAudioTranscriptionFeature: (callback: (e: CustomEvent<AudioTranscriptionFeatureEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.AUDIO_TRANSCRIPTION_FEATURE, callback),
 
   transcribeAudioInput: (audioBase64: string): Promise<AudioTranscriptionResultPayload> => {
     return new Promise((resolve, reject) => {
@@ -632,7 +727,8 @@ export const ACPBridge = {
     });
   },
 
-  onAudioTranscriptionResult: (callback: (e: CustomEvent<AudioTranscriptionResultEvent>) => void) => onBridgeEvent(EVENT_NAMES.AUDIO_TRANSCRIPTION_RESULT, callback),
+  onAudioTranscriptionResult: (callback: (e: CustomEvent<AudioTranscriptionResultEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.AUDIO_TRANSCRIPTION_RESULT, callback),
 
   startAudioRecording: () => {
     window.__startAudioRecording?.();
@@ -671,7 +767,8 @@ export const ACPBridge = {
     });
   },
 
-  onAudioRecordingState: (callback: (e: CustomEvent<AudioRecordingStateEvent>) => void) => onBridgeEvent(EVENT_NAMES.AUDIO_RECORDING_STATE, callback),
+  onAudioRecordingState: (callback: (e: CustomEvent<AudioRecordingStateEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.AUDIO_RECORDING_STATE, callback),
 
   loadAudioTranscriptionSettings: () => {
     window.__loadAudioTranscriptionSettings?.();
@@ -681,7 +778,8 @@ export const ACPBridge = {
     window.__saveAudioTranscriptionSettings?.(JSON.stringify(settings));
   },
 
-  onAudioTranscriptionSettings: (callback: (e: CustomEvent<AudioTranscriptionSettingsEvent>) => void) => onBridgeEvent(EVENT_NAMES.AUDIO_TRANSCRIPTION_SETTINGS, callback),
+  onAudioTranscriptionSettings: (callback: (e: CustomEvent<AudioTranscriptionSettingsEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.AUDIO_TRANSCRIPTION_SETTINGS, callback),
 
   loadGlobalSettings: () => {
     window.__loadGlobalSettings?.();
@@ -691,7 +789,9 @@ export const ACPBridge = {
     window.__saveGlobalSettings?.(JSON.stringify(settings));
   },
 
-  onGlobalSettings: (callback: (e: CustomEvent<GlobalSettingsEvent>) => void) => onBridgeEvent(EVENT_NAMES.GLOBAL_SETTINGS, callback),
+  onGlobalSettings: (callback: (e: CustomEvent<GlobalSettingsEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.GLOBAL_SETTINGS, callback),
 
-  onAdapterDeleted: (callback: (e: CustomEvent<AdapterDeletedEvent>) => void) => onBridgeEvent(EVENT_NAMES.ADAPTER_DELETED, callback),
+  onAdapterDeleted: (callback: (e: CustomEvent<AdapterDeletedEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.ADAPTER_DELETED, callback)
 };

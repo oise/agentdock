@@ -56,7 +56,7 @@ export default function PopupMenu({ items, highlightedIndex, layout, menuRef, on
                   className='h-3.5 w-3.5 flex-shrink-0 object-contain'
                 />
               )}
-              <span className='w-40 shrink-0 truncate font-mono leading-5'>{item.primary}</span>
+              <span className='shrink-0 font-mono leading-5'>{item.primary}</span>
               {item.secondary && (
                 <span
                   className={`min-w-0 flex-1 truncate leading-5 ${isSelected ? 'text-accent-foreground' : 'text-foreground'}`}

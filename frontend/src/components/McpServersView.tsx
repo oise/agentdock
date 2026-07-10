@@ -3,7 +3,7 @@ import { Network, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { McpServerConfig, McpStatus, McpStatusUpdate, McpTransport } from '../types/mcp';
 import { ACPBridge } from '../utils/bridge';
 import { Button } from './ui/Button';
-import { Checkbox } from './ui/Checkbox';
+import { Switch } from './ui/Switch';
 import { Tooltip } from './chat/shared/Tooltip';
 import ConfirmationModal from './ConfirmationModal';
 import { DropdownSelect } from './ui/DropdownSelect';
@@ -101,10 +101,10 @@ interface StatusVisual {
 }
 
 const STATUS_VISUALS: Record<McpStatus, StatusVisual> = {
-  connected: { dotClass: 'bg-success', pulse: false, defaultLabel: 'Running' },
+  connected: { dotClass: 'bg-success', pulse: false, defaultLabel: 'Connected' },
   loading: { dotClass: 'bg-warning', pulse: true, defaultLabel: 'Checking…' },
   error: { dotClass: 'bg-error', pulse: false, defaultLabel: 'Error' },
-  disabled: { dotClass: 'bg-foreground-secondary', pulse: false, defaultLabel: 'Disabled' },
+  disabled: { dotClass: 'bg-foreground-secondary', pulse: false, defaultLabel: 'Not running' },
   unknown: { dotClass: 'bg-foreground-secondary', pulse: false, defaultLabel: 'Unknown' },
 };
 
@@ -231,29 +231,33 @@ export function McpServersView() {
             const statusUpdate = statusMap[s.id];
             const status: McpStatus = statusUpdate?.status ?? 'unknown';
             const statusMessage = statusUpdate?.message;
+            const displayStatus: McpStatus = s.enabled ? status : 'disabled';
+            const displayStatusMessage = s.enabled ? statusMessage : undefined;
+            const statusLabel = STATUS_VISUALS[displayStatus].defaultLabel;
             return (
             <div
               key={s.id}
               className="flex items-center gap-3 px-4 py-2.5 border-b border-border"
             >
-              <Tooltip variant="minimal" content={s.enabled ? 'Enabled' : 'Disabled'}>
-                <Checkbox
-                  checked={s.enabled}
-                  onCheckedChange={() => toggle(s.id)}
-                  onClick={e => { e.stopPropagation(); }}
-                />
-              </Tooltip>
-
-              <McpStatusDot status={status} message={statusMessage} />
+              <McpStatusDot status={displayStatus} message={displayStatusMessage} />
 
               <div className="flex-1 min-w-0">
                 <div className="truncate">
                   {s.name}
                 </div>
-                <div className='mt-1 text-xs text-foreground-secondary truncate'>{s.transport}</div>
+                <div className='mt-1 truncate text-xs text-foreground-secondary' title={statusLabel}>
+                  {s.transport.toUpperCase()} · {statusLabel}
+                </div>
               </div>
 
-              <div className="flex items-center gap-1">
+              <div className='flex flex-shrink-0 items-center gap-2'>
+                <span className='text-xs text-foreground-secondary'>{s.enabled ? 'Enabled' : 'Disabled'}</span>
+                <Switch
+                  checked={s.enabled}
+                  onCheckedChange={() => toggle(s.id)}
+                  onClick={e => { e.stopPropagation(); }}
+                  aria-label={`${s.enabled ? 'Disable' : 'Enable'} ${s.name}`}
+                />
                 <Tooltip variant="minimal" content="Edit">
                   <button
                     type="button"
@@ -275,11 +279,6 @@ export function McpServersView() {
                   </button>
                 </Tooltip>
               </div>
-              {status === 'error' && statusMessage && (
-                <div className="mt-1 text-xs text-error truncate" title={statusMessage}>
-                  {statusMessage}
-                </div>
-              )}
             </div>
             );
           })}

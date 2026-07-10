@@ -1,11 +1,11 @@
 import { RefObject } from 'react';
 import {
+  ListPlus,
   LoaderCircle,
   Mic,
   Plus,
   SendHorizontal,
   Square,
-  ArrowUp,
 } from 'lucide-react';
 import { ApprovalMode, DropdownOption } from '../../../types/chat';
 import { SlashCommandItem } from './slashCommands';
@@ -51,7 +51,9 @@ interface ChatInputControlsProps {
   onReasoningEffortChange: (id: string) => void;
   onApprovalModeChange: (mode: ApprovalMode) => void;
   onSend: () => void;
+  onQueueDraft?: () => void;
   onStop: () => void;
+  promptQueueEnabled?: boolean;
 }
 
 export function ChatInputControls({
@@ -90,7 +92,9 @@ export function ChatInputControls({
   onReasoningEffortChange,
   onApprovalModeChange,
   onSend,
+  onQueueDraft,
   onStop,
+  promptQueueEnabled = false,
 }: ChatInputControlsProps) {
   const hasInput = !!inputValue.trim();
 
@@ -211,21 +215,23 @@ export function ChatInputControls({
           )
         )}
 
-        {isSending ? <>
-          <button key="queue-button" type="button" onClick={onSend} disabled={!hasInput}
-            className={`flex items-center h-full px-1.5 rounded appearance-none border-0 bg-editor-bg outline-none
-              text-ide-small focus-visible:bg-hover focus-visible:text-foreground
-              focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]
-              hover:bg-hover disabled:pointer-events-none hover:text-foreground
-              ${hasInput ? 'text-foreground-secondary' : 'text-[var(--ide-Label-disabledForeground)]'}`}
-          >
-            <Tooltip variant="minimal" content={hasInput ? 'Add to queue' : null}>
-              <div className="flex items-center">
-                <ArrowUp size={16} className="block -rotate-90" strokeWidth={2} />
-                <span className="invisible w-0" aria-hidden="true">&nbsp;</span>
-              </div>
-            </Tooltip>
-          </button>
+        {isSending ? (
+          <>
+          {promptQueueEnabled && hasInput && (
+            <button key="queue-button" type="button" onClick={onQueueDraft}
+              className={`flex items-center h-full px-1.5 rounded appearance-none border-0 bg-editor-bg outline-none
+                text-ide-small focus-visible:bg-hover focus-visible:text-foreground
+                focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]
+                hover:bg-hover hover:text-foreground text-foreground-secondary`}
+            >
+              <Tooltip variant="minimal" content="Add to queue">
+                <div className="flex items-center">
+                  <ListPlus size={16} className="block" strokeWidth={2} />
+                  <span className="invisible w-0" aria-hidden="true">&nbsp;</span>
+                </div>
+              </Tooltip>
+            </button>
+          )}
           <button key="stop-button" type="button" onClick={onStop}
             className="flex items-center h-full px-1.5 rounded appearance-none border-0 bg-editor-bg
                 outline-none text-ide-small text-error hover:bg-hover focus-visible:bg-hover
@@ -238,7 +244,8 @@ export function ChatInputControls({
               </div>
             </Tooltip>
           </button>
-        </> : (
+          </>
+        ) : (
           <button key="send-button" type="button" onClick={onSend} disabled={!hasInput}
             className={`flex items-center h-full px-1.5 rounded appearance-none border-0 bg-editor-bg outline-none
               text-ide-small focus-visible:bg-hover focus-visible:text-foreground

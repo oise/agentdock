@@ -16,15 +16,13 @@ import {
   HistorySessionMeta,
   PermissionRequest,
   ToolCallEvent,
-  UndoResultPayload
+  UndoResultPayload,
 } from '../types/chat';
 import { McpServerConfig, McpStatusUpdate } from '../types/mcp';
 import { PromptLibraryItem } from '../types/promptLibrary';
 import { SystemInstruction } from '../types/systemInstructions';
 export interface ContentChunkEvent { chunk: ContentChunk; }
 export interface StatusEvent { chatId: string; status: string; }
-export interface PromptIdleEvent { chatId: string; }
-export interface SubagentThreadsEvent { chatId: string; threads: import('../types/chat').SubagentThread[]; }
 export interface SessionIdEvent { chatId: string; sessionId: string; }
 export interface ModeEvent { chatId: string; modeId: string; }
 export interface AdaptersEvent { adapters: AgentOption[]; }
@@ -58,8 +56,6 @@ export const EVENT_NAMES = {
   PROMPT_LIBRARY: 'prompt-library',
   SYSTEM_INSTRUCTIONS: 'system-instructions',
   STATUS: 'acp-status',
-PROMPT_IDLE: 'acp-prompt-idle',
-  SUBAGENT_THREADS: 'acp-subagent-threads',
   SESSION_ID: 'acp-session-id',
   MODE: 'acp-mode',
   ADAPTERS: 'acp-adapters',
@@ -82,7 +78,7 @@ PROMPT_IDLE: 'acp-prompt-idle',
   AUDIO_TRANSCRIPTION_RESULT: 'audio-transcription-result',
   AUDIO_RECORDING_STATE: 'audio-recording-state',
   AUDIO_TRANSCRIPTION_SETTINGS: 'audio-transcription-settings',
-  GLOBAL_SETTINGS: 'global-settings'
+  GLOBAL_SETTINGS: 'global-settings',
 } as const;
 
 export function onBridgeEvent<T>(eventName: string, callback: (e: CustomEvent<T>) => void) {

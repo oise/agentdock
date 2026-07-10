@@ -14,8 +14,10 @@ export default function ChatInput(props: ChatInputProps) {
     inputValue,
     onInputChange,
     onSend,
+    onQueueDraft,
     onStop,
     isSending,
+    promptQueueEnabled,
     agentOptions,
     selectedAgentId,
     onAgentChange,
@@ -79,6 +81,8 @@ export default function ChatInput(props: ChatInputProps) {
     setLexicalEditor
   } = useChatInputController(props);
 
+  const handleSubmit = isSending ? (() => onQueueDraft?.()) : onSend;
+
   return (
     <div
       ref={inputRootRef}
@@ -113,7 +117,7 @@ export default function ChatInput(props: ChatInputProps) {
             onOpenFile={handleOpenFile}
             onHeightChange={onHeightChange}
             onImagePaste={handleImagePaste}
-            onSend={onSend}
+            onSend={handleSubmit}
             onKeyDownCapture={combinedHandleKeyDownCapture}
             onEditorReady={setLexicalEditor}
           />
@@ -154,7 +158,9 @@ export default function ChatInput(props: ChatInputProps) {
             onReasoningEffortChange={onReasoningEffortChange}
             onApprovalModeChange={onApprovalModeChange}
             onSend={onSend}
+            onQueueDraft={onQueueDraft}
             onStop={onStop}
+            promptQueueEnabled={promptQueueEnabled}
           />
         </div>
       </div>

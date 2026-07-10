@@ -1,27 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useChatSession } from '../../hooks/useChatSession';
 import { useFileChanges } from '../../hooks/useFileChanges';
-import {
-  AgentOption,
-  FileChangeSummary,
-  ForkConversationBase,
-  HistorySessionMeta,
-  Message,
-  PendingHandoffContext
-} from '../../types/chat';
+import { AgentOption, FileChangeSummary, ForkConversationBase, HistorySessionMeta, Message, PendingHandoffContext } from '../../types/chat';
 import { Check, Copy, Download, X } from 'lucide-react';
 import { acquireJcefLivePromptRepaint } from '../../utils/jcefHostRepaint';
 import {
   buildConversationHandoffFromTranscriptFile,
   buildConversationHandoffSaveFailureContext,
-  prepareConversationHandoff
+  prepareConversationHandoff,
 } from '../../utils/conversationHandoff';
 import { ACPBridge } from '../../utils/bridge';
 import MessageList from './MessageList';
 import ChatInput from './ChatInput';
-import { QueueList } from './input/QueueList';
-import { SubagentDropdown } from './input/SubagentDropdown';
-import { SubagentModal } from './input/SubagentModal';
+import { PromptQueueList } from './input/PromptQueueList';
 import PermissionBar from './PermissionBar';
 import FileChangesPanel from './FileChangesPanel';
 import ConfirmationModal from '../ConfirmationModal';
@@ -83,7 +74,10 @@ export default function ChatSessionView({
     status,
     isSending,
     isHistoryReplaying,
-    subagentThreads,
+    queuedPrompts,
+    removeQueuedPrompt,
+    updateQueuedPromptText,
+    sendQueuedPromptNow,
     agentOptions,
     selectedAgentId,
     selectedModelId,
@@ -98,11 +92,8 @@ export default function ChatSessionView({
     setApprovalMode,
     permissionRequest,
     handleSend,
+    handleQueueDraft,
     handleStop,
-    queuedPrompts,
-    removeQueuedPrompt,
-    updateQueuedPromptText,
-    sendQueuedPromptNow,
     handlePermissionDecision,
     hasSelectedAgent,
     attachments,
@@ -136,7 +127,7 @@ export default function ChatSessionView({
     handleUndoFile,
     handleUndoAllFiles,
     handleKeepFile,
-    handleKeepAll
+    handleKeepAll,
   } = useFileChanges(conversationId, acpSessionId, adapterName);
 
   const lastAssistantMsgWithContext = useMemo(() => {
@@ -154,13 +145,11 @@ export default function ChatSessionView({
 
   const handleShowDiff = useCallback((fc: FileChangeSummary) => {
     if (typeof window.__showDiff === 'function') {
-      window.__showDiff(
-        JSON.stringify({
-          filePath: fc.filePath,
-          status: fc.status,
-          operations: fc.operations
-        })
-      );
+      window.__showDiff(JSON.stringify({
+        filePath: fc.filePath,
+        status: fc.status,
+        operations: fc.operations,
+      }));
     }
   }, []);
 
@@ -170,7 +159,11 @@ export default function ChatSessionView({
     }
   }, []);
 
-  const { inputHeight, setContentHeight, startResizing } = useChatInputResize(attachments);
+  const {
+    inputHeight,
+    setContentHeight,
+    startResizing,
+  } = useChatInputResize(attachments);
 
   const {
     selectedImage,
@@ -179,11 +172,9 @@ export default function ChatSessionView({
     overlayActionState,
     overlayPrimaryActionRef,
     handleDownload,
-    handleCopyImage
+    handleCopyImage,
   } = useImageOverlayActions();
 
-const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null);
-  const selectedSubagent = subagentThreads.find((thread) => thread.id === selectedSubagentId) ?? null;
   const {
     handleAtBottomChange,
     handleCanMarkReadChange,
@@ -199,7 +190,7 @@ const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null
     onCanMarkReadChange,
     onPermissionRequestChange,
     onProcessingChange,
-    onSessionStateChange
+    onSessionStateChange,
   });
 
   useEffect(() => {
@@ -212,59 +203,51 @@ const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null
     selectedAgentId,
     messages,
     fileChanges,
-    onAgentChangeRequest
+    onAgentChangeRequest,
   });
 
-  const handleForkFromMessage = useCallback(
-    (messageId: string) => {
-      if (!onForkRequest || !selectedAgentId || messages.length === 0) return;
+  const handleForkFromMessage = useCallback((messageId: string) => {
+    if (!onForkRequest || !selectedAgentId || messages.length === 0) return;
 
-      const messageIndex = messages.findIndex((message) => message.id === messageId);
-      if (messageIndex < 0) return;
+    const messageIndex = messages.findIndex((message) => message.id === messageId);
+    if (messageIndex < 0) return;
 
-      let endExclusive = messageIndex + 1;
-      if (messages[messageIndex].role === 'user' && messages[messageIndex + 1]?.role === 'assistant') {
-        endExclusive += 1;
-      }
+    let endExclusive = messageIndex + 1;
+    if (messages[messageIndex].role === 'user' && messages[messageIndex + 1]?.role === 'assistant') {
+      endExclusive += 1;
+    }
 
-      const forkMessages = messages.slice(0, endExclusive);
-      const prepared = prepareConversationHandoff(forkMessages, []);
+    const forkMessages = messages.slice(0, endExclusive);
+    const prepared = prepareConversationHandoff(forkMessages, []);
 
-      const finish = (handoffText: string) => {
-        onForkRequest({
-          agentId: selectedAgentId,
-          messages: forkMessages,
-          handoffText
-        });
-      };
+    const finish = (handoffText: string) => {
+      onForkRequest({
+        agentId: selectedAgentId,
+        messages: forkMessages,
+        handoffText,
+      });
+    };
 
-      if (!prepared.exceedsInlineLimit) {
-        finish(prepared.handoffText);
-        return;
-      }
+    if (!prepared.exceedsInlineLimit) {
+      finish(prepared.handoffText);
+      return;
+    }
 
-      ACPBridge.saveConversationTranscript(conversationId, prepared.normalizedTranscript)
-        .then((saved) => {
-          finish(buildConversationHandoffFromTranscriptFile(prepared, saved.filePath || ''));
-        })
-        .catch((error) => {
-          const message = error instanceof Error ? error.message : String(error);
-          finish(buildConversationHandoffSaveFailureContext(prepared, message));
-        });
-    },
-    [conversationId, messages, onForkRequest, selectedAgentId]
-  );
+    ACPBridge.saveConversationTranscript(conversationId, prepared.normalizedTranscript)
+      .then((saved) => {
+        finish(buildConversationHandoffFromTranscriptFile(prepared, saved.filePath || ''));
+      })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        finish(buildConversationHandoffSaveFailureContext(prepared, message));
+      });
+  }, [conversationId, messages, onForkRequest, selectedAgentId]);
 
   return (
     <div className="flex flex-col h-full relative overflow-hidden bg-background">
-      {/* Subagent threads dropdown */}
-      {subagentThreads.length > 0 && (
-        <div className="absolute left-3 top-3 z-30">
-          <SubagentDropdown threads={subagentThreads} onSelectThread={(thread) => setSelectedSubagentId(thread.id)} />
-        </div>
-      )}
       {/* Message List Area with Scoped Overlay */}
-      <div className='flex-1 flex flex-col min-h-0 relative'>
+      <div className="flex-1 flex flex-col min-h-0 relative">
+
         <div className={`flex-1 flex flex-col min-h-0`}>
           <MessageList
             messages={messages}
@@ -283,7 +266,7 @@ const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null
         </div>
       </div>
 
-      <div className='flex flex-col shrink-0 relative z-20 shadow-[0_-2px_8px_rgba(0,0,0,0.05)] bg-background'>
+      <div className="flex flex-col shrink-0 relative z-20 shadow-[0_-2px_8px_rgba(0,0,0,0.05)] bg-background">
         <FileChangesPanel
           hasPluginEdits={hasPluginEdits}
           fileChanges={fileChanges}
@@ -297,34 +280,36 @@ const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null
           onShowDiff={handleShowDiff}
         />
 
-        {permissionRequest && <PermissionBar request={permissionRequest} onRespond={handlePermissionDecision} />}
+        {permissionRequest && (
+          <PermissionBar
+            request={permissionRequest}
+            onRespond={handlePermissionDecision}
+          />
+        )}
 
         {/* Resize Handle / Divider */}
         <div
           onMouseDown={startResizing}
-          className='h-[12px] -my-[6px] w-full cursor-row-resize relative z-10 group select-none'
+          className="h-[12px] -my-[6px] w-full cursor-row-resize relative z-10 group select-none"
         >
-          <div
-            className='absolute inset-x-0 top-1/2 -translate-y-1/2 h-[1px]
+          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[1px]
             bg-[var(--ide-Borders-ContrastBorderColor)] transition-[background-color,box-shadow] duration-500
-            delay-150 ease-out group-hover:bg-[var(--ide-Button-default-focusColor)] group-hover:opacity-70'
-          />
-          <div
-            className='absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-[2px]
+            delay-150 ease-out group-hover:bg-[var(--ide-Button-default-focusColor)] group-hover:opacity-70" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-[2px]
             bg-[var(--ide-Borders-ContrastBorderColor)] rounded-full transition-[background-color,box-shadow]
             duration-500 delay-150 ease-out group-hover:bg-[var(--ide-Button-default-focusColor)] group-hover:opacity-70
-            group-hover:shadow-[0_0_6px_color-mix(in_srgb,var(--ide-Button-default-focusColor),transparent_45%)]'
-          />
+            group-hover:shadow-[0_0_6px_color-mix(in_srgb,var(--ide-Button-default-focusColor),transparent_45%)]" />
         </div>
 
-{queuedPrompts.length > 0 && (
-          <div className="px-4 pb-2">
+        {queuedPrompts.length > 0 && (
+          <div className="px-4 pt-2 pb-2">
             <div className="mx-auto w-full max-w-[1200px] rounded-ide border border-[var(--ide-Button-startBorderColor)] bg-editor-bg">
-              <QueueList
+              <PromptQueueList
                 items={queuedPrompts}
                 onRemove={removeQueuedPrompt}
                 onChangeText={updateQueuedPromptText}
                 onSendNow={sendQueuedPromptNow}
+                sendNowCancelsCurrent={status === 'prompting' && isSending}
               />
             </div>
           </div>
@@ -338,23 +323,31 @@ const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null
             inputValue={inputValue}
             onInputChange={setInputValue}
             onSend={handleSend}
+            onQueueDraft={handleQueueDraft}
             onStop={handleStop}
             isSending={isSending}
+            promptQueueEnabled
             usageSessionKey={acpSessionId || undefined}
             status={status}
+
             agentOptions={agentOptions}
             selectedAgentId={selectedAgentId}
             onAgentChange={handleAgentChange}
+
             selectedModelId={selectedModelId}
             onModelChange={handleModelChange}
+
             modeOptions={modeOptions}
             selectedModeId={selectedModeId}
             onModeChange={handleModeChange}
+
             reasoningEffortOptions={reasoningEffortOptions}
             selectedReasoningEffortId={selectedReasoningEffortId}
             onReasoningEffortChange={handleReasoningEffortChange}
+
             approvalMode={approvalMode}
             onApprovalModeChange={setApprovalMode}
+
             hasSelectedAgent={hasSelectedAgent}
             availableCommands={availableCommands}
             attachments={attachments}
@@ -368,69 +361,56 @@ const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null
         </div>
       </div>
 
-      {/* Subagent output modal */}
-      {selectedSubagent && (
-        <SubagentModal thread={selectedSubagent} onClose={() => setSelectedSubagentId(null)} />
-      )}
-
       {/* Full-size Image Overlay */}
       {selectedImage && (
         <div
-          className='fixed inset-0 z-[100] bg-black bg-opacity-50 flex items-center
-            justify-center p-8 animate-in fade-in duration-200 cursor-zoom-out'
+          className="fixed inset-0 z-[100] bg-black bg-opacity-50 flex items-center
+            justify-center p-8 animate-in fade-in duration-200 cursor-zoom-out"
           onClick={closeSelectedImage}
         >
           <div
-            className='absolute right-4 top-16 z-10 flex items-center gap-1.5 px-2 py-2'
+            className="absolute right-4 top-16 z-10 flex items-center gap-1.5 px-2 py-2"
             onClick={(e) => e.stopPropagation()}
           >
-            <Tooltip content='Copy' variant='minimal'>
+            <Tooltip content="Copy" variant="minimal">
               <button
                 ref={overlayPrimaryActionRef}
-                type='button'
-                className='flex h-8 w-8 items-center justify-center rounded bg-secondary text-foreground
+                type="button"
+                className="flex h-8 w-8 items-center justify-center rounded bg-secondary text-foreground
                 transition-colors hover:bg-hover hover:text-foreground focus:outline-none
-                focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-black'
+                focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                 onClick={handleCopyImage}
               >
                 {overlayActionState === 'copied' ? <Check size={13} /> : <Copy size={16} />}
               </button>
             </Tooltip>
-            <Tooltip content='Download' variant='minimal'>
-              <a
-                href={selectedImage}
-                download='image.png'
-                className='flex h-8 w-8 items-center justify-center rounded bg-secondary text-foreground
+            <Tooltip content="Download" variant="minimal">
+              <a href={selectedImage} download="image.png"
+                className="flex h-8 w-8 items-center justify-center rounded bg-secondary text-foreground
                 transition-colors hover:bg-hover hover:text-foreground focus:outline-none focus-visible:ring-2
-                focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-black'
+                focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                 onClick={handleDownload}
               >
                 {overlayActionState === 'downloaded' ? <Check size={14} /> : <Download size={16} />}
               </a>
             </Tooltip>
-            <Tooltip content='Close' variant='minimal'>
-              <button
-                type='button'
-                className='flex h-8 w-8 items-center justify-center rounded bg-secondary text-foreground
+            <Tooltip content="Close" variant="minimal">
+              <button type="button"
+                className="flex h-8 w-8 items-center justify-center rounded bg-secondary text-foreground
                 transition-colors hover:bg-hover hover:text-foreground focus:outline-none focus-visible:ring-2
-                focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-black'
-                onClick={(e) => {
-                  e.stopPropagation();
-                  closeSelectedImage();
-                }}
+                focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+                onClick={(e) => { e.stopPropagation(); closeSelectedImage(); }}
               >
                 <X size={14} />
               </button>
             </Tooltip>
           </div>
 
-          <div className='relative max-w-full max-h-full flex items-center justify-center'>
-            <img
-              src={selectedImage}
-              tabIndex={0}
-              className='max-w-full max-h-full object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-200
+          <div className="relative max-w-full max-h-full flex items-center justify-center">
+            <img src={selectedImage} tabIndex={0}
+              className="max-w-full max-h-full object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-200
               focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-4
-              focus-visible:ring-offset-black'
+              focus-visible:ring-offset-black"
             />
           </div>
         </div>
@@ -438,9 +418,9 @@ const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null
 
       <ConfirmationModal
         isOpen={undoErrorMessage !== null}
-        title='Undo Failed'
+        title="Undo Failed"
         message={undoErrorMessage || ''}
-        confirmLabel='OK'
+        confirmLabel="OK"
         showCancelButton={false}
         onConfirm={clearUndoError}
         onCancel={clearUndoError}

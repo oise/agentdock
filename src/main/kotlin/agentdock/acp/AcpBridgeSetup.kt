@@ -92,9 +92,6 @@ internal fun AcpBridge.installServiceCallbacks() {
                         pushPlanChunk(chatId, todoPlanEntries, isReplay)
                     } else if (!isTodoWrite) {
                         pushToolCallChunk(chatId, json, isReplay)
-                        if (!isReplay) {
-                            updateSubagentThreads(chatId, update.toolCallId.value, json, isStart = true)
-                        }
                     }
                 }
             }
@@ -125,9 +122,6 @@ internal fun AcpBridge.installServiceCallbacks() {
                         pushPlanChunk(chatId, todoPlanEntries, isReplay)
                     } else if (!isTodoWrite) {
                         pushToolCallUpdateChunk(chatId, update.toolCallId.value, json, isReplay)
-                        if (!isReplay) {
-                            updateSubagentThreads(chatId, update.toolCallId.value, json, isStart = false)
-                        }
                     }
                 }
             }
@@ -149,18 +143,6 @@ internal fun AcpBridge.installServiceCallbacks() {
     }
 }
 
-private fun AcpBridge.updateSubagentThreads(chatId: String, toolCallId: String, rawJson: String, isStart: Boolean) {
-    val registry = if (isStart) {
-        subagentRegistries.computeIfAbsent(chatId) { SubagentThreadRegistry() }
-    } else {
-        subagentRegistries[chatId] ?: return
-    }
-    val updated = if (isStart) registry.onToolCall(toolCallId, rawJson) else registry.onToolCallUpdate(toolCallId, rawJson)
-    if (updated.isNotEmpty()) {
-        pushSubagentThreads(chatId, updated.toJsonArrayString())
-    }
-}
-
 private fun todoToolCallKey(chatId: String, sessionId: String, toolCallId: String): String =
     listOf(chatId, sessionId, toolCallId).joinToString("|")
 
@@ -170,9 +152,14 @@ private data class PatchDiff(val path: String, val oldText: String?, val newText
 private fun AcpBridge.convertBrokenOtherPatchToolCallJson(rawJson: String): String {
     val parsed = try { Json.parseToJsonElement(rawJson).jsonObject } catch (_: Exception) { return rawJson }
     val kind = parsed["kind"]?.jsonPrimitive?.contentOrNull
+    val rawInput = parsed["rawInput"]
     val patchText = when (kind) {
-        "other" -> (parsed["rawInput"] as? JsonObject)?.get("patchText")?.jsonPrimitive?.contentOrNull
-        "edit" -> (parsed["rawInput"] as? JsonPrimitive)?.contentOrNull
+        "other" -> (rawInput as? JsonObject)?.get("patchText")?.jsonPrimitive?.contentOrNull
+        "edit" -> when (rawInput) {
+            is JsonPrimitive -> rawInput.contentOrNull
+            is JsonObject -> rawInput["patchText"]?.jsonPrimitive?.contentOrNull
+            else -> null
+        }
         else -> null
     } ?: return rawJson
     if (!patchText.contains("*** Begin Patch")) return rawJson
@@ -313,6 +300,7 @@ internal fun AcpBridge.installAdapterQueries() {
                         pushAdapters()
 
                         service.stopSharedProcess(adapterId)
+                        AcpConfigOptionsCache.remove(adapterId)
                         latestVersionStates.remove(adapterId)
                         val adapterInfo = AcpAdapterPaths.getAdapterInfo(adapterId)
                         val targetDir = File(AcpAdapterPaths.getDependenciesDir(), adapterInfo.id)
@@ -382,6 +370,7 @@ internal fun AcpBridge.installAdapterQueries() {
             if (adapterId != null) {
                 scope.launch(Dispatchers.IO) {
                     service.stopSharedProcess(adapterId)
+                    AcpConfigOptionsCache.remove(adapterId)
                     latestVersionStates.remove(adapterId)
                     resetDownloadProbeState(adapterId)
                     val deleted = AcpAdapterPaths.deleteAdapter(adapterId, AcpAdapterPaths.getExecutionTarget())
@@ -440,6 +429,7 @@ internal fun AcpBridge.installAdapterQueries() {
                         pushAdapters()
 
                         service.stopSharedProcess(adapterId)
+                        AcpConfigOptionsCache.remove(adapterId)
                         val target = AcpAdapterPaths.getExecutionTarget()
                         val targetDir = File(AcpAdapterPaths.getDependenciesDir(), adapterInfo.id)
                         val deleted = AcpAdapterPaths.deleteAdapter(adapterId, target)

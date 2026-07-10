@@ -24,38 +24,11 @@ export interface ChatAttachment {
   endLine?: number;
 }
 
-export interface TextBlock {
-  type: 'text';
-  text: string;
-}
-export interface ImageBlock {
-  type: 'image';
-  data: string;
-  mimeType: string;
-  isInline?: boolean;
-}
-export interface AudioBlock {
-  type: 'audio';
-  data: string;
-  mimeType: string;
-  isInline?: boolean;
-}
-export interface VideoBlock {
-  type: 'video';
-  data: string;
-  mimeType: string;
-  name?: string;
-  path?: string;
-  isInline?: boolean;
-}
-export interface FileBlock {
-  type: 'file';
-  name: string;
-  mimeType: string;
-  data?: string;
-  path?: string;
-  isInline?: boolean;
-}
+export interface TextBlock { type: 'text'; text: string; }
+export interface ImageBlock { type: 'image'; data: string; mimeType: string; isInline?: boolean; }
+export interface AudioBlock { type: 'audio'; data: string; mimeType: string; isInline?: boolean; }
+export interface VideoBlock { type: 'video'; data: string; mimeType: string; name?: string; path?: string; isInline?: boolean; }
+export interface FileBlock { type: 'file'; name: string; mimeType: string; data?: string; path?: string; isInline?: boolean; }
 export interface CodeReferenceBlock {
   type: 'code_ref';
   id?: string;
@@ -78,17 +51,8 @@ export interface ToolCallEntry {
   // For thinking entries
   text?: string;
 }
-export interface ExploringBlock {
-  type: 'exploring';
-  isStreaming: boolean;
-  isReplay?: boolean;
-  entries: ToolCallEntry[];
-}
-export interface ToolCallBlock {
-  type: 'tool_call';
-  entry: ToolCallEntry;
-  isReplay?: boolean;
-}
+export interface ExploringBlock { type: 'exploring'; isStreaming: boolean; isReplay?: boolean; entries: ToolCallEntry[]; }
+export interface ToolCallBlock { type: 'tool_call'; entry: ToolCallEntry; isReplay?: boolean; }
 export interface PlanEntry {
   content: string;
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled' | 'failed';
@@ -99,20 +63,7 @@ export interface PlanBlock { type: 'plan'; entries: PlanEntry[]; isReplay?: bool
 
 export type RichContentBlock = TextBlock | ImageBlock | AudioBlock | VideoBlock | FileBlock | CodeReferenceBlock | ExploringBlock | ToolCallBlock | PlanBlock;
 
-export interface SubagentThread {
-  id: string;
-  agentName: string;
-  title: string;
-  status: 'running' | 'done' | 'error';
-  output?: string;
-}
 
-export interface QueuedPrompt {
-  id: string;
-  text: string;
-  blocks: RichContentBlock[];
-  attachments: ChatAttachment[];
-}
 
 export interface Message {
   id: string;
@@ -166,8 +117,10 @@ export interface AgentOption {
   availableModels?: ModelOption[];
   currentModeId?: string;
   availableModes?: ModeOption[];
+  availableModesByModel?: Record<string, ModeOption[]>;
   currentReasoningEffortId?: string;
   availableReasoningEfforts?: ReasoningEffortOption[];
+  reasoningEffortsByModel?: Record<string, ReasoningEffortOption[]>;
   downloaded?: boolean;
   downloadedKnown?: boolean;
   downloadPath?: string;
@@ -226,15 +179,7 @@ export interface TabUiFlags {
   processing: boolean;
 }
 
-export type TabType =
-  | 'chat'
-  | 'management'
-  | 'design'
-  | 'history'
-  | 'mcp'
-  | 'system-instructions'
-  | 'prompt-library'
-  | 'settings';
+export type TabType = 'chat' | 'management' | 'design' | 'history' | 'mcp' | 'system-instructions' | 'prompt-library' | 'settings';
 
 export interface ChatTab {
   id: string;
@@ -279,17 +224,7 @@ export interface HistorySessionMeta {
 export interface ContentChunk {
   chatId: string;
   role: 'user' | 'assistant';
-  type:
-    | 'text'
-    | 'thinking'
-    | 'image'
-    | 'audio'
-    | 'video'
-    | 'file'
-    | 'tool_call'
-    | 'tool_call_update'
-    | 'plan'
-    | 'prompt_done';
+  type: 'text' | 'thinking' | 'image' | 'audio' | 'video' | 'file' | 'tool_call' | 'tool_call_update' | 'plan' | 'prompt_done';
   text?: string;
   data?: string;
   path?: string;
@@ -369,6 +304,7 @@ export interface ConversationReplayLoadedPayload {
   chatId: string;
   data: ConversationReplayData;
 }
+
 
 export interface ToolCallDiff {
   path: string;
@@ -522,15 +458,7 @@ export interface GitCommitGenerationSettings {
 export interface GlobalSettings {
   audioNotificationsEnabled: boolean;
   uiFontSizeOffsetPx: number;
-  userMessageBackgroundStyle:
-    | 'default'
-    | 'blue'
-    | 'background-secondary'
-    | 'primary'
-    | 'secondary'
-    | 'accent'
-    | 'input'
-    | 'editor-bg';
+  userMessageBackgroundStyle: 'default' | 'blue' | 'background-secondary' | 'primary' | 'secondary' | 'accent' | 'input' | 'editor-bg';
   audioTranscription: AudioTranscriptionSettings;
   gitCommitGeneration: GitCommitGenerationSettings;
   quotaWidgetEnabled: boolean;
@@ -543,15 +471,23 @@ export interface GlobalSettingsPayload {
 declare global {
   interface Window {
     // Actions (Frontend -> Backend)
-    __startAgent?: (conversationId: string, adapterId?: string, modelId?: string, requestId?: string) => void;
-    __setModel?: (conversationId: string, adapterId: string, modelId: string) => void;
-    __setMode?: (conversationId: string, adapterId: string, modeId: string) => void;
-    __setReasoningEffort?: (conversationId: string, adapterId: string, reasoningEffortId: string) => void;
+    __startAgent?: (
+      conversationId: string,
+      adapterId?: string,
+      modelId?: string,
+      modeId?: string,
+      requestId?: string,
+      reasoningEffortId?: string
+    ) => void;
     __sendPrompt?: (
       conversationId: string,
       message: string,
       requestId?: string,
-      forkBase?: ForkConversationBase
+      forkBase?: ForkConversationBase,
+      adapterId?: string,
+      modelId?: string,
+      modeId?: string,
+      reasoningEffortId?: string
     ) => void;
     __requestAdapters?: () => void;
     __notifyReady?: () => void;
@@ -593,8 +529,6 @@ declare global {
     __onAcpLog?: (payload: AcpLogEntryPayload) => void;
     __onContentChunk?: (chunk: ContentChunk) => void;
     __onStatus?: (chatId: string, status: string) => void;
-__onPromptIdle?: (chatId: string) => void;
-    __onSubagentThreads?: (chatId: string, threads: SubagentThread[]) => void;
     __onSessionId?: (chatId: string, id: string) => void;
     __onAdapters?: (adapters: AgentOption[]) => void;
     __onAvailableCommands?: (adapterId: string, commands: AvailableCommand[]) => void;

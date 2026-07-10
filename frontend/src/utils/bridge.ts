@@ -11,7 +11,7 @@ import {
   ForkConversationBase,
   GlobalSettingsPayload,
   SessionMetadataUpdatePayload,
-  ToolCallEvent
+  ToolCallEvent,
 } from '../types/chat';
 import { extractToolCallDiffEntries } from './toolCallUtils';
 import { McpServerConfig } from '../types/mcp';
@@ -39,15 +39,13 @@ import {
   McpStatusEvent,
   ModeEvent,
   PermissionRequestEvent,
-  PromptIdleEvent,
   PromptLibraryEvent,
   SessionIdEvent,
   StatusEvent,
-  SubagentThreadsEvent,
   SystemInstructionsEvent,
   ToolCallBridgeEvent,
   UndoResultEvent,
-  onBridgeEvent
+  onBridgeEvent,
 } from './bridgeEvents';
 
 let saveTranscriptCounter = 0;
@@ -59,6 +57,7 @@ const pendingRpcMethodsById = new Map<string | number, string>();
 const toolCallRawInputById = new Map<string, Record<string, any>>();
 const BRIDGE_REQUEST_TIMEOUT_MS = 120_000;
 const BRIDGE_OPERATION_TIMEOUT_MS = 10_000;
+const CANCEL_PROMPT_OPERATION_TIMEOUT_MS = 15_000;
 
 function nextSaveTranscriptRequestId(): string {
   saveTranscriptCounter += 1;
@@ -82,7 +81,8 @@ function nextBridgeOperationRequestId(operation: string): string {
 
 function awaitBridgeOperation(
   operation: BridgeOperationResultPayload['operation'],
-  invoke: (requestId: string) => void
+  invoke: (requestId: string) => void,
+  timeoutMs = BRIDGE_OPERATION_TIMEOUT_MS,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const requestId = nextBridgeOperationRequestId(operation);
@@ -90,7 +90,7 @@ function awaitBridgeOperation(
     const timeout = window.setTimeout(() => {
       cleanup();
       reject(new Error(`Bridge request '${operation}' was not acknowledged. Connection to the agent may be broken.`));
-    }, BRIDGE_OPERATION_TIMEOUT_MS);
+    }, timeoutMs);
 
     cleanup = ACPBridge.onBridgeOperationResult((e) => {
       const payload = e.detail.payload;
@@ -128,10 +128,8 @@ export const ACPBridge = {
           if (chunk.type === 'tool_call' && toolCallId && raw.rawInput && typeof raw.rawInput === 'object') {
             toolCallRawInputById.set(toolCallId, raw.rawInput);
           }
-          const diffs = extractToolCallDiffEntries(
-            raw,
-            toolCallId ? toolCallRawInputById.get(toolCallId) : undefined
-          ).map((diff) => ({ path: diff.path, oldText: diff.oldText, newText: diff.newText }));
+          const diffs = extractToolCallDiffEntries(raw, toolCallId ? toolCallRawInputById.get(toolCallId) : undefined)
+            .map((diff) => ({ path: diff.path, oldText: diff.oldText, newText: diff.newText }));
           const status = chunk.toolStatus || raw.status;
           if (diffs.length > 0) {
             const payload: ToolCallEvent = {
@@ -141,7 +139,7 @@ export const ACPBridge = {
               status,
               isReplay: chunk.isReplay,
               diffs,
-              locations: raw.locations
+              locations: raw.locations,
             };
             const eventName = chunk.type === 'tool_call' ? EVENT_NAMES.TOOL_CALL : EVENT_NAMES.TOOL_CALL_UPDATE;
             window.dispatchEvent(new CustomEvent(eventName, { detail: { chatId: chunk.chatId, payload } }));
@@ -152,18 +150,11 @@ export const ACPBridge = {
               kind: chunk.toolKind || raw.kind,
               status,
               isReplay: chunk.isReplay,
-              diffs: []
+              diffs: [],
             };
-            window.dispatchEvent(
-              new CustomEvent(EVENT_NAMES.TOOL_CALL_UPDATE, { detail: { chatId: chunk.chatId, payload } })
-            );
+            window.dispatchEvent(new CustomEvent(EVENT_NAMES.TOOL_CALL_UPDATE, { detail: { chatId: chunk.chatId, payload } }));
           }
-          if (
-            chunk.type === 'tool_call_update' &&
-            toolCallId &&
-            status &&
-            !['pending', 'running', 'in_progress', 'active'].includes(String(status).toLowerCase())
-          ) {
+          if (chunk.type === 'tool_call_update' && toolCallId && status && !['pending', 'running', 'in_progress', 'active'].includes(String(status).toLowerCase())) {
             toolCallRawInputById.delete(toolCallId);
           }
         } catch (e) {
@@ -174,13 +165,6 @@ export const ACPBridge = {
 
     window.__onStatus = (chatId, status) => {
       window.dispatchEvent(new CustomEvent(EVENT_NAMES.STATUS, { detail: { chatId, status } }));
-    };
-
-window.__onPromptIdle = (chatId) => {
-      window.dispatchEvent(new CustomEvent(EVENT_NAMES.PROMPT_IDLE, { detail: { chatId } }));
-    };
-    window.__onSubagentThreads = (chatId, threads) => {
-      window.dispatchEvent(new CustomEvent(EVENT_NAMES.SUBAGENT_THREADS, { detail: { chatId, threads } }));
     };
 
     window.__onBridgeOperationResult = (payload) => {
@@ -325,23 +309,19 @@ window.__onPromptIdle = (chatId) => {
     window.__onFilesResult = (filesJson) => {
       let files = [];
       try {
-        files = typeof filesJson === 'string' ? JSON.parse(filesJson) : filesJson;
+        files = typeof filesJson === "string" ? JSON.parse(filesJson) : filesJson;
       } catch (e) {
         console.warn('[bridge] Failed to parse files result', e);
       }
-      window.dispatchEvent(new CustomEvent('acp-files-result', { detail: { files } }));
+      window.dispatchEvent(new CustomEvent("acp-files-result", { detail: { files } }));
     };
 
     if (window.__notifyReady) window.__notifyReady();
   },
 
-  onContentChunk: (callback: (e: CustomEvent<ContentChunkEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.CONTENT_CHUNK, callback),
+  onContentChunk: (callback: (e: CustomEvent<ContentChunkEvent>) => void) => onBridgeEvent(EVENT_NAMES.CONTENT_CHUNK, callback),
 
   onStatus: (callback: (e: CustomEvent<StatusEvent>) => void) => onBridgeEvent(EVENT_NAMES.STATUS, callback),
-
-onPromptIdle: (callback: (e: CustomEvent<PromptIdleEvent>) => void) => onBridgeEvent(EVENT_NAMES.PROMPT_IDLE, callback),
-  onSubagentThreads: (callback: (e: CustomEvent<SubagentThreadsEvent>) => void) => onBridgeEvent(EVENT_NAMES.SUBAGENT_THREADS, callback),
 
   onBridgeOperationResult: (callback: (e: CustomEvent<BridgeOperationResultEvent>) => void) => onBridgeEvent(EVENT_NAMES.BRIDGE_OPERATION_RESULT, callback),
 
@@ -351,35 +331,41 @@ onPromptIdle: (callback: (e: CustomEvent<PromptIdleEvent>) => void) => onBridgeE
 
   onAdapters: (callback: (e: CustomEvent<AdaptersEvent>) => void) => onBridgeEvent(EVENT_NAMES.ADAPTERS, callback),
 
-  onAvailableCommands: (callback: (e: CustomEvent<AvailableCommandsEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.AVAILABLE_COMMANDS, callback),
+  onAvailableCommands: (callback: (e: CustomEvent<AvailableCommandsEvent>) => void) => onBridgeEvent(EVENT_NAMES.AVAILABLE_COMMANDS, callback),
 
   getAvailableCommands: (adapterId: string) => {
     return availableCommandsByAdapter.get(adapterId) ?? [];
   },
 
-  onPermissionRequest: (callback: (e: CustomEvent<PermissionRequestEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.PERMISSION, callback),
+  onPermissionRequest: (callback: (e: CustomEvent<PermissionRequestEvent>) => void) => onBridgeEvent(EVENT_NAMES.PERMISSION, callback),
 
   requestAdapters: () => {
     window.__requestAdapters?.();
   },
 
-  startAgent: (conversationId: string, adapterId?: string, modelId?: string) => {
+  startAgent: (conversationId: string, adapterId?: string, modelId?: string, modeId?: string, reasoningEffortId?: string) => {
     if (typeof window.__startAgent !== 'function') {
       return Promise.reject(new Error('Start agent bridge is not available.'));
     }
     return awaitBridgeOperation('start_agent', (requestId) => {
-      window.__startAgent?.(conversationId, adapterId, modelId, requestId);
+      window.__startAgent?.(conversationId, adapterId, modelId, modeId, requestId, reasoningEffortId);
     });
   },
 
-  sendPrompt: (conversationId: string, message: string, forkBase?: ForkConversationBase) => {
+  sendPrompt: (
+    conversationId: string,
+    message: string,
+    forkBase?: ForkConversationBase,
+    adapterId?: string,
+    modelId?: string,
+    modeId?: string,
+    reasoningEffortId?: string
+  ) => {
     if (typeof window.__sendPrompt !== 'function') {
       return Promise.reject(new Error('Send prompt bridge is not available.'));
     }
     return awaitBridgeOperation('send_prompt', (requestId) => {
-      window.__sendPrompt?.(conversationId, message, requestId, forkBase);
+      window.__sendPrompt?.(conversationId, message, requestId, forkBase, adapterId, modelId, modeId, reasoningEffortId);
     });
   },
 
@@ -387,9 +373,13 @@ onPromptIdle: (callback: (e: CustomEvent<PromptIdleEvent>) => void) => onBridgeE
     if (typeof window.__cancelPrompt !== 'function') {
       return Promise.reject(new Error('Cancel prompt bridge is not available.'));
     }
-    return awaitBridgeOperation('cancel_prompt', (requestId) => {
-      window.__cancelPrompt?.(conversationId, requestId);
-    });
+    return awaitBridgeOperation(
+      'cancel_prompt',
+      (requestId) => {
+        window.__cancelPrompt?.(conversationId, requestId);
+      },
+      CANCEL_PROMPT_OPERATION_TIMEOUT_MS,
+    );
   },
 
   recoverRuntime: (reason?: string) => {
@@ -409,8 +399,7 @@ onPromptIdle: (callback: (e: CustomEvent<PromptIdleEvent>) => void) => onBridgeE
     window.__cancelAgentInstall?.(adapterId);
   },
 
-  onUsageData: (callback: (e: CustomEvent<{ adapterId: string; json: string }>) => void) =>
-    onBridgeEvent(EVENT_NAMES.USAGE_DATA, callback),
+  onUsageData: (callback: (e: CustomEvent<{ adapterId: string; json: string }>) => void) => onBridgeEvent(EVENT_NAMES.USAGE_DATA, callback),
 
   onLog: (callback: (e: CustomEvent) => void) => onBridgeEvent(EVENT_NAMES.LOG, callback),
 
@@ -422,11 +411,9 @@ onPromptIdle: (callback: (e: CustomEvent<PromptIdleEvent>) => void) => onBridgeE
     window.__syncHistoryList?.(projectPath);
   },
 
-  onHistoryList: (callback: (e: CustomEvent<HistoryListEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.HISTORY_LIST, callback),
+  onHistoryList: (callback: (e: CustomEvent<HistoryListEvent>) => void) => onBridgeEvent(EVENT_NAMES.HISTORY_LIST, callback),
 
-  onHistoryDeleteResult: (callback: (e: CustomEvent<HistoryDeleteResultEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.HISTORY_DELETE_RESULT, callback),
+  onHistoryDeleteResult: (callback: (e: CustomEvent<HistoryDeleteResultEvent>) => void) => onBridgeEvent(EVENT_NAMES.HISTORY_DELETE_RESULT, callback),
 
   loadHistoryConversation: (conversationId: string, projectPath: string, historyConversationId: string) => {
     window.__loadHistoryConversation?.(conversationId, projectPath, historyConversationId);
@@ -491,15 +478,11 @@ onPromptIdle: (callback: (e: CustomEvent<PromptIdleEvent>) => void) => onBridgeE
     window.__openHistoryConversationCli?.({ projectPath, conversationId });
   },
 
-  onUndoResult: (callback: (e: CustomEvent<UndoResultEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.UNDO_RESULT, callback),
+  onUndoResult: (callback: (e: CustomEvent<UndoResultEvent>) => void) => onBridgeEvent(EVENT_NAMES.UNDO_RESULT, callback),
 
-  onChangesState: (callback: (e: CustomEvent<ChangesStateEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.CHANGES_STATE, callback),
+  onChangesState: (callback: (e: CustomEvent<ChangesStateEvent>) => void) => onBridgeEvent(EVENT_NAMES.CHANGES_STATE, callback),
 
-  computeFileChangeStats: (
-    files: { filePath: string; status: 'A' | 'M'; operations: FileChangeOperation[] }[]
-  ): Promise<FileChangeStatsResultPayload> => {
+  computeFileChangeStats: (files: { filePath: string; status: 'A' | 'M'; operations: FileChangeOperation[] }[]): Promise<FileChangeStatsResultPayload> => {
     return new Promise((resolve, reject) => {
       if (typeof window.__computeFileChangeStats !== 'function') {
         reject(new Error('File change stats bridge is not available.'));
@@ -530,29 +513,23 @@ onPromptIdle: (callback: (e: CustomEvent<PromptIdleEvent>) => void) => onBridgeE
     });
   },
 
-  onToolCall: (callback: (e: CustomEvent<ToolCallBridgeEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.TOOL_CALL, callback),
+  onToolCall: (callback: (e: CustomEvent<ToolCallBridgeEvent>) => void) => onBridgeEvent(EVENT_NAMES.TOOL_CALL, callback),
 
-  onToolCallUpdate: (callback: (e: CustomEvent<ToolCallBridgeEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.TOOL_CALL_UPDATE, callback),
+  onToolCallUpdate: (callback: (e: CustomEvent<ToolCallBridgeEvent>) => void) => onBridgeEvent(EVENT_NAMES.TOOL_CALL_UPDATE, callback),
 
-  onFileChangeStats: (callback: (e: CustomEvent<FileChangeStatsEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.FILE_CHANGE_STATS, callback),
+  onFileChangeStats: (callback: (e: CustomEvent<FileChangeStatsEvent>) => void) => onBridgeEvent(EVENT_NAMES.FILE_CHANGE_STATS, callback),
 
-  onAttachmentsAdded: (callback: (e: CustomEvent<{ chatId: string; files: ChatAttachment[] }>) => void) =>
-    onBridgeEvent(EVENT_NAMES.ATTACHMENTS_ADDED, callback),
+  onAttachmentsAdded: (callback: (e: CustomEvent<{ chatId: string; files: ChatAttachment[] }>) => void) => onBridgeEvent(EVENT_NAMES.ATTACHMENTS_ADDED, callback),
 
-  onConversationTranscriptSaved: (callback: (e: CustomEvent<ConversationTranscriptSavedEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.CONVERSATION_TRANSCRIPT_SAVED, callback),
+  onConversationTranscriptSaved: (callback: (e: CustomEvent<ConversationTranscriptSavedEvent>) => void) => onBridgeEvent(EVENT_NAMES.CONVERSATION_TRANSCRIPT_SAVED, callback),
 
-  onConversationReplayLoaded: (callback: (e: CustomEvent<ConversationReplayLoadedEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.CONVERSATION_REPLAY_LOADED, callback),
+  onConversationReplayLoaded: (callback: (e: CustomEvent<ConversationReplayLoadedEvent>) => void) => onBridgeEvent(EVENT_NAMES.CONVERSATION_REPLAY_LOADED, callback),
 
   searchFiles: (query: string) => {
     window.__searchFiles?.(query);
   },
 
-  onFilesResult: (callback: (e: CustomEvent<{ files: { path: string; name: string }[] }>) => void) => {
+  onFilesResult: (callback: (e: CustomEvent<{ files: { path: string, name: string }[] }>) => void) => {
     const fn = (e: Event) => callback(e as CustomEvent);
     window.addEventListener('acp-files-result', fn);
     return () => window.removeEventListener('acp-files-result', fn);
@@ -566,8 +543,7 @@ onPromptIdle: (callback: (e: CustomEvent<PromptIdleEvent>) => void) => onBridgeE
     window.__saveMcpServers?.(JSON.stringify(servers));
   },
 
-  onMcpServers: (callback: (e: CustomEvent<McpServersEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.MCP_SERVERS, callback),
+  onMcpServers: (callback: (e: CustomEvent<McpServersEvent>) => void) => onBridgeEvent(EVENT_NAMES.MCP_SERVERS, callback),
 
   checkMcpStatus: () => {
     window.__checkMcpStatus?.();
@@ -583,8 +559,7 @@ onPromptIdle: (callback: (e: CustomEvent<PromptIdleEvent>) => void) => onBridgeE
     window.__savePromptLibrary?.(JSON.stringify(items));
   },
 
-  onPromptLibrary: (callback: (e: CustomEvent<PromptLibraryEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.PROMPT_LIBRARY, callback),
+  onPromptLibrary: (callback: (e: CustomEvent<PromptLibraryEvent>) => void) => onBridgeEvent(EVENT_NAMES.PROMPT_LIBRARY, callback),
 
   loadSystemInstructions: () => {
     window.__loadSystemInstructions?.();
@@ -594,8 +569,7 @@ onPromptIdle: (callback: (e: CustomEvent<PromptIdleEvent>) => void) => onBridgeE
     window.__saveSystemInstructions?.(JSON.stringify(instructions));
   },
 
-  onSystemInstructions: (callback: (e: CustomEvent<SystemInstructionsEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.SYSTEM_INSTRUCTIONS, callback),
+  onSystemInstructions: (callback: (e: CustomEvent<SystemInstructionsEvent>) => void) => onBridgeEvent(EVENT_NAMES.SYSTEM_INSTRUCTIONS, callback),
 
   loadAudioTranscriptionFeature: () => {
     window.__loadAudioTranscriptionFeature?.();
@@ -609,8 +583,7 @@ onPromptIdle: (callback: (e: CustomEvent<PromptIdleEvent>) => void) => onBridgeE
     window.__uninstallAudioTranscriptionFeature?.();
   },
 
-  onAudioTranscriptionFeature: (callback: (e: CustomEvent<AudioTranscriptionFeatureEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.AUDIO_TRANSCRIPTION_FEATURE, callback),
+  onAudioTranscriptionFeature: (callback: (e: CustomEvent<AudioTranscriptionFeatureEvent>) => void) => onBridgeEvent(EVENT_NAMES.AUDIO_TRANSCRIPTION_FEATURE, callback),
 
   transcribeAudioInput: (audioBase64: string): Promise<AudioTranscriptionResultPayload> => {
     return new Promise((resolve, reject) => {
@@ -646,8 +619,7 @@ onPromptIdle: (callback: (e: CustomEvent<PromptIdleEvent>) => void) => onBridgeE
     });
   },
 
-  onAudioTranscriptionResult: (callback: (e: CustomEvent<AudioTranscriptionResultEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.AUDIO_TRANSCRIPTION_RESULT, callback),
+  onAudioTranscriptionResult: (callback: (e: CustomEvent<AudioTranscriptionResultEvent>) => void) => onBridgeEvent(EVENT_NAMES.AUDIO_TRANSCRIPTION_RESULT, callback),
 
   startAudioRecording: () => {
     window.__startAudioRecording?.();
@@ -686,8 +658,7 @@ onPromptIdle: (callback: (e: CustomEvent<PromptIdleEvent>) => void) => onBridgeE
     });
   },
 
-  onAudioRecordingState: (callback: (e: CustomEvent<AudioRecordingStateEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.AUDIO_RECORDING_STATE, callback),
+  onAudioRecordingState: (callback: (e: CustomEvent<AudioRecordingStateEvent>) => void) => onBridgeEvent(EVENT_NAMES.AUDIO_RECORDING_STATE, callback),
 
   loadAudioTranscriptionSettings: () => {
     window.__loadAudioTranscriptionSettings?.();
@@ -697,8 +668,7 @@ onPromptIdle: (callback: (e: CustomEvent<PromptIdleEvent>) => void) => onBridgeE
     window.__saveAudioTranscriptionSettings?.(JSON.stringify(settings));
   },
 
-  onAudioTranscriptionSettings: (callback: (e: CustomEvent<AudioTranscriptionSettingsEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.AUDIO_TRANSCRIPTION_SETTINGS, callback),
+  onAudioTranscriptionSettings: (callback: (e: CustomEvent<AudioTranscriptionSettingsEvent>) => void) => onBridgeEvent(EVENT_NAMES.AUDIO_TRANSCRIPTION_SETTINGS, callback),
 
   loadGlobalSettings: () => {
     window.__loadGlobalSettings?.();
@@ -708,9 +678,7 @@ onPromptIdle: (callback: (e: CustomEvent<PromptIdleEvent>) => void) => onBridgeE
     window.__saveGlobalSettings?.(JSON.stringify(settings));
   },
 
-  onGlobalSettings: (callback: (e: CustomEvent<GlobalSettingsEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.GLOBAL_SETTINGS, callback),
+  onGlobalSettings: (callback: (e: CustomEvent<GlobalSettingsEvent>) => void) => onBridgeEvent(EVENT_NAMES.GLOBAL_SETTINGS, callback),
 
-  onAdapterDeleted: (callback: (e: CustomEvent<AdapterDeletedEvent>) => void) =>
-    onBridgeEvent(EVENT_NAMES.ADAPTER_DELETED, callback)
+  onAdapterDeleted: (callback: (e: CustomEvent<AdapterDeletedEvent>) => void) => onBridgeEvent(EVENT_NAMES.ADAPTER_DELETED, callback),
 };

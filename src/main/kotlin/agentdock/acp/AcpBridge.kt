@@ -21,9 +21,6 @@ class AcpBridge(
 ) {
     internal var sendPromptQuery: JBCefJSQuery? = null
     internal var startAgentQuery: JBCefJSQuery? = null
-    internal var setModelQuery: JBCefJSQuery? = null
-    internal var setModeQuery: JBCefJSQuery? = null
-    internal var setReasoningEffortQuery: JBCefJSQuery? = null
     internal var listAdaptersQuery: JBCefJSQuery? = null
     internal var cancelPromptQuery: JBCefJSQuery? = null
     internal var stopAgentQuery: JBCefJSQuery? = null
@@ -75,7 +72,6 @@ class AcpBridge(
     internal val livePromptCaptures = ConcurrentHashMap<String, LivePromptCapture>()
     internal val historyReplayCaptures = ConcurrentHashMap<String, HistoryReplayCapture>()
     internal val suppressReplayForChatIds: MutableSet<String> = ConcurrentHashMap.newKeySet<String>()
-    internal val subagentRegistries = ConcurrentHashMap<String, SubagentThreadRegistry>()
     internal val todoToolCallKeys: MutableSet<String> = ConcurrentHashMap.newKeySet<String>()
     internal val emittedTodoPlanKeys: MutableSet<String> = ConcurrentHashMap.newKeySet<String>()
 

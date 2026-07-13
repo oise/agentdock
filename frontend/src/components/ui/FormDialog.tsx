@@ -36,8 +36,7 @@ export function FormDialog({ isOpen, title, onClose, children, footer }: FormDia
 
   return (
     <div
-      className='fixed inset-0 z-[100] flex items-start justify-center bg-black/20 px-3 pb-3 pt-24 animate-in fade-in duration-150'
-      onClick={onClose}
+      className='fixed inset-0 z-[100] flex items-start justify-center bg-black/50 px-3 pb-3 pt-24 animate-in fade-in duration-150'
     >
       <div
         ref={dialogRef}

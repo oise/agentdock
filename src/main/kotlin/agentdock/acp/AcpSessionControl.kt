@@ -6,7 +6,6 @@ import com.agentclientprotocol.model.PermissionOptionId
 import com.agentclientprotocol.model.RequestPermissionOutcome
 import com.agentclientprotocol.model.RequestPermissionResponse
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.withLock
@@ -44,6 +43,7 @@ internal fun AcpClientService.prompt(chatId: String, blocks: List<ContentBlock>)
     }
 
     context.statusRef.set(AcpClientService.Status.Prompting)
+    val promptGeneration = context.promptGeneration.incrementAndGet()
     context.ignoreUpdatesUntilPrompt = false
     var stopReason: String? = null
     val activeAdapterName = context.activeAdapterNameRef.get()
@@ -68,19 +68,28 @@ internal fun AcpClientService.prompt(chatId: String, blocks: List<ContentBlock>)
     try {
         session.prompt(promptBlocks).collect { event ->
             when (event) {
-                is Event.SessionUpdateEvent -> sessionUpdateHandler?.invoke(chatId, event.update, false, null)
+                is Event.SessionUpdateEvent -> {
+                    if (context.promptGeneration.get() == promptGeneration && !context.ignoreUpdatesUntilPrompt) {
+                        sessionUpdateHandler?.invoke(chatId, event.update, false, null)
+                    }
+                }
                 is Event.PromptResponseEvent -> stopReason = event.response.stopReason.toString()
             }
         }
-        if (!activeAdapterName.isNullOrBlank()) {
+        val isCurrentPrompt = context.promptGeneration.get() == promptGeneration && !context.ignoreUpdatesUntilPrompt
+        if (isCurrentPrompt && !activeAdapterName.isNullOrBlank()) {
             awaitPendingSessionUpdates(activeAdapterName)
         }
-        stopReason?.let { emit(AcpEvent.PromptDone(it)) }
+        if (isCurrentPrompt) {
+            stopReason?.let { emit(AcpEvent.PromptDone(it)) }
+        }
     } catch (e: Exception) {
         if (e is kotlinx.coroutines.CancellationException) throw e
-        emit(AcpEvent.Error(formatAcpError(e)))
+        if (context.promptGeneration.get() == promptGeneration && !context.ignoreUpdatesUntilPrompt) {
+            emit(AcpEvent.Error(formatAcpError(e)))
+        }
     } finally {
-        if (context.statusRef.get() == AcpClientService.Status.Prompting) {
+        if (context.promptGeneration.get() == promptGeneration && context.statusRef.get() == AcpClientService.Status.Prompting) {
             context.statusRef.set(AcpClientService.Status.Ready)
         }
     }
@@ -97,13 +106,8 @@ internal suspend fun AcpClientService.cancel(chatId: String) {
 
 internal suspend fun AcpClientService.cancelWithContext(context: AcpClientService.AgentContext) {
     val session = context.lifecycleMutex.withLock { context.session } ?: return
-    try {
-        session.cancel()
-    } finally {
-        if (context.statusRef.get() == AcpClientService.Status.Prompting) {
-            context.statusRef.set(AcpClientService.Status.Ready)
-        }
-    }
+    context.ignoreUpdatesUntilPrompt = true
+    session.cancel()
 }
 
 internal suspend fun AcpClientService.stopAgent(chatId: String) {
@@ -116,11 +120,9 @@ internal suspend fun AcpClientService.stopAgent(chatId: String) {
 internal fun AcpClientService.stopSharedProcess(adapterName: String) {
     ensureExecutionTargetCurrent()
     adapterInitializationJobs.remove(adapterName)?.cancel()
-    adapterInitializationScopes.remove(adapterName)?.coroutineContext?.cancel()
     val shared = activeProcesses.remove(processKey(adapterName))
-    teardownAdapterProcess(adapterName, shared)
+    teardownAdapterProcess(shared)
     updateAdapterInitializationState(adapterName, AcpClientService.AdapterInitializationStatus.NotStarted)
-    adapterInitialization.remove(adapterName)
     adapterRuntimeMetadataMap.remove(adapterName)
     availableCommandsByAdapter.remove(adapterName)
     sessions.values.filter { it.sharedProcess == shared }.forEach { it.stop() }
@@ -129,12 +131,11 @@ internal fun AcpClientService.stopSharedProcess(adapterName: String) {
 internal fun AcpClientService.replaceSharedProcess(adapterName: String): AcpClientService.SharedProcess {
     ensureExecutionTargetCurrent()
     val previous = activeProcesses.remove(processKey(adapterName))
-    teardownAdapterProcess(adapterName, previous)
+    teardownAdapterProcess(previous)
     return createSharedProcess(adapterName).also { activeProcesses[processKey(adapterName)] = it }
 }
 
 internal fun AcpClientService.teardownAdapterProcess(
-    _adapterName: String,
     shared: AcpClientService.SharedProcess?
 ) {
     runCatching { shared?.stop() }
@@ -146,9 +147,6 @@ internal fun AcpClientService.resetExecutionEnvironment(
 ) {
     adapterInitializationJobs.values.forEach { it.cancel() }
     adapterInitializationJobs.clear()
-    adapterInitializationScopes.values.forEach { it.coroutineContext.cancel() }
-    adapterInitializationScopes.clear()
-    adapterInitialization.clear()
     adapterInitializationState.clear()
     adapterInitializationErrors.clear()
     adapterInitializationDetails.clear()
@@ -156,6 +154,7 @@ internal fun AcpClientService.resetExecutionEnvironment(
     availableCommandsByAdapter.clear()
     systemInstructionsInjectedSessionIds.clear()
     replayOwnerBySessionId.clear()
+    configProbeSessionKeys.clear()
 
     sessions.values.forEach { it.stop() }
     if (clearSessions) {
@@ -165,7 +164,7 @@ internal fun AcpClientService.resetExecutionEnvironment(
     val processes = activeProcesses.values.toList()
     activeProcesses.clear()
     processes.forEach { shared ->
-        runCatching { teardownAdapterProcess(shared.adapterName, shared) }
+        runCatching { teardownAdapterProcess(shared) }
     }
 
     startupInitializationStarted.set(false)

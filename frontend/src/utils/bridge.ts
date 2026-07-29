@@ -336,6 +336,17 @@ export const ACPBridge = {
       window.dispatchEvent(new CustomEvent("acp-files-result", { detail: { files } }));
     };
 
+    window.__onFileIconResult = (result) => {
+      window.dispatchEvent(new CustomEvent('acp-file-icon-result', { detail: result }));
+    };
+
+    window.__onThemeChanged = () => {
+      fileIconCacheEpoch += 1;
+      fileIconCache.clear();
+      pendingFileIconRequests.clear();
+      window.dispatchEvent(new CustomEvent('acp-theme-changed'));
+    };
+
     if (window.__notifyReady) window.__notifyReady();
   },
 

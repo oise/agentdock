@@ -6,24 +6,28 @@ internal fun AcpClientService.updateMetadataFromConfigOptionResponse(
     adapterName: String,
     response: JsonObject,
     context: AcpClientService.AgentContext
-) {
-    val configOptions = response["configOptions"] ?: return
+): Unit {
     val adapterInfo = AcpAdapterPaths.getAdapterInfo(adapterName)
-    val rawMetadata = runtimeMetadataFromConfigOptionsJson(configOptions, adapterInfo)
-    val metadata = applyAdapterRuntimePreferences(
-        adapterInfo = adapterInfo,
-        currentModelId = rawMetadata.currentModelId,
-        availableModels = rawMetadata.availableModels,
-        modelConfigId = rawMetadata.modelConfigId,
-        currentModeId = rawMetadata.currentModeId,
-        availableModes = rawMetadata.availableModes,
-        modeConfigId = rawMetadata.modeConfigId,
-        currentReasoningEffortId = rawMetadata.currentReasoningEffortId,
-        availableReasoningEfforts = rawMetadata.availableReasoningEfforts,
-        reasoningEffortConfigId = rawMetadata.reasoningEffortConfigId
+    updateSessionRuntimeMetadata(
+        adapterInfo,
+        runtimeMetadataFromSetConfigOptionResponseJson(response, adapterInfo),
+        context
     )
-    adapterRuntimeMetadataMap[adapterName] = metadata
+}
+
+internal fun AcpClientService.updateSessionRuntimeMetadata(
+    adapterInfo: AcpAdapterConfig.AdapterInfo,
+    freshMetadata: AcpClientService.AdapterRuntimeMetadata,
+    context: AcpClientService.AgentContext
+): AcpClientService.AdapterRuntimeMetadata {
+    val metadata = AcpConfigOptionsCache.updateFromSnapshot(adapterInfo, freshMetadata)
+        .toRuntimeMetadata(adapterInfo)
+    context.runtimeMetadataRef.set(metadata)
     context.activeModelIdRef.set(metadata.currentModelId)
     context.activeModeIdRef.set(metadata.currentModeId)
     context.activeReasoningEffortIdRef.set(metadata.currentReasoningEffortId)
+    context.activeConfigValues.clear()
+    context.activeConfigValues.putAll(metadata.configOptions.associate { it.id to it.currentValue })
+    runCatching { sessionConfigOptionsHandler?.invoke(context.chatId, metadata) }
+    return metadata
 }

@@ -29,19 +29,8 @@ object AcpAdapterConfig {
     @Serializable
     data class AgentVersionConfig(
         val args: List<String>,
-        val pattern: String? = null
-    )
-
-    @Serializable
-    data class AuthConfig(
-        val authScript: String? = null,
-        val uiMode: String = "login_logout",
-        val loginMode: String = "background",
-        val command: List<String> = emptyList(),
-        val authNpmPackage: String? = null,
-        val statusArgs: List<String> = emptyList(),
-        val loginArgs: List<String> = emptyList(),
-        val logoutArgs: List<String> = emptyList()
+        val pattern: String? = null,
+        val command: String = "adapter"
     )
 
     @Serializable
@@ -65,6 +54,12 @@ object AcpAdapterConfig {
     }
 
     @Serializable
+    enum class PatchRoot {
+        @SerialName("package") PACKAGE,
+        @SerialName("runtime") RUNTIME
+    }
+
+    @Serializable
     enum class UpdateSourceType {
         @SerialName("github_release") GITHUB_RELEASE
     }
@@ -81,6 +76,7 @@ object AcpAdapterConfig {
     data class Distribution(
         val type: DistributionType,
         val version: String,
+        val minimumVersion: String? = null,
         val packageName: String? = null,
         val downloadUrl: String? = null,
         val binaryName: PlatformBinary? = null,
@@ -96,14 +92,21 @@ object AcpAdapterConfig {
         val iconPathLight: String? = null,
         val iconPathDark: String? = null,
         val supportsSessionList: Boolean = true,
+        val sessionListMethod: String = "acpSessionList",
+        val sessionDeleteMethod: String? = null,
         val distribution: Distribution,
         val launchPath: String = "",
         val launchBinary: PlatformBinary? = null,
         val disabledModels: List<String> = emptyList(),
         val disabledModes: List<String> = emptyList(),
         val args: List<String> = emptyList(),
+        val patchRoot: PatchRoot = PatchRoot.PACKAGE,
         val patches: List<String> = emptyList(),
-        val authConfig: AuthConfig? = null,
+        val loginMethod: String? = null,
+        val logoutMethod: String? = null,
+        val loginStatusMethod: String? = null,
+        val loginArgs: List<String> = listOf("login"),
+        val logoutArgs: List<String> = listOf("logout"),
         val agentVersionConfig: AgentVersionConfig? = null,
         val cli: CliConfig? = null,
         /**

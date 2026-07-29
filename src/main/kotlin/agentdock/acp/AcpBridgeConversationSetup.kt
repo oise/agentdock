@@ -56,13 +56,35 @@ private fun parsePermissionDecisionPayload(payload: String?): PermissionDecision
     }.getOrNull()
 }
 
-private fun AcpBridge.refreshDownloadedAdapterInitialization() {
-    val target = AcpAdapterPaths.getExecutionTarget()
-    AcpAdapterConfig.getAllAdapters().values.forEach { info ->
-        if (!AcpAdapterPaths.isDownloaded(info.id, target)) return@forEach
-        if (service.isAdapterReady(info.id)) return@forEach
-        if (service.adapterInitializationStatus(info.id) == AcpClientService.AdapterInitializationStatus.Initializing) return@forEach
-        service.initializeAdapterInBackground(info.id)
+internal fun AcpBridge.startInitialAdapterRefresh() {
+    if (!initialAdapterRefreshStarted.compareAndSet(false, true)) {
+        pushAdapterRefreshState(fullAdapterRefreshInProgress.get())
+        scope.launch(Dispatchers.IO) { pushAdapters(includeRuntimeChecks = false) }
+        return
+    }
+    startFullAdapterRefresh()
+}
+
+private fun AcpBridge.startFullAdapterRefresh() {
+    if (!fullAdapterRefreshInProgress.compareAndSet(false, true)) {
+        pushAdapterRefreshState(true)
+        scope.launch(Dispatchers.IO) {
+            pushAdapters(includeRuntimeChecks = false)
+        }
+        return
+    }
+
+    pushAdapterRefreshState(true)
+    fullAdapterRefreshDispatching.set(true)
+    scope.launch(Dispatchers.IO) {
+        try {
+            resetAdapterRefreshState()
+            pushAdapters(includeRuntimeChecks = false)
+            pushAdapters(includeRuntimeChecks = true)
+        } finally {
+            fullAdapterRefreshDispatching.set(false)
+            finishFullAdapterRefreshIfIdle()
+        }
     }
 }
 
@@ -101,9 +123,6 @@ internal fun AcpBridge.installConversationQueries() {
             val parsed = parseStartRequestPayload(payload)
             val chatId = parsed.chatId
             val adapterName = parsed.adapterId
-            val modelId = parsed.modelId
-            val modeId = parsed.modeId
-            val reasoningEffortId = parsed.reasoningEffortId
             if (chatId != null) {
                 pushBridgeOperationResult(parsed.requestId, chatId, "start_agent", ok = true)
                 scope.launch(Dispatchers.Default) {
@@ -113,9 +132,7 @@ internal fun AcpBridge.installConversationQueries() {
                             service.startAgent(
                                 chatId,
                                 adapterName,
-                                modelId,
-                                preferredModeId = modeId,
-                                preferredReasoningEffortId = reasoningEffortId
+                                parsed.configValues
                             )
                         }
                         pushAdapters()
@@ -135,14 +152,12 @@ internal fun AcpBridge.installConversationQueries() {
     }
 
     listAdaptersQuery = JBCefJSQuery.create(browser as com.intellij.ui.jcef.JBCefBrowserBase).apply {
-        addHandler {
-            scope.launch(Dispatchers.IO) {
-                resetAuthStatusRefreshState()
-                pushAdapters(includeRuntimeChecks = false)
-                refreshDownloadedAdapterInitialization()
-                scope.launch(Dispatchers.IO) {
-                    pushAdapters(includeRuntimeChecks = true)
-                }
+        addHandler { payload ->
+            if (payload == "refresh") {
+                initialAdapterRefreshStarted.set(true)
+                startFullAdapterRefresh()
+            } else {
+                startInitialAdapterRefresh()
             }
             JBCefJSQuery.Response("ok")
         }
@@ -167,7 +182,12 @@ internal fun AcpBridge.installConversationQueries() {
                 }
 
                 pushBridgeOperationResult(parsed.requestId, chatId, "send_prompt", ok = true)
-                val captureId = beginLivePromptCapture(chatId, parsed.rawBlocks, parsed.forkBase)
+                val captureId = beginLivePromptCapture(
+                    chatId,
+                    parsed.rawBlocks,
+                    parsed.forkBase,
+                    parsed.configValues
+                )
                 val previousPromptJob = promptJobs[chatId]?.takeIf { it.isActive }
                 lateinit var job: Job
                 job = scope.launch(Dispatchers.Default, start = CoroutineStart.LAZY) {
@@ -188,10 +208,9 @@ internal fun AcpBridge.installConversationQueries() {
                         service.startAgent(
                             chatId = chatId,
                             adapterName = parsed.adapterId,
-                            preferredModelId = parsed.modelId,
-                            preferredModeId = parsed.modeId,
-                            preferredReasoningEffortId = parsed.reasoningEffortId
+                            preferredConfigValues = parsed.configValues
                         )
+                        pushAdapters(includeRuntimeChecks = false)
                         pushStatus(chatId, "prompting")
                         service.prompt(chatId, blocks).collect { event ->
                             when (event) {

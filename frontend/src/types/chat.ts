@@ -24,38 +24,11 @@ export interface ChatAttachment {
   endLine?: number;
 }
 
-export interface TextBlock {
-  type: 'text';
-  text: string;
-}
-export interface ImageBlock {
-  type: 'image';
-  data: string;
-  mimeType: string;
-  isInline?: boolean;
-}
-export interface AudioBlock {
-  type: 'audio';
-  data: string;
-  mimeType: string;
-  isInline?: boolean;
-}
-export interface VideoBlock {
-  type: 'video';
-  data: string;
-  mimeType: string;
-  name?: string;
-  path?: string;
-  isInline?: boolean;
-}
-export interface FileBlock {
-  type: 'file';
-  name: string;
-  mimeType: string;
-  data?: string;
-  path?: string;
-  isInline?: boolean;
-}
+export interface TextBlock { type: 'text'; text: string; }
+export interface ImageBlock { type: 'image'; data: string; mimeType: string; isInline?: boolean; }
+export interface AudioBlock { type: 'audio'; data: string; mimeType: string; isInline?: boolean; }
+export interface VideoBlock { type: 'video'; data: string; mimeType: string; name?: string; path?: string; isInline?: boolean; }
+export interface FileBlock { type: 'file'; name: string; mimeType: string; data?: string; path?: string; isInline?: boolean; }
 export interface CodeReferenceBlock {
   type: 'code_ref';
   id?: string;
@@ -78,39 +51,24 @@ export interface ToolCallEntry {
   // For thinking entries
   text?: string;
 }
-export interface ExploringBlock {
-  type: 'exploring';
-  isStreaming: boolean;
-  isReplay?: boolean;
-  entries: ToolCallEntry[];
-}
-export interface ToolCallBlock {
-  type: 'tool_call';
-  entry: ToolCallEntry;
-  isReplay?: boolean;
-}
+export interface ExploringBlock { type: 'exploring'; isStreaming: boolean; isReplay?: boolean; entries: ToolCallEntry[]; }
+export interface ToolCallBlock { type: 'tool_call'; entry: ToolCallEntry; isReplay?: boolean; }
 export interface PlanEntry {
   content: string;
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled' | 'failed';
   priority?: string;
 }
 
-export interface PlanBlock {
-  type: 'plan';
-  entries: PlanEntry[];
-  isReplay?: boolean;
-}
+export interface PlanBlock { type: 'plan'; entries: PlanEntry[]; isReplay?: boolean; }
 
-export type RichContentBlock =
-  | TextBlock
-  | ImageBlock
-  | AudioBlock
-  | VideoBlock
-  | FileBlock
-  | CodeReferenceBlock
-  | ExploringBlock
-  | ToolCallBlock
-  | PlanBlock;
+export type RichContentBlock = TextBlock | ImageBlock | AudioBlock | VideoBlock | FileBlock | CodeReferenceBlock | ExploringBlock | ToolCallBlock | PlanBlock;
+
+export interface MessageConfigOption {
+  id: string;
+  name: string;
+  value: string;
+  displayValue?: string;
+}
 
 export interface Message {
   id: string;
@@ -122,8 +80,7 @@ export interface Message {
   // Meta-information
   agentId?: string;
   agentName?: string;
-  modelName?: string;
-  modeName?: string;
+  configOptions?: MessageConfigOption[];
   promptStartedAtMillis?: number;
   duration?: number;
   contextTokensUsed?: number;
@@ -149,10 +106,38 @@ export interface ReasoningEffortOption {
   description?: string;
 }
 
+export interface ConfigOptionValue {
+  value: string;
+  name: string;
+  description?: string;
+}
+
+export interface ConfigOption {
+  id: string;
+  name: string;
+  description?: string;
+  category?: string;
+  type: 'select' | 'boolean';
+  currentValue: string;
+  options: ConfigOptionValue[];
+}
+
+export interface SessionConfigOptionsPayload {
+  chatId: string;
+  configOptions: ConfigOption[];
+  reasoningEffortsByModel: Record<string, ConfigOptionValue[]>;
+}
+
 export interface AvailableCommand {
   name: string;
   description: string;
   inputHint?: string | null;
+}
+
+export interface AgentAuthMethod {
+  id: string;
+  name: string;
+  description: string;
 }
 
 export interface AgentOption {
@@ -164,23 +149,24 @@ export interface AgentOption {
   availableModels?: ModelOption[];
   currentModeId?: string;
   availableModes?: ModeOption[];
-  availableModesByModel?: Record<string, ModeOption[]>;
   currentReasoningEffortId?: string;
   availableReasoningEfforts?: ReasoningEffortOption[];
-  reasoningEffortsByModel?: Record<string, ReasoningEffortOption[]>;
+  configOptions?: ConfigOption[];
+  reasoningEffortsByModel?: Record<string, ConfigOptionValue[]>;
   downloaded?: boolean;
   downloadedKnown?: boolean;
   downloadPath?: string;
   downloading?: boolean;
   downloadStatus?: string;
   disabledModels?: string[];
-  hasAuthentication?: boolean;
-  authAuthenticated?: boolean;
-  authKnown?: boolean;
-  authLoading?: boolean;
+  loginMethod?: string | null;
+  authMethods?: AgentAuthMethod[];
   authError?: string;
   authenticating?: boolean;
-  authUiMode?: 'login_logout' | 'manage_terminal';
+  authenticatingMethodId?: string;
+  loginStatusSupported?: boolean;
+  loggedIn?: boolean | null;
+  logoutAvailable?: boolean;
   initializing?: boolean;
   initializationDetail?: string;
   initializationError?: string;
@@ -226,15 +212,7 @@ export interface TabUiFlags {
   processing: boolean;
 }
 
-export type TabType =
-  | 'chat'
-  | 'management'
-  | 'design'
-  | 'history'
-  | 'mcp'
-  | 'system-instructions'
-  | 'prompt-library'
-  | 'settings';
+export type TabType = 'chat' | 'management' | 'design' | 'history' | 'mcp' | 'system-instructions' | 'prompt-library' | 'settings';
 
 export interface ChatTab {
   id: string;
@@ -269,6 +247,7 @@ export interface HistorySessionMeta {
   allAdapterNames?: string[];
   modelId?: string;
   modeId?: string;
+  configOptions?: Record<string, string>;
   projectPath: string;
   title: string;
   filePath: string;
@@ -279,17 +258,7 @@ export interface HistorySessionMeta {
 export interface ContentChunk {
   chatId: string;
   role: 'user' | 'assistant';
-  type:
-    | 'text'
-    | 'thinking'
-    | 'image'
-    | 'audio'
-    | 'video'
-    | 'file'
-    | 'tool_call'
-    | 'tool_call_update'
-    | 'plan'
-    | 'prompt_done';
+  type: 'text' | 'thinking' | 'image' | 'audio' | 'video' | 'file' | 'tool_call' | 'tool_call_update' | 'plan' | 'prompt_done';
   text?: string;
   data?: string;
   path?: string;
@@ -306,10 +275,7 @@ export interface ContentChunk {
   planEntries?: PlanEntry[];
   agentId?: string;
   agentName?: string;
-  modelId?: string;
-  modelName?: string;
-  modeId?: string;
-  modeName?: string;
+  configOptions?: MessageConfigOption[];
   promptStartedAtMillis?: number;
   durationSeconds?: number;
   contextTokensUsed?: number;
@@ -338,10 +304,7 @@ export interface ReplayContentBlock {
 export interface ConversationAssistantMetadata {
   agentId?: string;
   agentName?: string;
-  modelId?: string;
-  modelName?: string;
-  modeId?: string;
-  modeName?: string;
+  configOptions?: MessageConfigOption[];
   promptStartedAtMillis?: number;
   durationSeconds?: number;
   contextTokensUsed?: number;
@@ -369,6 +332,7 @@ export interface ConversationReplayLoadedPayload {
   chatId: string;
   data: ConversationReplayData;
 }
+
 
 export interface ToolCallDiff {
   path: string;
@@ -487,12 +451,10 @@ export interface BridgeOperationResultPayload {
 
 export interface AudioTranscriptionFeatureState {
   id: string;
-  title: string;
   installed: boolean;
   installing: boolean;
   supported: boolean;
   status: string;
-  detail: string;
   installPath: string;
 }
 
@@ -522,15 +484,7 @@ export interface GitCommitGenerationSettings {
 export interface GlobalSettings {
   audioNotificationsEnabled: boolean;
   uiFontSizeOffsetPx: number;
-  userMessageBackgroundStyle:
-    | 'default'
-    | 'blue'
-    | 'background-secondary'
-    | 'primary'
-    | 'secondary'
-    | 'accent'
-    | 'input'
-    | 'editor-bg';
+  userMessageBackgroundStyle: 'default' | 'blue' | 'background-secondary' | 'primary' | 'secondary' | 'accent' | 'input' | 'editor-bg';
   audioTranscription: AudioTranscriptionSettings;
   gitCommitGeneration: GitCommitGenerationSettings;
   quotaWidgetEnabled: boolean;
@@ -546,10 +500,8 @@ declare global {
     __startAgent?: (
       conversationId: string,
       adapterId?: string,
-      modelId?: string,
-      modeId?: string,
-      requestId?: string,
-      reasoningEffortId?: string
+      configValues?: Record<string, string>,
+      requestId?: string
     ) => void;
     __sendPrompt?: (
       conversationId: string,
@@ -557,11 +509,9 @@ declare global {
       requestId?: string,
       forkBase?: ForkConversationBase,
       adapterId?: string,
-      modelId?: string,
-      modeId?: string,
-      reasoningEffortId?: string
+      configValues?: Record<string, string>
     ) => void;
-    __requestAdapters?: () => void;
+    __requestAdapters?: (forceRefresh?: boolean) => void;
     __notifyReady?: () => void;
     __respondPermission?: (requestId: string, decision: string) => void;
     __cancelPrompt?: (conversationId: string, requestId?: string) => void;
@@ -576,8 +526,9 @@ declare global {
     __renameHistoryConversation?: (payload: { projectPath: string; conversationId: string; newTitle: string }) => void;
     __loadHistoryConversation?: (conversationId: string, projectPath: string, historyConversationId: string) => void;
     __recoverRuntime?: (reason?: string, requestId?: string) => void;
-    __loginAgent?: (adapterId: string) => void;
+    __loginAgent?: (adapterId: string, methodId: string) => void;
     __logoutAgent?: (adapterId: string) => void;
+    __cancelAgentAuth?: (adapterId: string) => void;
     __fetchAdapterUsage?: (adapterId: string) => void;
     __openAgentCli?: (adapterId: string) => void;
     __openHistoryConversationCli?: (payload: { projectPath: string; conversationId: string }) => void;
@@ -603,8 +554,10 @@ declare global {
     __onStatus?: (chatId: string, status: string) => void;
     __onSessionId?: (chatId: string, id: string) => void;
     __onAdapters?: (adapters: AgentOption[]) => void;
+    __onAdapterRefreshState?: (refreshing: boolean) => void;
     __onAvailableCommands?: (adapterId: string, commands: AvailableCommand[]) => void;
     __onMode?: (chatId: string, modeId: string) => void;
+    __onSessionConfigOptions?: (payload: SessionConfigOptionsPayload) => void;
     __onPermissionRequest?: (request: PermissionRequest) => void;
     __onHistoryList?: (list: HistorySessionMeta[]) => void;
     __onHistoryDeleteResult?: (result: HistoryDeleteResultPayload) => void;
@@ -622,9 +575,6 @@ declare global {
     __onMcpStatus?: (update: unknown) => void;
     __onFilesResult?: (filesJson: unknown) => void;
     __searchFiles?: (query: string) => void;
-    __onFileIconResult?: (result: { path: string; icon: string }) => void;
-    __onThemeChanged?: () => void;
-    __requestFileIcon?: (path: string) => void;
     __loadMcpServers?: () => void;
     __saveMcpServers?: (json: string) => void;
     __checkMcpStatus?: () => void;

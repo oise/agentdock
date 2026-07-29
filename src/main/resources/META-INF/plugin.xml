@@ -1,8 +1,7 @@
 <idea-plugin>
     <id>agentdock</id>
     <name>Agent Dock</name>
-    <version>9999.0.0-dev</version>
-    <update-url></update-url>
+    <version>1.5.0</version>
     <vendor url="https://github.com/edgarsr/agentdock">EdgarsR</vendor>
 
     <description><![CDATA[
@@ -13,13 +12,15 @@
             <li>Codex</li>
             <li>Cursor</li>
             <li>GitHub Copilot</li>
+            <li>Grok Build</li>
             <li>Kilo</li>
+            <li>Kimi Code</li>
             <li>OpenCode</li>
             <li>Qoder</li>
         </ul>
         <h4>Features:</h4>
         <ul>
-            <li>Installation, update, and uninstall flows for supported AI agents inside the plugin.</li>
+            <li>Installation, update, uninstall, login, and logout flows for supported AI agents inside the plugin.</li>
             <li>Communication with supported AI agents through ACP (Agent Client Protocol) in a GUI.</li>
             <li>Structured display of agent output, including tool use, thinking blocks, terminal commands, plans, file edits, and diffs.</li>
             <li>Review of files changed by an agent, with options to accept selected changes or revert them from the IDE.</li>
@@ -35,6 +36,7 @@
             <li>AI agents can be switched within the same chat while preserving the session context.</li>
             <li>MCP server configuration for additional agent tools and external resources.</li>
             <li>Reusable prompts can be saved in the prompt library and inserted into chat when needed.</li>
+            <li>Prompts can be queued while an agent is already working.</li>
             <li>System instructions can be managed and applied to agent sessions.</li>
             <li>Git commit messages can be generated from the current changes.</li>
         </ul>
@@ -48,13 +50,18 @@
 
     <change-notes><![CDATA[
         <ul>
-            <li>Fixed ACP runtime option discovery by supporting configOptions for models, modes, and reasoning effort.</li>
-            <li>Added a separate reasoning effort selector for ACP agents that expose it independently from model selection.</li>
-            <li>Removed deprecated JetBrains Terminal API usage from IDE terminal command launch handling.</li>
+            <li>Added support for Grok Build.</li>
+            <li>Added support for Kimi Code.</li>
+            <li>Updated the Qoder integration.</li>
+            <li>Updated the GitHub Copilot integration and changed its usage data source.</li>
+            <li>Reworked agent management, including login and logout flows and the related UI.</li>
+            <li>Added a menu exposing all agent configuration options.</li>
+            <li>Fixed minor front-end issues.</li>
         </ul>
     ]]></change-notes>
 
      <depends>com.intellij.modules.platform</depends>
+     <depends optional="true" config-file="agentdock-withJcef.xml">com.intellij.modules.jcef</depends>
      <depends optional="true" config-file="agentdock-withTerminal.xml">org.jetbrains.plugins.terminal</depends>
      <extensions defaultExtensionNs="com.intellij">
         <applicationService serviceImplementation="agentdock.acp.AcpQuotaService"/>

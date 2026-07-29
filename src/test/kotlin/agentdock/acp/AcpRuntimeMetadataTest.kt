@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class AcpRuntimeMetadataTest {
     @Test
@@ -47,6 +48,22 @@ class AcpRuntimeMetadataTest {
                     { "value": "medium", "name": "Medium", "description": "Balanced" },
                     { "value": "high", "name": "High", "description": "Deeper reasoning" }
                   ]
+                },
+                {
+                  "id": "verbosity",
+                  "name": "Verbosity",
+                  "type": "select",
+                  "currentValue": "brief",
+                  "options": [
+                    { "value": "brief", "name": "Brief" },
+                    { "value": "detailed", "name": "Detailed" }
+                  ]
+                },
+                {
+                  "id": "use_tools",
+                  "name": "Use tools",
+                  "type": "boolean",
+                  "currentValue": true
                 }
               ]
             }
@@ -64,10 +81,12 @@ class AcpRuntimeMetadataTest {
         assertEquals("reasoning_effort", metadata.reasoningEffortConfigId)
         assertEquals("medium", metadata.currentReasoningEffortId)
         assertEquals(listOf("low", "medium", "high"), metadata.availableReasoningEfforts.map { it.id })
+        assertEquals("brief", metadata.configOptions.first { it.id == "verbosity" }.currentValue)
+        assertEquals("true", metadata.configOptions.first { it.id == "use_tools" }.currentValue)
     }
 
     @Test
-    fun `runtime metadata falls back to legacy models and modes json`() {
+    fun `runtime metadata ignores legacy models and modes json`() {
         val response = Json.parseToJsonElement(
             """
             {
@@ -90,14 +109,14 @@ class AcpRuntimeMetadataTest {
             """.trimIndent()
         ).jsonObject
 
-        val metadata = runtimeMetadataFromSessionResponseJson(response, adapterInfo(disabledModes = listOf("plan")))
+        val metadata = runtimeMetadataFromSessionResponseJson(response, adapterInfo())
 
         assertEquals(null, metadata.modelConfigId)
-        assertEquals("legacy-a", metadata.currentModelId)
-        assertEquals(listOf("legacy-a", "legacy-b"), metadata.availableModels.map { it.modelId })
+        assertEquals(null, metadata.currentModelId)
+        assertEquals(emptyList(), metadata.availableModels)
         assertEquals(null, metadata.modeConfigId)
-        assertEquals("code", metadata.currentModeId)
-        assertEquals(listOf("code"), metadata.availableModes.map { it.id })
+        assertEquals(null, metadata.currentModeId)
+        assertEquals(emptyList(), metadata.availableModes)
         assertEquals(null, metadata.reasoningEffortConfigId)
         assertEquals(null, metadata.currentReasoningEffortId)
         assertEquals(emptyList(), metadata.availableReasoningEfforts)
@@ -214,6 +233,35 @@ class AcpRuntimeMetadataTest {
     }
 
     @Test
+    fun `runtime metadata clears current model when every model is disabled`() {
+        val response = Json.parseToJsonElement(
+            """
+            {
+              "configOptions": [
+                {
+                  "id": "model",
+                  "category": "model",
+                  "type": "select",
+                  "currentValue": "disabled-model",
+                  "options": [
+                    { "value": "disabled-model", "name": "Disabled model" }
+                  ]
+                }
+              ]
+            }
+            """.trimIndent()
+        ).jsonObject
+
+        val metadata = runtimeMetadataFromSessionResponseJson(
+            response,
+            adapterInfo(disabledModels = listOf("disabled-model"))
+        )
+
+        assertEquals(null, metadata.currentModelId)
+        assertEquals(emptyList(), metadata.availableModels)
+    }
+
+    @Test
     fun `runtime metadata uses config option reasoning effort`() {
         val response = Json.parseToJsonElement(
             """
@@ -281,6 +329,91 @@ class AcpRuntimeMetadataTest {
         val metadata = runtimeMetadataFromConfigOptionsJson(configOptions, adapterInfo())
         assertEquals("reasoning_effort", metadata.reasoningEffortConfigId)
         assertEquals("high", metadata.currentReasoningEffortId)
+    }
+
+    @Test
+    fun `fresh snapshot replaces adapter options and preserves untouched model effort catalog`() {
+        val existing = CachedAdapterConfigOptions(
+            adapterId = "codex",
+            adapterVersion = "1.0.0",
+            refreshedAtMillis = 100L,
+            configOptions = listOf(
+                AcpConfigOption(
+                    "reasoning_effort", "Reasoning", category = "thought_level", type = "select",
+                    currentValue = "high",
+                    options = listOf(AcpConfigOptionValue("high", "High"))
+                )
+            ),
+            reasoningEffortsByModel = mapOf(
+                "model-a" to listOf(AcpConfigOptionValue("high", "High", null)),
+                "model-b" to listOf(AcpConfigOptionValue("low", "Low", null))
+            )
+        )
+        val fresh = AcpClientService.AdapterRuntimeMetadata(
+            configOptions = listOf(
+                AcpConfigOption(
+                    "model", "Model", category = "model", type = "select", currentValue = "model-a",
+                    options = listOf(
+                        AcpConfigOptionValue("model-a", "Model A", null),
+                        AcpConfigOptionValue("model-b", "Model B", null)
+                    )
+                ),
+                AcpConfigOption(
+                    "mode", "Mode", category = "mode", type = "select", currentValue = "new-mode",
+                    options = listOf(AcpConfigOptionValue("new-mode", "New mode", null))
+                )
+            )
+        )
+
+        val updated = existing.updatedWithSnapshot(adapterInfo(), "1.0.0", fresh)
+
+        assertEquals(100L, updated.refreshedAtMillis)
+        assertEquals(emptyList(), updated.reasoningEffortsByModel["model-a"])
+        assertEquals(listOf("low"), updated.reasoningEffortsByModel["model-b"]?.map { it.value })
+        assertEquals("reasoning_effort", updated.configOptions.first { it.isReasoning() }.id)
+        val runtime = updated.toRuntimeMetadata(adapterInfo())
+        assertEquals("new-mode", runtime.currentModeId)
+        assertEquals(null, runtime.currentReasoningEffortId)
+    }
+
+    @Test
+    fun `cache preserves mode and effort options when adapter has no model selector`() {
+        val metadata = AcpClientService.AdapterRuntimeMetadata(
+            configOptions = listOf(
+                AcpConfigOption(
+                    "mode", "Mode", category = "mode", type = "select", currentValue = "build",
+                    options = listOf(AcpConfigOptionValue("build", "Build", null))
+                ),
+                AcpConfigOption(
+                    "reasoning_effort", "Reasoning", category = "thought_level", type = "select",
+                    currentValue = "medium",
+                    options = listOf(AcpConfigOptionValue("medium", "Medium", null))
+                ),
+                AcpConfigOption(
+                    "verbosity", "Verbosity", type = "select", currentValue = "brief",
+                    options = listOf(AcpConfigOptionValue("brief", "Brief", null))
+                )
+            )
+        )
+
+        val existing: CachedAdapterConfigOptions? = null
+        val cached = existing.updatedWithSnapshot(adapterInfo(), "1.0.0", metadata, refreshedAtMillis = 100L)
+        val restored = cached.toRuntimeMetadata(adapterInfo())
+
+        assertEquals("build", restored.currentModeId)
+        assertEquals(listOf("build"), restored.availableModes.map { it.id })
+        assertEquals("medium", restored.currentReasoningEffortId)
+        assertEquals(listOf("medium"), restored.availableReasoningEfforts.map { it.id })
+        assertEquals("brief", restored.configOptions.first { it.id == "verbosity" }.currentValue)
+    }
+
+    @Test
+    fun `set config option response requires complete config options state`() {
+        val response = Json.parseToJsonElement("{}").jsonObject
+
+        assertFailsWith<IllegalStateException> {
+            runtimeMetadataFromSetConfigOptionResponseJson(response, adapterInfo())
+        }
     }
 
     private fun adapterInfo(

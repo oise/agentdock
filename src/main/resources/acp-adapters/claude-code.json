@@ -9,7 +9,12 @@
   },
   "disabledModels": [],
   "disabledModes": [],
-  "patches": [],
+  "loginMethod": "acp",
+  "logoutMethod": "acp",
+  "loginStatusMethod": "claudeCodeCliAuthStatus",
+  "patches": [
+    "@patches/claude-code/disable-auto-updater.patch"
+  ],
   "cli": {
     "executable": {
       "win": "node.exe",
@@ -28,24 +33,5 @@
   "agentVersionConfig": {
     "args": ["--cli", "--version"],
     "pattern": "(\\d+\\.\\d+[\\d.\\-]*)"
-  },
-  "authConfig": {
-    "uiMode": "login_logout",
-    "loginMode": "background",
-    "statusArgs": [
-      "--cli",
-      "auth",
-      "status"
-    ],
-    "loginArgs": [
-      "--cli",
-      "auth",
-      "login"
-    ],
-    "logoutArgs": [
-      "--cli",
-      "auth",
-      "logout"
-    ]
   }
 }

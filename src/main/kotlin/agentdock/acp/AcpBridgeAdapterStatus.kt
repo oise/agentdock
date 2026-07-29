@@ -1,14 +1,48 @@
 package agentdock.acp
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import agentdock.IdeTheme
 import agentdock.utils.escapeForJsString
+import com.intellij.openapi.diagnostic.Logger
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import com.agentclientprotocol.model.AuthMethod
+
+private const val RUNTIME_CHECK_MAX_ATTEMPTS = 3
+private const val RUNTIME_CHECK_RETRY_DELAY_MS = 1_000L
+private val LOG = Logger.getInstance("agentdock.acp.AcpBridgeAdapterStatus")
 
 private fun downloadProbeKey(target: AcpExecutionTarget, adapterId: String) = "${target.name}:$adapterId"
+
+private suspend fun runRuntimeCheckWithRetries(check: suspend (attempt: Int) -> Boolean): Boolean {
+    for (attempt in 1..RUNTIME_CHECK_MAX_ATTEMPTS) {
+        if (check(attempt)) return true
+        if (attempt < RUNTIME_CHECK_MAX_ATTEMPTS) delay(RUNTIME_CHECK_RETRY_DELAY_MS)
+    }
+    return false
+}
+
+private fun <K> AcpBridge.launchRuntimeCheck(
+    jobs: ConcurrentHashMap<K, Job>,
+    key: K,
+    check: suspend () -> Unit
+) {
+    val job = scope.launch(Dispatchers.IO, start = CoroutineStart.LAZY) { check() }
+    job.invokeOnCompletion {
+        jobs.remove(key, job)
+        finishFullAdapterRefreshIfIdle()
+    }
+    val selected = jobs.compute(key) { _, current ->
+        current?.takeUnless { it.isCompleted } ?: job
+    } === job
+    if (selected) job.start() else job.cancel()
+}
 
 private fun parseAgentVersion(config: AcpAdapterConfig.AgentVersionConfig, output: String): String? {
     if (output.isBlank()) return null
@@ -53,10 +87,6 @@ private fun AcpAdapterConfig.ModeInfo.toReasoningEffortPayload(): AdapterReasoni
     return AdapterReasoningEffortPayload(id, name, description.orEmpty())
 }
 
-private fun AcpAdapterConfig.ModeInfo.toModePayload(): AdapterModePayload {
-    return AdapterModePayload(id, name, description.orEmpty())
-}
-
 internal fun AcpBridge.setDownloadProbeState(
     adapterId: String,
     target: AcpExecutionTarget,
@@ -72,18 +102,13 @@ internal fun AcpBridge.setDownloadProbeState(
     )
 }
 
+@OptIn(com.agentclientprotocol.annotations.UnstableApi::class)
 private fun AcpBridge.buildAdapterPayload(
     info: AcpAdapterConfig.AdapterInfo,
     target: AcpExecutionTarget,
-    includeRuntimeChecks: Boolean,
-    runtimeChecksReady: Boolean,
-    idsToFetch: MutableList<String>
+    preferences: AcpAgentPreferencesState
 ): AdapterPayload {
-    val probeState = if (includeRuntimeChecks) {
-        downloadProbeStates[downloadProbeKey(target, info.id)]
-    } else {
-        null
-    }
+    val probeState = downloadProbeStates[downloadProbeKey(target, info.id)]
     val downloadedKnown = probeState?.downloadedKnown == true
     val downloaded = probeState?.downloaded
     val initStatus = service.adapterInitializationStatus(info.id)
@@ -91,7 +116,27 @@ private fun AcpBridge.buildAdapterPayload(
 
     val dlStatus = downloadStatuses[info.id] ?: ""
     val isDownloading = dlStatus.isNotEmpty() && !dlStatus.startsWith("Error")
-    val hasAuthentication = info.authConfig != null
+    val usesAcpLogin = info.loginMethod == "acp"
+    val authMethods = if (usesAcpLogin) {
+        service.adapterAuthMethods(info.id).mapNotNull { method ->
+            when (method) {
+                is AuthMethod.AgentAuth, is AuthMethod.TerminalAuth -> AdapterAuthMethodPayload(
+                    id = method.id.value,
+                    name = method.name,
+                    description = method.description.orEmpty()
+                )
+                else -> null
+            }
+        }
+    } else {
+        emptyList()
+    }
+    val logoutAvailable = when (info.logoutMethod) {
+        "acp" -> service.isAdapterLogoutAvailable(info.id)
+        "cli" -> info.logoutArgs.isNotEmpty()
+        "copilotRpc" -> true
+        else -> false
+    }
     val installedVersion = probeState?.installedVersion
     val rawAgentVersion = agentVersionStates[info.id]
     val agentVersion = rawAgentVersion?.takeIf { it != installedVersion }
@@ -102,7 +147,7 @@ private fun AcpBridge.buildAdapterPayload(
         (AcpAdapterUpdates.isUpdateCheckSupported(info) || isStaticUpdateAvailable)
     val updateKey = "${target.name}:${info.id}"
     val updateChecking = updateCheckJobs[updateKey]?.isActive == true
-    val latestVersion = if (!runtimeChecksReady || !updateSupported) {
+    val latestVersion = if (!updateSupported) {
         null
     } else if (AcpAdapterUpdates.isUpdateCheckSupported(info)) {
         latestVersionStates[info.id]
@@ -111,96 +156,54 @@ private fun AcpBridge.buildAdapterPayload(
     }
     val updateKnown = updateSupported && !latestVersion.isNullOrBlank() && !installedVersion.isNullOrBlank()
     val updateAvailable = updateKnown && latestVersion != installedVersion
-    val authUiMode = info.authConfig?.uiMode ?: "login_logout"
-    val isAuthenticating = AcpAuthService.isAuthenticating(info.id)
+    val isAuthenticating = authActionJobs[info.id]?.isActive == true
     val cliAvailable = downloaded == true && info.cli != null && cli.isIdeTerminalAvailable()
     val rawInitError = service.adapterInitializationError(info.id) ?: ""
     val initializationDetail = if (isInitializing) service.adapterInitializationDetail(info.id).orEmpty() else ""
-    val authRequiredByInit = rawInitError.startsWith("[AUTH_REQUIRED]")
-    val initError = if (authRequiredByInit) "" else rawInitError
-
-    val shouldFetchAuth = downloadedKnown &&
-        downloaded == true && hasAuthentication && authUiMode == "login_logout" &&
-        !isDownloading && !isAuthenticating
-
-    val needsAuthFetch = shouldFetchAuth && !authStates.containsKey(info.id)
-    if (needsAuthFetch) {
-        idsToFetch.add(info.id)
-    }
-
-    val authAuthenticated = when {
-        !downloadedKnown -> null
-        !hasAuthentication -> null
-        authRequiredByInit -> false
-        authUiMode != "login_logout" -> null
-        !shouldFetchAuth || needsAuthFetch -> null
-        else -> authStates[info.id] == true
-    }
-    val authKnown = when {
-        !downloadedKnown -> false
-        !hasAuthentication -> true
-        authRequiredByInit -> true
-        authUiMode != "login_logout" -> true
-        else -> authAuthenticated != null
-    }
-    val authLoading = needsAuthFetch || authFetchJobs[info.id]?.isActive == true
+    val initError = rawInitError
 
     val isReady = when {
         !downloadedKnown -> null
-        authRequiredByInit -> false
         initStatus == AcpClientService.AdapterInitializationStatus.NotStarted -> false
         initStatus == AcpClientService.AdapterInitializationStatus.Failed -> false
         initStatus != AcpClientService.AdapterInitializationStatus.Ready -> null
         !service.isAdapterReady(info.id) -> false
-        !hasAuthentication -> true
-        authUiMode != "login_logout" -> true
-        authAuthenticated == null -> null
-        else -> authAuthenticated
+        else -> true
     }
     val readyKnown = isReady != null
 
-    val savedPreference = AcpAgentPreferencesStore.preferenceFor(info.id)
+    val savedPreference = preferences.agents[info.id]
     val rawRuntimeMetadata = service.adapterRuntimeMetadata(info.id)
-        ?: AcpClientService.AdapterRuntimeMetadata(
-            currentModelId = null,
-            availableModels = emptyList(),
-            currentModeId = null,
-            availableModes = emptyList(),
-            currentReasoningEffortId = null,
-            availableReasoningEfforts = emptyList()
-        )
-    val resolvedCurrentModelId = savedPreference?.modelId
-        ?.takeIf { preferred ->
-            rawRuntimeMetadata.availableModels.isEmpty() || rawRuntimeMetadata.availableModels.any { it.modelId == preferred }
-        }
+        ?: AcpClientService.AdapterRuntimeMetadata(emptyList())
+    val preferredValues = savedPreference?.configOptions.orEmpty()
+    val modelOption = rawRuntimeMetadata.configOptions.firstOrNull { it.matchesCategory("model") }
+    val selectedModelId = modelOption?.id?.let { preferredValues[it] }
+        ?.takeIf { preferred -> modelOption?.accepts(preferred) == true }
         ?: rawRuntimeMetadata.currentModelId
-    val resolvedAvailableModes = rawRuntimeMetadata.modesForModel(resolvedCurrentModelId)
-    val resolvedCurrentModeId = savedPreference?.modeId
-        ?.takeIf { preferred -> resolvedAvailableModes.any { it.id == preferred } }
-        ?: rawRuntimeMetadata.currentModeId
-            ?.takeIf { current -> resolvedAvailableModes.any { it.id == current } }
-        ?: resolvedAvailableModes.firstOrNull()?.id
-    val resolvedAvailableReasoningEfforts = rawRuntimeMetadata.reasoningEffortsForModel(resolvedCurrentModelId)
-    val resolvedCurrentReasoningEffortId = savedPreference?.reasoningEffortId
-        ?.takeIf { preferred -> resolvedAvailableReasoningEfforts.any { it.id == preferred } }
-        ?: rawRuntimeMetadata.currentReasoningEffortId
-            ?.takeIf { current -> resolvedAvailableReasoningEfforts.any { it.id == current } }
-        ?: resolvedAvailableReasoningEfforts.firstOrNull()?.id
-    val resolvedReasoningEffortConfigId = rawRuntimeMetadata.reasoningEffortConfigId
     val runtimeMetadata = rawRuntimeMetadata.copy(
-        currentModelId = resolvedCurrentModelId,
-        currentModeId = resolvedCurrentModeId,
-        availableModes = resolvedAvailableModes,
-        currentReasoningEffortId = resolvedCurrentReasoningEffortId,
-        availableReasoningEfforts = resolvedAvailableReasoningEfforts,
-        reasoningEffortConfigId = resolvedReasoningEffortConfigId
+        configOptions = rawRuntimeMetadata.configOptions.map { option ->
+            val values = if (
+                option.matchesCategory("thought_level") || option.matchesCategory("reasoning_effort")
+            ) {
+                rawRuntimeMetadata.reasoningEffortsByModel[selectedModelId] ?: option.options
+            } else {
+                option.options
+            }
+            val candidate = preferredValues[option.id]
+            val resolved = candidate
+                ?.takeIf { option.copy(options = values).accepts(it) }
+                ?: option.currentValue.takeIf { option.type != "select" || values.any { value -> value.value == it } }
+                ?: values.firstOrNull()?.value
+                ?: option.currentValue
+            option.copy(currentValue = resolved, options = values)
+        }
     )
 
     return AdapterPayload(
         id = info.id,
         name = info.name,
         iconPath = loadIconDataUrl(info.resolveIconPath()),
-        isLastUsed = info.id == AcpAgentPreferencesStore.lastAgentId(),
+        isLastUsed = info.id == preferences.lastAgentId,
         currentModelId = runtimeMetadata.currentModelId ?: "",
         availableModels = runtimeMetadata.availableModels.map {
             AdapterModelPayload(it.modelId, it.name, it.description.orEmpty())
@@ -209,26 +212,23 @@ private fun AcpBridge.buildAdapterPayload(
         availableModes = runtimeMetadata.availableModes.map {
             AdapterModePayload(it.id, it.name, it.description.orEmpty())
         },
-        availableModesByModel = runtimeMetadata.availableModesByModel.mapValues { (_, modes) ->
-            modes.map { it.toModePayload() }
-        },
         currentReasoningEffortId = runtimeMetadata.currentReasoningEffortId ?: "",
         availableReasoningEfforts = runtimeMetadata.availableReasoningEfforts.map {
             it.toReasoningEffortPayload()
         },
-        reasoningEffortsByModel = runtimeMetadata.availableReasoningEffortsByModel.mapValues { (_, efforts) ->
-            efforts.map { it.toReasoningEffortPayload() }
-        },
+        configOptions = runtimeMetadata.configOptions,
+        reasoningEffortsByModel = runtimeMetadata.reasoningEffortsByModel,
         downloaded = downloaded,
         downloadedKnown = downloadedKnown,
         downloadPath = if (downloaded == true) AcpAdapterPaths.getDownloadPath(info.id, target) else "",
-        hasAuthentication = hasAuthentication,
-        authAuthenticated = authAuthenticated,
-        authKnown = authKnown,
-        authLoading = authLoading,
-        authError = "",
+        loginMethod = info.loginMethod,
+        authMethods = authMethods,
         authenticating = isAuthenticating,
-        authUiMode = authUiMode,
+        authenticatingMethodId = authActionMethodIds[info.id].orEmpty(),
+        authError = authErrors[info.id].orEmpty(),
+        loginStatusSupported = info.loginStatusMethod != null,
+        loggedIn = loginStatusStates[info.id],
+        logoutAvailable = logoutAvailable,
         initializing = isInitializing,
         initializationDetail = initializationDetail,
         initializationError = initError,
@@ -254,52 +254,119 @@ private fun AcpBridge.ensureDownloadProbeStarted(
 ) {
     val key = downloadProbeKey(target, info.id)
     if (downloadProbeStates[key]?.downloadedKnown == true) return
-    if (downloadProbeJobs[key]?.isActive == true) return
 
-    downloadProbeJobs[key] = scope.launch(Dispatchers.IO) {
-        try {
-            val downloaded = AcpAdapterPaths.isDownloaded(adapterName = info.id, target = target)
-            val installedVersion = if (downloaded) {
-                AcpAdapterPaths.installedVersion(adapterName = info.id, target = target)
-            } else {
-                null
+    launchRuntimeCheck(downloadProbeJobs, key) {
+        val succeeded = runRuntimeCheckWithRetries { attempt ->
+            try {
+                val downloaded = AcpAdapterPaths.isDownloaded(adapterName = info.id, target = target)
+                downloadProbeStates[key] = AdapterDownloadProbeState(
+                    downloaded = downloaded,
+                    downloadedKnown = true,
+                    installedVersion = if (downloaded) AcpAdapterPaths.installedVersion(info.id, target) else null
+                )
+                if (
+                    downloaded &&
+                    !service.isAdapterReady(info.id) &&
+                    service.adapterInitializationStatus(info.id) != AcpClientService.AdapterInitializationStatus.Initializing
+                ) {
+                    service.initializeAdapterInBackground(info.id)
+                }
+                true
+            } catch (error: Exception) {
+                downloadProbeStates.remove(key)
+                LOG.warn(
+                    "Adapter download probe failed for '${info.id}' " +
+                        "(attempt $attempt/$RUNTIME_CHECK_MAX_ATTEMPTS)",
+                    error
+                )
+                false
             }
-            downloadProbeStates[key] = AdapterDownloadProbeState(
-                downloaded = downloaded,
-                downloadedKnown = true,
-                installedVersion = installedVersion
-            )
-        } catch (_: Exception) {
-            downloadProbeStates.remove(key)
-        } finally {
-            downloadProbeJobs.remove(key)
-            pushAdapters()
         }
+        pushAdapters(
+            includeRuntimeChecks = succeeded,
+            adapterIdToRefresh = info.id.takeIf { succeeded }
+        )
     }
 }
 
-internal fun AcpBridge.pushAdapters(includeRuntimeChecks: Boolean = true) {
+private fun AcpBridge.ensureLoginStatusCheckStarted(
+    info: AcpAdapterConfig.AdapterInfo,
+    target: AcpExecutionTarget,
+    force: Boolean = false
+) {
+    if (info.loginStatusMethod == null) return
+    val stageForFullRefresh = fullAdapterRefreshInProgress.get()
+    if (stageForFullRefresh && completedLoginStatusRefreshes.contains(info.id)) return
+    if (!force && loginStatusStates.containsKey(info.id)) return
+
+    launchRuntimeCheck(loginStatusJobs, info.id) {
+        runRuntimeCheckWithRetries { attempt ->
+            try {
+                val loggedIn = AcpLoginStatus.resolve(info, target)
+                if (loggedIn != null) {
+                    if (stageForFullRefresh) {
+                        pendingLoginStatusStates[info.id] = loggedIn
+                    } else {
+                        loginStatusStates[info.id] = loggedIn
+                    }
+                    true
+                } else {
+                    LOG.warn(
+                        "Login status check returned no result for '${info.id}' " +
+                            "(attempt $attempt/$RUNTIME_CHECK_MAX_ATTEMPTS)"
+                    )
+                    false
+                }
+            } catch (error: Exception) {
+                LOG.warn(
+                    "Login status check failed for '${info.id}' " +
+                        "(attempt $attempt/$RUNTIME_CHECK_MAX_ATTEMPTS)",
+                    error
+                )
+                false
+            }
+        }
+        if (stageForFullRefresh) completedLoginStatusRefreshes.add(info.id)
+        if (!stageForFullRefresh) pushAdapters()
+    }
+}
+
+internal fun AcpBridge.refreshAdapterLoginStatus(adapterId: String) {
+    val info = runCatching { AcpAdapterConfig.getAdapterInfo(adapterId) }.getOrNull()
+    if (info?.loginStatusMethod == null) {
+        pushAdapters()
+        return
+    }
+
+    val target = AcpAdapterPaths.getExecutionTarget()
+    loginStatusJobs.remove(adapterId)?.cancel()
+    pushAdapters()
+    ensureLoginStatusCheckStarted(info, target, force = true)
+}
+
+internal fun AcpBridge.pushAdapters(
+    includeRuntimeChecks: Boolean = false,
+    adapterIdToRefresh: String? = null
+) {
     try {
         val unique = linkedMapOf<String, AcpAdapterConfig.AdapterInfo>()
         AcpAdapterConfig.getAllAdapters().values.forEach { info -> unique[info.id] = info }
         val target = AcpAdapterPaths.getExecutionTarget()
-        val runtimeChecksReady = includeRuntimeChecks
 
         if (includeRuntimeChecks) {
             unique.values.forEach { info ->
+                if (adapterIdToRefresh != null && info.id != adapterIdToRefresh) return@forEach
                 ensureDownloadProbeStarted(info, target)
             }
         }
 
-        val idsToFetch = mutableListOf<String>()
+        val preferences = AcpAgentPreferencesStore.load()
 
         val adapters = unique.values.sortedBy { it.name.lowercase() }.map { info ->
             buildAdapterPayload(
                 info = info,
                 target = target,
-                includeRuntimeChecks = includeRuntimeChecks,
-                runtimeChecksReady = runtimeChecksReady,
-                idsToFetch = idsToFetch
+                preferences = preferences
             )
         }
 
@@ -312,30 +379,47 @@ internal fun AcpBridge.pushAdapters(includeRuntimeChecks: Boolean = true) {
             )
         }
 
-        for (id in idsToFetch) {
-            if (authFetchJobs[id]?.isActive == true) continue
-            authFetchJobs[id] = scope.launch(Dispatchers.IO) {
-                val authenticated = try { AcpAuthService.getAuthStatus(id).authenticated } catch (_: Exception) { true }
-                authStates[id] = authenticated
-                authFetchJobs.remove(id)
-                pushAdapters()
-            }
+        unique.values.forEach { info ->
+            if (!includeRuntimeChecks) return@forEach
+            if (adapterIdToRefresh != null && info.id != adapterIdToRefresh) return@forEach
+            if (info.loginStatusMethod == null) return@forEach
+            if (adapters.firstOrNull { it.id == info.id }?.downloaded != true) return@forEach
+            ensureLoginStatusCheckStarted(
+                info = info,
+                target = target,
+                force = fullAdapterRefreshInProgress.get()
+            )
         }
 
         unique.values.forEach { info ->
             if (!includeRuntimeChecks) return@forEach
+            if (adapterIdToRefresh != null && info.id != adapterIdToRefresh) return@forEach
             val key = "${target.name}:${info.id}"
             if (updateCheckJobs[key]?.isActive == true) return@forEach
             val downloaded = adapters.firstOrNull { it.id == info.id }?.downloaded == true
             if (!downloaded || !AcpAdapterUpdates.isUpdateCheckSupported(info)) return@forEach
             if (!latestVersionStates[info.id].isNullOrBlank()) return@forEach
-            updateCheckJobs[key] = scope.launch(Dispatchers.IO) {
-                try {
-                    AcpAdapterUpdates.latestAvailableVersion(info)?.let { latest ->
-                        latestVersionStates[info.id] = latest
+
+            launchRuntimeCheck(updateCheckJobs, key) {
+                runRuntimeCheckWithRetries { attempt ->
+                    try {
+                        val latest = AcpAdapterUpdates.latestAvailableVersion(info)
+                        if (!latest.isNullOrBlank()) {
+                            latestVersionStates[info.id] = latest
+                            return@runRuntimeCheckWithRetries true
+                        }
+                        LOG.warn(
+                            "Adapter update check returned no version for '${info.id}' " +
+                                "(attempt $attempt/$RUNTIME_CHECK_MAX_ATTEMPTS)"
+                        )
+                    } catch (error: Exception) {
+                        LOG.warn(
+                            "Adapter update check failed for '${info.id}' " +
+                                "(attempt $attempt/$RUNTIME_CHECK_MAX_ATTEMPTS)",
+                            error
+                        )
                     }
-                } finally {
-                    updateCheckJobs.remove(key)
+                    false
                 }
                 pushAdapters()
             }
@@ -343,6 +427,7 @@ internal fun AcpBridge.pushAdapters(includeRuntimeChecks: Boolean = true) {
 
         unique.values.forEach { info ->
             if (!includeRuntimeChecks) return@forEach
+            if (adapterIdToRefresh != null && info.id != adapterIdToRefresh) return@forEach
             if (info.agentVersionConfig == null) return@forEach
             if (agentVersionJobs[info.id]?.isActive == true) return@forEach
             val adapterPayload = adapters.firstOrNull { it.id == info.id }
@@ -350,57 +435,110 @@ internal fun AcpBridge.pushAdapters(includeRuntimeChecks: Boolean = true) {
             val isDownloading = adapterPayload.downloadStatus.isNotEmpty() && !adapterPayload.downloadStatus.startsWith("Error")
             if (isDownloading) return@forEach
             if (!agentVersionStates[info.id].isNullOrBlank()) return@forEach
-            agentVersionJobs[info.id] = scope.launch(Dispatchers.IO) {
-                try {
-                    val cmd = AcpAuthService.buildAgentVersionCommand(info)
-                    if (!cmd.isNullOrEmpty()) {
-                        val downloadPath = AcpAdapterPaths.getDownloadPath(info.id, target)
-                        val workDir = if (downloadPath.isNotBlank()) File(downloadPath) else null
-                        val builder = ProcessBuilder(cmd)
-                            .also { pb -> if (workDir != null) pb.directory(workDir) }
-                            .redirectErrorStream(true)
-                        AcpNodeRuntimeResolver.resolveAvailable()?.let { AcpNodeRuntimeResolver.applyTo(builder, it) }
-                        val proc = builder.start()
-                        val output = proc.inputStream.bufferedReader().use { it.readText() }.trim()
-                        val finished = proc.waitFor(10L, TimeUnit.SECONDS)
-                        if (!finished) proc.destroyForcibly()
-                        else {
-                            val version = parseAgentVersion(info.agentVersionConfig, output)
-                            if (!version.isNullOrBlank()) agentVersionStates[info.id] = version
+
+            launchRuntimeCheck(agentVersionJobs, info.id) {
+                runRuntimeCheckWithRetries { attempt ->
+                    try {
+                        val cmd = AcpAgentVersionCommand.buildAgentVersionCommand(info)
+                        if (cmd.isNullOrEmpty()) {
+                            LOG.warn(
+                                "Agent version command is unavailable for '${info.id}' " +
+                                    "(attempt $attempt/$RUNTIME_CHECK_MAX_ATTEMPTS)"
+                            )
+                        } else {
+                            val workDir = AcpAdapterPaths.getDownloadPath(info.id, target)
+                                .takeIf { it.isNotBlank() }
+                                ?.let(::File)
+                            val builder = ProcessBuilder(cmd)
+                                .also { process -> if (workDir != null) process.directory(workDir) }
+                                .redirectErrorStream(true)
+                            AcpNodeRuntimeResolver.resolveAvailable()
+                                ?.let { AcpNodeRuntimeResolver.applyTo(builder, it) }
+                            val process = builder.start()
+                            val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
+                            if (!process.waitFor(10L, TimeUnit.SECONDS)) {
+                                process.destroyForcibly()
+                                LOG.warn(
+                                    "Agent version command timed out for '${info.id}' " +
+                                        "(attempt $attempt/$RUNTIME_CHECK_MAX_ATTEMPTS)"
+                                )
+                            } else {
+                                val version = parseAgentVersion(info.agentVersionConfig, output)
+                                if (!version.isNullOrBlank()) {
+                                    agentVersionStates[info.id] = version
+                                    return@runRuntimeCheckWithRetries true
+                                }
+                                LOG.warn(
+                                    "Unable to parse agent version for '${info.id}' " +
+                                        "(attempt $attempt/$RUNTIME_CHECK_MAX_ATTEMPTS)"
+                                )
+                            }
                         }
+                    } catch (error: Exception) {
+                        LOG.warn(
+                            "Agent version check failed for '${info.id}' " +
+                                "(attempt $attempt/$RUNTIME_CHECK_MAX_ATTEMPTS)",
+                            error
+                        )
                     }
-                } catch (_: Exception) {
-                } finally {
-                    agentVersionJobs.remove(info.id)
+                    false
                 }
                 pushAdapters()
             }
         }
     } catch (_: Exception) {
+    } finally {
+        if (includeRuntimeChecks) finishFullAdapterRefreshIfIdle()
     }
 }
 
-internal fun AcpBridge.resetAuthStatusRefreshState() {
-    authFetchJobs.values.forEach { it.cancel() }
-    authFetchJobs.clear()
-    authStates.clear()
+internal fun AcpBridge.pushAdapterRefreshState(refreshing: Boolean) {
+    runOnEdt {
+        browser.cefBrowser.executeJavaScript(
+            "if(window.__onAdapterRefreshState) window.__onAdapterRefreshState($refreshing);",
+            browser.cefBrowser.url, 0
+        )
+    }
+}
+
+internal fun AcpBridge.finishFullAdapterRefreshIfIdle() {
+    if (!fullAdapterRefreshInProgress.get()) return
+    if (fullAdapterRefreshDispatching.get()) return
+    val hasActiveChecks =
+        downloadProbeJobs.values.any { !it.isCompleted } ||
+            loginStatusJobs.values.any { !it.isCompleted } ||
+            updateCheckJobs.values.any { !it.isCompleted } ||
+            agentVersionJobs.values.any { !it.isCompleted }
+    if (!hasActiveChecks) {
+        if (fullAdapterRefreshInProgress.compareAndSet(true, false)) {
+            loginStatusStates.putAll(pendingLoginStatusStates)
+            pendingLoginStatusStates.clear()
+            completedLoginStatusRefreshes.clear()
+            pushAdapters()
+            pushAdapterRefreshState(false)
+        }
+    }
+}
+
+internal fun AcpBridge.resetAdapterRefreshState() {
+    downloadStatuses.forEach { (adapterId, status) ->
+        if (status.startsWith("Error:")) {
+            downloadStatuses.remove(adapterId, status)
+        }
+    }
     downloadProbeJobs.values.forEach { it.cancel() }
     downloadProbeJobs.clear()
     downloadProbeStates.clear()
+    loginStatusJobs.values.forEach { it.cancel() }
+    loginStatusJobs.clear()
+    pendingLoginStatusStates.clear()
+    completedLoginStatusRefreshes.clear()
     updateCheckJobs.values.forEach { it.cancel() }
     updateCheckJobs.clear()
     latestVersionStates.clear()
     agentVersionJobs.values.forEach { it.cancel() }
     agentVersionJobs.clear()
     agentVersionStates.clear()
-    authActionJobs.values.forEach { it.cancel() }
-    authActionJobs.clear()
-    adapterInstallCancellations.values.forEach { it.cancel() }
-    adapterInstallCancellations.clear()
-    adapterInstallJobs.values.forEach { it.cancel() }
-    adapterInstallJobs.clear()
-    downloadStatuses.clear()
-    AcpAuthService.resetTransientState()
 }
 
 internal fun AcpBridge.resetDownloadProbeState(adapterId: String? = null) {
@@ -409,6 +547,14 @@ internal fun AcpBridge.resetDownloadProbeState(adapterId: String? = null) {
         downloadProbeJobs.values.forEach { it.cancel() }
         downloadProbeJobs.clear()
         downloadProbeStates.clear()
+        loginStatusJobs.values.forEach { it.cancel() }
+        loginStatusJobs.clear()
+        loginStatusStates.clear()
+        pendingLoginStatusStates.clear()
+        completedLoginStatusRefreshes.clear()
+        agentVersionJobs.values.forEach { it.cancel() }
+        agentVersionJobs.clear()
+        agentVersionStates.clear()
         return
     }
     targets.forEach { target ->
@@ -416,6 +562,19 @@ internal fun AcpBridge.resetDownloadProbeState(adapterId: String? = null) {
         downloadProbeJobs.remove(key)?.cancel()
         downloadProbeStates.remove(key)
     }
+    loginStatusJobs.remove(adapterId)?.cancel()
+    loginStatusStates.remove(adapterId)
+    pendingLoginStatusStates.remove(adapterId)
+    completedLoginStatusRefreshes.remove(adapterId)
     agentVersionJobs.remove(adapterId)?.cancel()
     agentVersionStates.remove(adapterId)
+}
+
+internal fun AcpBridge.resetUpdateCheckState(
+    adapterId: String,
+    target: AcpExecutionTarget = AcpAdapterPaths.getExecutionTarget()
+) {
+    val key = "${target.name}:$adapterId"
+    updateCheckJobs.remove(key)?.cancel()
+    latestVersionStates.remove(adapterId)
 }

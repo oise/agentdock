@@ -7,6 +7,11 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import agentdock.utils.atomicWriteText
+import agentdock.acp.AcpAdapterConfig
+import agentdock.acp.AcpClientService
+import agentdock.acp.deleteHistorySession
+import com.intellij.openapi.project.ProjectManager
+import kotlinx.coroutines.runBlocking
 import java.io.File
 
 internal object SessionListDeleteSupport {
@@ -16,22 +21,41 @@ internal object SessionListDeleteSupport {
             "codex" -> resolveCodexSourceFilePath(projectPath, sessionId)
             "github-copilot-cli" -> resolveGithubCopilotSourceFilePath(projectPath, sessionId)
             "cursor-cli" -> resolveCursorSourceFilePath(projectPath, sessionId)
-            "qoder" -> QoderCliHistory.resolveSourceFilePath(projectPath, sessionId)
             else -> ""
         }
     }
 
     fun deleteSession(projectPath: String, adapterName: String, sessionId: String, sourceFilePath: String?): Boolean {
+        when (runCatching { AcpAdapterConfig.getAdapterInfo(adapterName).sessionDeleteMethod }.getOrNull()) {
+            "grokCliSessionDelete" -> return GrokSessionHistory.grokCliSessionDelete(adapterName, projectPath, sessionId)
+            "kimiCodeSessionDelete" -> return KimiSessionHistory.kimiCodeSessionDelete(projectPath, sessionId)
+            null -> Unit
+            else -> return false
+        }
+
         return when (adapterName) {
             "claude-code" -> deleteClaudeSession(projectPath, sessionId, sourceFilePath)
             "codex" -> deleteCodexSession(sourceFilePath)
             "cursor-cli" -> deleteCursorSession(sourceFilePath)
             "github-copilot-cli" -> deleteGithubCopilotSession(sourceFilePath)
-            "kilo" -> runAgentHistoryCliCommand("kilo", projectPath, listOf("session", "delete", sessionId)) != null
-            "opencode" -> runAgentHistoryCliCommand("opencode", projectPath, listOf("session", "delete", sessionId)) != null
-            "qoder" -> QoderCliHistory.deleteQoderSession(sourceFilePath)
+            "kilo" -> runCatching {
+                runAgentHistoryCliCommand("kilo", projectPath, listOf("session", "delete", sessionId))
+            }.isSuccess
+            "opencode" -> runCatching {
+                runAgentHistoryCliCommand("opencode", projectPath, listOf("session", "delete", sessionId))
+            }.isSuccess
+            "qoder" -> deleteQoderSession(sessionId)
             else -> false
         }
+    }
+
+    private fun deleteQoderSession(sessionId: String): Boolean {
+        val service = ProjectManager.getInstance().openProjects
+            .asSequence()
+            .map(AcpClientService::getInstance)
+            .firstOrNull { it.isAdapterReady("qoder") }
+            ?: return false
+        return runBlocking { service.deleteHistorySession("qoder", sessionId) }
     }
 
     private fun resolveClaudeSourceFilePath(projectPath: String, sessionId: String): String {

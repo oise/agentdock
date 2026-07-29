@@ -1,5 +1,6 @@
 package agentdock.acp
 
+import com.intellij.util.text.VersionComparatorUtil
 import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
@@ -128,28 +129,6 @@ internal fun downloadArchiveDistributionLocal(
             ensureExtractedFilesExecutable(targetDir)
         }
         tempFile.delete()
-        val authNpmPackage = adapterInfo.authConfig?.authNpmPackage
-        if (!authNpmPackage.isNullOrBlank()) {
-            cancellation?.throwIfCancelled()
-            statusCallback?.invoke("Installing auth tools...")
-            val nodeRuntime = AcpNodeRuntimeResolver.resolveOrInstall(statusCallback, cancellation)
-            if (nodeRuntime == null) {
-                statusCallback?.invoke("Error: Node.js is required")
-                return false
-            }
-            val builder = ProcessBuilder(nodeRuntime.npm, "install", "--prefix", targetDir.absolutePath, "$authNpmPackage@latest")
-                .directory(targetDir)
-            AcpNodeRuntimeResolver.applyTo(builder, nodeRuntime)
-            val authInstallExitCode = runArchiveCommand(
-                builder,
-                statusCallback,
-                cancellation
-            )
-            if (authInstallExitCode != 0) {
-                statusCallback?.invoke("Error: Auth tools installation failed")
-                return false
-            }
-        }
         statusCallback?.invoke("${adapterInfo.name} installed successfully.")
         true
     } catch (e: CancellationException) {
@@ -191,6 +170,15 @@ internal fun installedVersionFromRuntimeDir(
         }
         AcpAdapterConfig.DistributionType.ARCHIVE -> readInstallMetadata(runtimeDir)
     }
+}
+
+internal fun isInstalledVersionSupported(
+    adapterInfo: AcpAdapterConfig.AdapterInfo,
+    installedVersion: String?
+): Boolean {
+    val minimumVersion = adapterInfo.distribution.minimumVersion?.trim().orEmpty()
+    return minimumVersion.isEmpty() ||
+        (!installedVersion.isNullOrBlank() && VersionComparatorUtil.compare(installedVersion, minimumVersion) >= 0)
 }
 
 internal fun writeInstallMetadata(runtimeDir: File, version: String) {

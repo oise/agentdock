@@ -3,7 +3,8 @@ import {
   AudioTranscriptionFeatureState,
   AvailableCommand,
   ChatAttachment,
-  DropdownOption
+  ConfigOption,
+  DropdownOption,
 } from '../../../types/chat';
 
 export interface ChatInputProps {
@@ -30,6 +31,8 @@ export interface ChatInputProps {
   reasoningEffortOptions: DropdownOption[];
   selectedReasoningEffortId: string;
   onReasoningEffortChange: (id: string) => void;
+  additionalConfigOptions: ConfigOption[];
+  onConfigOptionChange: (configId: string, value: string) => void;
   approvalMode: ApprovalMode;
   onApprovalModeChange: (mode: ApprovalMode) => void;
   hasSelectedAgent: boolean;
@@ -45,11 +48,9 @@ export interface ChatInputProps {
 
 export const emptyTranscriptionFeature: AudioTranscriptionFeatureState = {
   id: 'whisper-transcription',
-  title: 'Whisper',
   installed: false,
   installing: false,
   supported: false,
   status: 'Loading',
-  detail: '',
-  installPath: ''
+  installPath: '',
 };

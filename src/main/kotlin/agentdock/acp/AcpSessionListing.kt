@@ -1,11 +1,15 @@
 package agentdock.acp
 
-import com.agentclientprotocol.annotations.UnstableApi
-import kotlinx.coroutines.flow.toList
+import agentdock.history.GrokSessionHistory
 import agentdock.history.SessionMeta
 import agentdock.history.fallbackHistoryTitle
 import agentdock.history.historyComparablePath
 import agentdock.history.parseHistoryTimestamp
+import com.agentclientprotocol.annotations.UnstableApi
+import com.agentclientprotocol.rpc.MethodName
+import kotlinx.coroutines.flow.toList
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 @OptIn(UnstableApi::class)
 internal suspend fun AcpClientService.listHistorySessions(
@@ -13,14 +17,34 @@ internal suspend fun AcpClientService.listHistorySessions(
     projectPath: String
 ): List<SessionMeta> {
     ensureExecutionTargetCurrent()
-    if (!AcpAdapterPaths.isDownloaded(adapterInfo.id)) return emptyList()
+    check(AcpAdapterPaths.isDownloaded(adapterInfo.id)) {
+        "Adapter '${adapterInfo.id}' is not installed"
+    }
 
-    val sharedProc = activeProcesses[processKey(adapterInfo.id)]?.takeIf { it.isHealthy() } ?: return emptyList()
-    val client = sharedProc.client ?: return emptyList()
+    return when (adapterInfo.sessionListMethod) {
+        "acpSessionList" -> acpSessionList(adapterInfo, projectPath)
+        "grokCliSessions" -> GrokSessionHistory.grokCliSessions(adapterInfo.id, projectPath)
+        else -> throw IllegalStateException(
+            "Unknown session list method '${adapterInfo.sessionListMethod}' for adapter '${adapterInfo.id}'"
+        )
+    }
+}
+
+@OptIn(UnstableApi::class)
+private suspend fun AcpClientService.acpSessionList(
+    adapterInfo: AcpAdapterConfig.AdapterInfo,
+    projectPath: String
+): List<SessionMeta> {
+    val sharedProc = activeProcesses[processKey(adapterInfo.id)]?.takeIf { it.isHealthy() }
+        ?: throw IllegalStateException("Adapter '${adapterInfo.id}' is not ready for session/list")
+    val client = sharedProc.client
+        ?: throw IllegalStateException("Adapter '${adapterInfo.id}' does not have an initialized ACP client")
     val expectedProjectPath = historyComparablePath(projectPath)
-    val requestedCwd = if (adapterInfo.id == "codex" || adapterInfo.id == "github-copilot-cli") null else resolveSessionCwd(projectPath)
+    val sessionListCwd = resolveSessionCwd(projectPath).let { cwd ->
+        if (adapterInfo.id == "github-copilot-cli") cwd.replace('\\', '/') else cwd
+    }
 
-    return client.listSessions(cwd = requestedCwd).toList().mapNotNull { session ->
+    return client.listSessions(cwd = sessionListCwd).toList().mapNotNull { session ->
         val sessionProjectPath = historyComparablePath(session.cwd)
         if (expectedProjectPath.isNotBlank() && sessionProjectPath != expectedProjectPath) {
             return@mapNotNull null
@@ -37,4 +61,17 @@ internal suspend fun AcpClientService.listHistorySessions(
             updatedAt = updatedAt
         )
     }
+}
+
+@OptIn(UnstableApi::class)
+internal suspend fun AcpClientService.deleteHistorySession(adapterName: String, sessionId: String): Boolean {
+    val sharedProc = activeProcesses[processKey(adapterName)]?.takeIf { it.isHealthy() } ?: return false
+    val protocol = sharedProc.protocol ?: return false
+    return runCatching {
+        protocol.sendRequestRaw(
+            MethodName("session/delete"),
+            buildJsonObject { put("sessionId", sessionId) }
+        )
+        true
+    }.getOrDefault(false)
 }

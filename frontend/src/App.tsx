@@ -52,6 +52,8 @@ function App() {
     tabs,
     activeTabId,
     tabUi,
+    renamableTabIds,
+    handleRenameTab,
     availableAgents,
     runnableAgents,
     agentAvailabilityResolved,
@@ -62,6 +64,8 @@ function App() {
     handleReorderTabs,
     handleCloseTab,
     handleCloseAllTabs,
+    hasOpenConversationsForAdapter,
+    handleUpdateAgent,
     handleNewTab,
     handleOpenHistory,
     openSingletonTab,
@@ -92,6 +96,8 @@ function App() {
         onCloseAllTabs={handleCloseAllTabs}
         onNewTab={() => handleNewTab()}
         onNewTabWithAgent={(agentId) => handleNewTab(agentId)}
+        renamableTabIds={renamableTabIds}
+        onRenameTab={handleRenameTab}
         agents={availableAgents}
         onOpenHistory={() => openSingletonTab('history', 'History')}
         onOpenManagement={() => openSingletonTab('management', 'Service Providers')}
@@ -114,6 +120,8 @@ function App() {
               isActive={isTabActive}
               availableAgents={availableAgents}
               runnableAgents={runnableAgents}
+              hasOpenConversationsForAdapter={hasOpenConversationsForAdapter}
+              onUpdateAgent={handleUpdateAgent}
               pendingHandoff={pendingHandoffsByTab[tab.id]}
               onOpenHistory={handleOpenHistory}
               onUserMessageSent={() => handleUserMessageSent(tab.id)}

@@ -1,73 +1,48 @@
 import { ContentChunk, ExploringBlock, Message, RichContentBlock } from '../../types/chat';
+import { safeParseJson } from '../../utils/toolCallUtils';
 
 export function isExploringChunk(chunk: ContentChunk): boolean {
-  const kind = chunk.toolKind || '';
+  // Stored tool_call_update events carry kind/title only inside the raw payload.
+  const raw: Record<string, unknown> = (chunk.toolKind && chunk.toolTitle)
+    ? {}
+    : safeParseJson(chunk.toolRawJson);
+  const rawKind: string = typeof raw.kind === 'string' ? raw.kind : '';
+  const rawTitle: string = typeof raw.title === 'string' ? raw.title : '';
+
+  const kind = chunk.toolKind || rawKind;
   if (kind === 'read' || kind === 'fetch' || kind === 'search') return true;
   if (kind === 'execute') {
-    const cmd = (chunk.toolTitle || '').toLowerCase().trim();
+    const cmd = (chunk.toolTitle || rawTitle).toLowerCase().trim();
     if (!cmd) return true;
 
     const IMPACTFUL_KEYWORDS = [
-      'rm',
-      'mv',
-      'cp',
-      'mkdir',
-      'touch',
-      'chmod',
-      'chown',
-      'run',
-      'compile',
-      'del',
-      'erase',
-      'rd',
-      'rmdir',
-      'move',
-      'copy',
-      'ren',
-      'rename',
-      'new-item',
-      'remove-item',
-      'move-item',
-      'copy-item',
-      'update',
-      'curl',
-      'wget',
-      'scp',
-      'rsync',
-      'ssh',
-      'ftp',
-      'uninstall',
-      'publish',
-      'add',
-      'commit',
-      'push',
-      'revert',
-      'restore',
-      'build',
-      'install',
-      'insert',
-      'mysql',
-      'pgsql',
-      'postgres',
-      'delete',
-      'drush'
+      'rm', 'mv', 'cp', 'mkdir', 'touch', 'chmod', 'chown', 'run', 'compile',
+      'del', 'erase', 'rd', 'rmdir', 'move', 'copy', 'ren', 'rename',
+      'new-item', 'remove-item', 'move-item', 'copy-item', 'update',
+      'curl', 'wget', 'scp', 'rsync', 'ssh', 'ftp', 'uninstall', 'publish',
+      'add', 'commit', 'push', 'revert', 'restore', 'build', 'install',
+      'insert', 'mysql', 'pgsql', 'postgres', 'delete', 'drush', 'rm'
     ];
 
-    const isImpactful = cmd.split(/&&|\|\||[|;]/).some((segment) => {
+    const isImpactful = cmd.split(/&&|\|\||[|;]/).some(segment => {
       const head: string[] = [];
       for (const token of segment.trim().split(/\s+/)) {
         if (!token || token.startsWith('-')) continue;
         head.push(token);
         if (head.length >= 3) break;
       }
-      return IMPACTFUL_KEYWORDS.some((kw) => head.includes(kw));
+      return IMPACTFUL_KEYWORDS.some(kw => head.includes(kw));
     });
     return !isImpactful;
   }
   return false;
 }
 
-export function stripTransferredContextForDisplay(text: string, role: 'user' | 'assistant', isReplay: boolean): string {
+export function stripTransferredContextForDisplay(
+  text: string,
+  role: 'user' | 'assistant',
+  isReplay?: boolean
+): string {
   if (!isReplay || role !== 'user') return text;
 
   const markerStart = text.indexOf('[TRANSFERRED CONTEXT]');
@@ -85,7 +60,9 @@ export function stripTransferredContextForDisplay(text: string, role: 'user' | '
 }
 
 export function getBlocks(msg: Message): RichContentBlock[] {
-  return msg.role === 'assistant' ? [...(msg.contentBlocks || [])] : [...(msg.blocks || [])];
+  return msg.role === 'assistant'
+    ? [...(msg.contentBlocks || [])]
+    : [...(msg.blocks || [])];
 }
 
 export function setBlocks(msg: Message, blocks: RichContentBlock[]): Message {
@@ -108,7 +85,7 @@ export function failPendingToolStatuses(blocks: RichContentBlock[] | undefined):
           ...block,
           entry: {
             ...block.entry,
-            status: 'failed'
+            status: 'failed',
           }
         };
       }
@@ -119,13 +96,7 @@ export function failPendingToolStatuses(blocks: RichContentBlock[] | undefined):
       let entriesChanged = false;
       const entries = block.entries.map((entry) => {
         const status = (entry.status || '').toLowerCase();
-        if (
-          !status ||
-          status === 'pending' ||
-          status === 'running' ||
-          status === 'in_progress' ||
-          status === 'active'
-        ) {
+        if (!status || status === 'pending' || status === 'running' || status === 'in_progress' || status === 'active') {
           entriesChanged = true;
           return { ...entry, status: 'failed' };
         }

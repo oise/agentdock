@@ -1,20 +1,15 @@
 package agentdock.acp
 
 import com.agentclientprotocol.client.Client
-import com.agentclientprotocol.client.ClientInfo
-import com.agentclientprotocol.client.ClientOperationsFactory
 import com.agentclientprotocol.client.ClientSession
 import com.agentclientprotocol.common.ClientSessionOperations
-import com.agentclientprotocol.common.SessionCreationParameters
 import com.agentclientprotocol.model.*
 import com.agentclientprotocol.protocol.Protocol
 import com.agentclientprotocol.rpc.JsonRpcNotification
-import com.agentclientprotocol.rpc.MethodName
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.util.Disposer
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -24,6 +19,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.*
+import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -40,7 +36,8 @@ data class PermissionRequest(
 class AcpClientService private constructor(val project: Project) {
     internal data class AdapterRuntimeMetadata(
         val configOptions: List<AcpConfigOption>,
-        val reasoningEffortsByModel: Map<String, List<AcpConfigOptionValue>> = emptyMap()
+        val configOptionsByModel: Map<String, List<AcpConfigOption>> = emptyMap(),
+        val usesAdapterConfigOptions: Boolean = false
     ) {
         private fun option(vararg categories: String): AcpConfigOption? =
             configOptions.firstOrNull { option -> categories.any(option::matchesCategory) }
@@ -65,32 +62,64 @@ class AcpClientService private constructor(val project: Project) {
         }
         val reasoningEffortConfigId get() = reasoningOption?.id
 
-        fun reasoningEffortsForModel(modelId: String?): List<AcpAdapterConfig.ModeInfo> {
-            val values = modelId?.let { reasoningEffortsByModel[it] } ?: reasoningOption?.options.orEmpty()
-            return values.map { AcpAdapterConfig.ModeInfo(it.value, it.name, it.description) }
-        }
+        fun configOptionsForModel(modelId: String?): List<AcpConfigOption> =
+            modelId?.let { configOptionsByModel[it] } ?: configOptions
     }
 
     companion object {
+        private const val CLEANUP_JOIN_TIMEOUT_MS = 3000L
+
         private val instances = ConcurrentHashMap<Project, AcpClientService>()
 
-        fun getInstance(project: Project): AcpClientService {
-            AcpProcessRegistry.registerOwner()
-            val service = instances.computeIfAbsent(project) { p ->
+        private val pendingCleanups: MutableSet<Thread> =
+            Collections.newSetFromMap(ConcurrentHashMap<Thread, Boolean>())
+        private val shutdownTaskRegistered = AtomicBoolean(false)
+
+        // Kept free of side effects: this runs on the EDT from the tool window and the commit action,
+        // so registry I/O and adapter initialization belong to AcpStartupActivity instead.
+        fun getInstance(project: Project): AcpClientService =
+            instances.computeIfAbsent(project) { p ->
                 val created = AcpClientService(p)
-                Disposer.register(p, Disposable {
-                    created.shutdown()
-                    instances.remove(p)
-                    if (instances.isEmpty()) {
-                        AcpProcessRegistry.closeOwnerAndCleanupIfLast()
-                    }
-                })
+                Disposer.register(p, Disposable { cleanupInBackground(created, p) })
                 created
             }
-            service.initializeDownloadedAdaptersInBackground()
-            return service
+
+        /**
+         * Project disposal runs on the EDT, and stopping agent processes must never hold the IDE
+         * window open. The work is handed to a plain thread that JVM shutdown waits for, so the
+         * kill is still guaranteed to be issued - see "Files written on the user's disk" in
+         * AGENTS.md.
+         */
+        private fun cleanupInBackground(service: AcpClientService, project: Project) {
+            instances.remove(project)
+            val lastOwner = instances.isEmpty()
+            registerShutdownTaskOnce()
+
+            val thread = Thread({
+                try {
+                    service.shutdown()
+                    if (lastOwner) {
+                        AcpProcessRegistry.closeOwnerAndCleanupIfLast()
+                    }
+                } finally {
+                    pendingCleanups.remove(Thread.currentThread())
+                }
+            }, "AgentDock process cleanup")
+            thread.isDaemon = true
+            pendingCleanups.add(thread)
+            thread.start()
         }
 
+        private fun registerShutdownTaskOnce() {
+            if (!shutdownTaskRegistered.compareAndSet(false, true)) return
+            runCatching {
+                Runtime.getRuntime().addShutdownHook(Thread {
+                    pendingCleanups.toList().forEach { thread ->
+                        runCatching { thread.join(CLEANUP_JOIN_TIMEOUT_MS) }
+                    }
+                })
+            }
+        }
     }
     @Volatile
     internal var logCallback: ((AcpLogEntry) -> Unit)? = null
@@ -136,6 +165,25 @@ class AcpClientService private constructor(val project: Project) {
 
     internal fun setOnSessionConfigOptionsChanged(handler: (String, AdapterRuntimeMetadata) -> Unit) {
         sessionConfigOptionsHandler = handler
+    }
+
+    /**
+     * The handlers above capture the bridge, and through it the JCEF browser. This service outlives
+     * the tool window content, so the content has to hand them back when it goes away. The owner
+     * check keeps a late disposal of an old bridge from unhooking a newer one.
+     */
+    @Volatile
+    internal var callbackOwner: Any? = null
+
+    internal fun releaseUiCallbacks(owner: Any) {
+        if (callbackOwner !== owner) return
+        callbackOwner = null
+        logCallback = null
+        permissionRequestHandler = null
+        sessionUpdateHandler = null
+        availableCommandsHandler = null
+        adapterInitializationStateHandler = null
+        sessionConfigOptionsHandler = null
     }
 
     internal fun bindLiveSessionOwner(chatId: String, sessionId: String?) {
@@ -221,7 +269,6 @@ class AcpClientService private constructor(val project: Project) {
 
     fun status(chatId: String): Status = sessions[chatId]?.statusRef?.get() ?: Status.NotStarted
     fun sessionId(chatId: String): String? = sessions[chatId]?.sessionIdRef?.get()
-    fun activeModelId(chatId: String): String? = sessions[chatId]?.activeModelIdRef?.get()
     fun activeModeId(chatId: String): String? = sessions[chatId]?.activeModeIdRef?.get()
     fun adapterInitializationStatus(adapterName: String): AdapterInitializationStatus {
         return adapterInitializationState[adapterName] ?: AdapterInitializationStatus.NotStarted
@@ -314,14 +361,6 @@ class AcpClientService private constructor(val project: Project) {
         return "Connection to the agent process was lost."
     }
 
-    fun getAvailableModels(adapterName: String? = null): List<AcpAdapterConfig.ModelInfo> {
-        val name = adapterName ?: AcpAdapterPaths.resolveAdapterName(null)
-        if (!AcpAdapterPaths.isDownloaded(name)) {
-            return emptyList()
-        }
-        return adapterRuntimeMetadataMap[name]?.availableModels ?: emptyList()
-    }
-
     internal inner class AgentContext(val chatId: String) {
         val lifecycleMutex = Mutex()
         val statusRef = AtomicReference(Status.NotStarted)
@@ -332,6 +371,7 @@ class AcpClientService private constructor(val project: Project) {
         val activeReasoningEffortIdRef = AtomicReference<String?>(null)
         val activeConfigValues = ConcurrentHashMap<String, String>()
         val runtimeMetadataRef = AtomicReference<AdapterRuntimeMetadata?>(null)
+        @Volatile var configOptionsUpdateInProgress: Boolean = false
         val promptGeneration = AtomicLong(0)
         @Volatile var lastHistoryLoadTime: Long = System.currentTimeMillis()
         @Volatile var allowReplayDelivery: Boolean = true
@@ -355,6 +395,7 @@ class AcpClientService private constructor(val project: Project) {
             activeReasoningEffortIdRef.set(null)
             activeConfigValues.clear()
             runtimeMetadataRef.set(null)
+            configOptionsUpdateInProgress = false
             promptGeneration.incrementAndGet()
             lastHistoryLoadTime = 0
             allowReplayDelivery = true
@@ -370,6 +411,7 @@ class AcpClientService private constructor(val project: Project) {
             session = null
             sharedProcess = null
             promptGeneration.incrementAndGet()
+            configOptionsUpdateInProgress = false
             ignoreUpdatesUntilPrompt = false
             allowReplayDelivery = true
             pendingRequests.values.forEach {

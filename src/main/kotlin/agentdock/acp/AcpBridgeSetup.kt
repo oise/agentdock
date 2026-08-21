@@ -1,5 +1,8 @@
 package agentdock.acp
 
+import agentdock.BuildConfig
+import agentdock.utils.jsStringLiteral
+import com.agentclientprotocol.model.ContentBlock
 import com.agentclientprotocol.model.SessionUpdate
 import com.intellij.ui.jcef.JBCefJSQuery
 import kotlinx.coroutines.CancellationException
@@ -8,10 +11,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
-import agentdock.history.AgentDockHistoryService
 import java.io.File
 internal fun AcpBridge.installServiceCallbacks() {
-    service.setOnLogEntry { pushLogEntry(it) }
+    service.callbackOwner = this
+    if (BuildConfig.IS_DEV) {
+        service.setOnLogEntry { pushLogEntry(it) }
+    }
     service.setOnPermissionRequest { pushPermissionRequest(it) }
     service.setOnAvailableCommands { adapterId, commands ->
         pushAvailableCommands(adapterId, commands)
@@ -20,19 +25,31 @@ internal fun AcpBridge.installServiceCallbacks() {
         scope.launch(Dispatchers.IO) { pushAdapters() }
     }
     service.setOnSessionConfigOptionsChanged { chatId, metadata ->
+        val adapterId = service.activeAdapterName(chatId) ?: return@setOnSessionConfigOptionsChanged
+        AcpAgentPreferencesStore.rememberConfigOptions(adapterId, metadata.configOptions.associate { it.id to it.currentValue })
+        pushAdapters()
         pushSessionConfigOptions(chatId, metadata)
     }
     service.setOnSessionUpdate { chatId: String, update: SessionUpdate, isReplay: Boolean, _meta: JsonElement? ->
         if (isReplay && suppressReplayForChatIds.contains(chatId)) {
+            replayFreshnessProbes[chatId]?.let { probe ->
+                when (update) {
+                    is SessionUpdate.UserMessageChunk -> probe.closeMessage()
+                    is SessionUpdate.AgentMessageChunk ->
+                        (update.content as? ContentBlock.Text)?.let { probe.appendAssistantText(it.text) }
+                    else -> Unit
+                }
+            }
             return@setOnSessionUpdate
         }
-        val captureOnlyReplay = isReplay && historyReplayCaptures.containsKey(chatId)
-        val sessionId = if (captureOnlyReplay) {
+        // Replay is capture-only: it is collected into ConversationReplayData and delivered
+        // to the UI in one piece by pushConversationReplayLoaded, never as streamed chunks.
+        val sessionId = if (isReplay) {
             historyReplayCaptures[chatId]?.currentSessionId.orEmpty()
         } else {
             service.sessionId(chatId).orEmpty()
         }
-        val adapterName = if (captureOnlyReplay) {
+        val adapterName = if (isReplay) {
             historyReplayCaptures[chatId]?.currentAdapterName.orEmpty()
         } else {
             service.activeAdapterName(chatId).orEmpty()
@@ -41,36 +58,33 @@ internal fun AcpBridge.installServiceCallbacks() {
             is SessionUpdate.UserMessageChunk -> {
                 if (isReplay) {
                     recordReplayUserBlock(chatId, sessionId, adapterName, update.content)
-                    if (!captureOnlyReplay) {
-                        pushContentBlock(chatId, "user", update.content, isThought = false, isReplay = true)
-                    }
                 }
             }
             is SessionUpdate.AgentMessageChunk -> {
                 recordContentBlock(chatId, sessionId, adapterName, "assistant", update.content, isThought = false, isReplay = isReplay)
-                if (!captureOnlyReplay) {
-                    if (!isReplay && contentBlockHasVisibleOutput(update.content)) {
+                if (!isReplay) {
+                    if (contentBlockHasVisibleOutput(update.content)) {
                         markLivePromptVisibleAssistantOutput(chatId)
                     }
-                    pushContentBlock(chatId, "assistant", update.content, isThought = false, isReplay = isReplay)
+                    pushContentBlock(chatId, "assistant", update.content, isThought = false)
                 }
             }
             is SessionUpdate.AgentThoughtChunk -> {
                 recordContentBlock(chatId, sessionId, adapterName, "assistant", update.content, isThought = true, isReplay = isReplay)
-                if (!captureOnlyReplay) {
-                    if (!isReplay && contentBlockHasVisibleOutput(update.content, textType = "thinking")) {
+                if (!isReplay) {
+                    if (contentBlockHasVisibleOutput(update.content, textType = "thinking")) {
                         markLivePromptVisibleAssistantOutput(chatId)
                     }
-                    pushContentBlock(chatId, "assistant", update.content, isThought = true, isReplay = isReplay)
+                    pushContentBlock(chatId, "assistant", update.content, isThought = true)
                 }
             }
             is SessionUpdate.CurrentModeUpdate -> {
-                if (!captureOnlyReplay) {
+                if (!isReplay) {
                     pushMode(chatId, update.currentModeId.value)
                 }
             }
             is SessionUpdate.ToolCall -> {
-                if (!isReplay) removeProcessedFilesForDiffs(chatId, update.content)
+                if (!isReplay) ensureChangesStateForLiveDiffs(chatId, update.content)
                 var json = try { Json.encodeToString(update) } catch (_: Exception) { update.toString() }
                 json = convertBrokenOtherPatchToolCallJson(json)
                 val isPermissionRequest = update.toolCallId.value.endsWith("-permission")
@@ -88,19 +102,19 @@ internal fun AcpBridge.installServiceCallbacks() {
                         recordStoredEvent(chatId, sessionId, adapterName, buildStoredToolCallChunk(json), isReplay)
                     }
                 }
-                if (!isPermissionRequest && !captureOnlyReplay) {
-                    if (!isReplay && (!isTodoWrite || shouldEmitTodoPlan)) {
+                if (!isPermissionRequest && !isReplay) {
+                    if (!isTodoWrite || shouldEmitTodoPlan) {
                         markLivePromptVisibleAssistantOutput(chatId)
                     }
                     if (shouldEmitTodoPlan) {
-                        pushPlanChunk(chatId, todoPlanEntries, isReplay)
+                        pushPlanChunk(chatId, todoPlanEntries)
                     } else if (!isTodoWrite) {
-                        pushToolCallChunk(chatId, json, isReplay)
+                        pushToolCallChunk(chatId, json)
                     }
                 }
             }
             is SessionUpdate.ToolCallUpdate -> {
-                if (!isReplay) removeProcessedFilesForDiffs(chatId, update.content)
+                if (!isReplay) ensureChangesStateForLiveDiffs(chatId, update.content)
                 var json = try { Json.encodeToString(update) } catch (_: Exception) { update.toString() }
                 json = convertBrokenOtherPatchToolCallJson(json)
                 val isPermissionRequest = update.toolCallId.value.endsWith("-permission")
@@ -118,14 +132,14 @@ internal fun AcpBridge.installServiceCallbacks() {
                         recordStoredEvent(chatId, sessionId, adapterName, buildStoredToolCallUpdateChunk(update.toolCallId.value, json), isReplay)
                     }
                 }
-                if (!isPermissionRequest && !captureOnlyReplay) {
-                    if (!isReplay && (!isTodoWrite || shouldEmitTodoPlan)) {
+                if (!isPermissionRequest && !isReplay) {
+                    if (!isTodoWrite || shouldEmitTodoPlan) {
                         markLivePromptVisibleAssistantOutput(chatId)
                     }
                     if (shouldEmitTodoPlan) {
-                        pushPlanChunk(chatId, todoPlanEntries, isReplay)
+                        pushPlanChunk(chatId, todoPlanEntries)
                     } else if (!isTodoWrite) {
-                        pushToolCallUpdateChunk(chatId, update.toolCallId.value, json, isReplay)
+                        pushToolCallUpdateChunk(chatId, update.toolCallId.value, json)
                     }
                 }
             }
@@ -135,11 +149,11 @@ internal fun AcpBridge.installServiceCallbacks() {
                     recordUsageUpdate(chatId, sessionId, adapterName, usage.first, usage.second, isReplay)
                 } else if (isPlanUpdate(update, _meta)) {
                     buildStoredPlanChunk(update, _meta)?.let { recordStoredEvent(chatId, sessionId, adapterName, it, isReplay) }
-                    if (!captureOnlyReplay) {
-                        if (!isReplay && extractPlanEntries(update, _meta)?.isNotEmpty() == true) {
+                    if (!isReplay) {
+                        if (extractPlanEntries(update, _meta)?.isNotEmpty() == true) {
                             markLivePromptVisibleAssistantOutput(chatId)
                         }
-                        pushPlanChunk(chatId, update, isReplay, _meta)
+                        pushPlanChunk(chatId, update, _meta)
                     }
                 }
             }
@@ -286,6 +300,17 @@ internal fun AcpBridge.installAdapterQueries() {
         }
     }
 
+    rememberConfigOptionQuery = JBCefJSQuery.create(browser as com.intellij.ui.jcef.JBCefBrowserBase).apply {
+        addHandler { payload ->
+            val parsed = parseStartRequestPayload(payload)
+            parsed.adapterId?.takeIf { parsed.configValues.isNotEmpty() }?.let { adapterId ->
+                AcpAgentPreferencesStore.rememberConfigOptions(adapterId, parsed.configValues)
+                pushAdapters()
+            }
+            JBCefJSQuery.Response("ok")
+        }
+    }
+
     downloadAgentQuery = JBCefJSQuery.create(browser as com.intellij.ui.jcef.JBCefBrowserBase).apply {
         addHandler { payload ->
             val adapterId = parseIdOnlyPayload(payload)
@@ -329,6 +354,7 @@ internal fun AcpBridge.installAdapterQueries() {
                             setDownloadProbeState(adapterId, target, downloaded = true, installedVersion = installedVersion)
                             service.initializeAdapterInBackground(adapterId)
                             refreshAdapterLoginStatus(adapterId)
+                            pushAdapters(includeRuntimeChecks = true, adapterIdToRefresh = adapterId)
                         } else {
                             downloadStatuses.compute(adapterId) { _, previous ->
                                 previous?.takeIf { it.startsWith("Error:") }
@@ -381,10 +407,11 @@ internal fun AcpBridge.installAdapterQueries() {
                     val deleted = AcpAdapterPaths.deleteAdapter(adapterId, target)
                     if (deleted) {
                         downloadStatuses.remove(adapterId)
+                        authErrors.remove(adapterId)
                         setDownloadProbeState(adapterId, target, downloaded = false)
                         runOnEdt {
                             browser.cefBrowser.executeJavaScript(
-                                "if(window.__onAdapterDeleted) window.__onAdapterDeleted(${jsStringLiteral(adapterId)});",
+                                "if(window.__onAdapterDeleted) window.__onAdapterDeleted(${adapterId.jsStringLiteral()});",
                                 browser.cefBrowser.url, 0
                             )
                         }
@@ -462,6 +489,7 @@ internal fun AcpBridge.installAdapterQueries() {
                             setDownloadProbeState(adapterId, target, downloaded = true, installedVersion = latestVersion)
                             service.initializeAdapterInBackground(adapterId)
                             refreshAdapterLoginStatus(adapterId)
+                            pushAdapters(includeRuntimeChecks = true, adapterIdToRefresh = adapterId)
                         } else {
                             downloadStatuses.compute(adapterId) { _, previous ->
                                 previous?.takeIf { it.startsWith("Error:") }
@@ -545,8 +573,8 @@ internal fun AcpBridge.installAdapterQueries() {
                 if (result.isNotBlank()) {
                     AcpQuotaService.getInstance().updateQuotaForAdapter(adapterId, result)
                 }
-                val escapedAdapterId = jsStringLiteral(adapterId)
-                val escapedResult = jsStringLiteral(result)
+                val escapedAdapterId = adapterId.jsStringLiteral()
+                val escapedResult = result.jsStringLiteral()
                 runOnEdt {
                     browser.cefBrowser.executeJavaScript(
                         "if(window.__onUsageData) window.__onUsageData($escapedAdapterId, $escapedResult);",

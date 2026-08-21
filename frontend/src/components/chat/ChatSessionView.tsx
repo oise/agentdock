@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo } from 'react';
-import { useChatSession } from '../../hooks/useChatSession';
+import { useChatSession, UseChatSessionOptions } from '../../hooks/useChatSession';
 import { useFileChanges } from '../../hooks/useFileChanges';
-import { AgentOption, FileChangeSummary, ForkConversationBase, HistorySessionMeta, Message, PendingHandoffContext } from '../../types/chat';
+import { FileChangeSummary, Message } from '../../types/chat';
 import { Check, Copy, Download, X } from 'lucide-react';
 import { acquireJcefLivePromptRepaint } from '../../utils/jcefHostRepaint';
 import {
@@ -22,18 +22,8 @@ import { useChatInputResize } from './session/useChatInputResize';
 import { useChatSessionNotifications } from './session/useChatSessionNotifications';
 import { useImageOverlayActions } from './session/useImageOverlayActions';
 
-interface ChatSessionProps {
-  initialAgentId?: string;
-  conversationId: string;
-  availableAgents: AgentOption[];
-  historySession?: HistorySessionMeta;
-  pendingHandoff?: PendingHandoffContext;
-  initialMessages?: Message[];
-  metadataTitleOverride?: string;
-  inheritedAdapterNames?: string[];
-  forkBase?: ForkConversationBase;
+interface ChatSessionProps extends UseChatSessionOptions {
   isActive?: boolean;
-  onUserMessageSent?: () => void;
   onAssistantActivity?: () => void;
   onAtBottomChange?: (isAtBottom: boolean) => void;
   onCanMarkReadChange?: (canMarkRead: boolean) => void;
@@ -41,7 +31,6 @@ interface ChatSessionProps {
   onProcessingChange?: (isProcessing: boolean) => void;
   onAgentChangeRequest?: (payload: { agentId: string; handoffText: string }) => void;
   onForkRequest?: (payload: { agentId: string; messages: Message[]; handoffText: string }) => void;
-  onHandoffConsumed?: (handoffId: string) => void;
   onSessionStateChange?: (state: { acpSessionId: string; adapterName: string }) => void;
 }
 
@@ -71,12 +60,14 @@ export default function ChatSessionView({
     messages,
     inputValue,
     setInputValue,
+    composerLoadRevision,
     status,
     isSending,
     isHistoryReplaying,
     queuedPrompts,
     removeQueuedPrompt,
-    updateQueuedPromptText,
+    editQueuedPrompt,
+    reorderQueuedPrompt,
     sendQueuedPromptNow,
     agentOptions,
     selectedAgentId,
@@ -102,10 +93,9 @@ export default function ChatSessionView({
     setAttachments,
     availableCommands,
     acpSessionId,
-    adapterName,
     adapterDisplayName,
     adapterIconPath
-  } = useChatSession(
+  } = useChatSession({
     conversationId,
     availableAgents,
     initialAgentId,
@@ -117,7 +107,7 @@ export default function ChatSessionView({
     forkBase,
     onHandoffConsumed,
     onUserMessageSent
-  );
+  });
 
   const {
     hasPluginEdits,
@@ -130,10 +120,13 @@ export default function ChatSessionView({
     handleUndoAllFiles,
     handleKeepFile,
     handleKeepAll,
-  } = useFileChanges(conversationId, acpSessionId, adapterName);
+  } = useFileChanges(conversationId, acpSessionId, selectedAgentId);
 
   const lastAssistantMsgWithContext = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
+    // Fork messages keep their original context metadata for transcript/history display,
+    // but they belong to the source session and must not represent the new session usage.
+    const currentSessionStartIndex = initialMessages?.length ?? 0;
+    for (let i = messages.length - 1; i >= currentSessionStartIndex; i--) {
       const msg = messages[i];
       if (msg.role === 'assistant' && (msg.contextTokensUsed !== undefined || msg.contextWindowSize !== undefined)) {
         if (!selectedAgentId || msg.agentId === selectedAgentId) {
@@ -143,7 +136,7 @@ export default function ChatSessionView({
       }
     }
     return null;
-  }, [messages, selectedAgentId]);
+  }, [initialMessages?.length, messages, selectedAgentId]);
 
   const handleShowDiff = useCallback((fc: FileChangeSummary) => {
     if (typeof window.__showDiff === 'function') {
@@ -186,7 +179,7 @@ export default function ChatSessionView({
     isHistoryReplaying,
     permissionRequest,
     acpSessionId,
-    adapterName,
+    adapterName: selectedAgentId,
     onAssistantActivity,
     onAtBottomChange,
     onCanMarkReadChange,
@@ -289,6 +282,17 @@ export default function ChatSessionView({
           />
         )}
 
+        {queuedPrompts.length > 0 && (
+          <PromptQueueList
+            items={queuedPrompts}
+            onRemove={removeQueuedPrompt}
+            onEdit={editQueuedPrompt}
+            onReorder={reorderQueuedPrompt}
+            onSendNow={sendQueuedPromptNow}
+            sendNowCancelsCurrent={status === 'prompting' && isSending}
+          />
+        )}
+
         {/* Resize Handle / Divider */}
         <div
           onMouseDown={startResizing}
@@ -303,26 +307,13 @@ export default function ChatSessionView({
             group-hover:shadow-[0_0_6px_color-mix(in_srgb,var(--ide-Button-default-focusColor),transparent_45%)]" />
         </div>
 
-        {queuedPrompts.length > 0 && (
-          <div className="px-4 pt-2 pb-2">
-            <div className="mx-auto w-full max-w-[1200px] rounded-ide border border-[var(--ide-Button-startBorderColor)] bg-editor-bg">
-              <PromptQueueList
-                items={queuedPrompts}
-                onRemove={removeQueuedPrompt}
-                onChangeText={updateQueuedPromptText}
-                onSendNow={sendQueuedPromptNow}
-                sendNowCancelsCurrent={status === 'prompting' && isSending}
-              />
-            </div>
-          </div>
-        )}
-
         <div style={{ height: `${inputHeight}px` }} className="flex flex-col">
           <ChatInput
             conversationId={conversationId}
             contextTokensUsed={lastAssistantMsgWithContext?.contextTokensUsed}
             contextWindowSize={lastAssistantMsgWithContext?.contextWindowSize}
             inputValue={inputValue}
+            composerLoadRevision={composerLoadRevision}
             onInputChange={setInputValue}
             onSend={handleSend}
             onQueueDraft={handleQueueDraft}

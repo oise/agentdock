@@ -8,8 +8,16 @@ import {
   ContentChunk,
   ToolCallDiffEntry,
 } from '../../types/chat';
-import { safeParseJson, buildToolCallEntry, extractResultTexts, appendToolOutput, replaceToolOutput, extractToolCallDiffEntries } from '../../utils/toolCallUtils';
-import { nextMessageId } from './messageBasics';
+import {
+  safeParseJson,
+  buildToolCallEntry,
+  extractResultTexts,
+  appendToolOutput,
+  replaceToolOutput,
+  extractToolCallDiffEntries,
+  mergeToolCallDiffEntries,
+} from '../../utils/toolCallUtils';
+import { nextMessageId, plainTextFromBlocks } from './messageBasics';
 import {
   closeStreamingExploring,
   failPendingToolStatuses,
@@ -22,6 +30,10 @@ import { createToolCallBlocks, isExecuteToolKind, matchesToolCallId } from './to
 
 function nextThinkingId(): string {
   return `thinking-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function thinkingId(chunk: ContentChunk): string {
+  return chunk.toolCallId || nextThinkingId();
 }
 
 function collectToolCallDiffEntries(blocks: ToolCallBlock[]): ToolCallDiffEntry[] {
@@ -39,40 +51,6 @@ function collectToolCallDiffEntries(blocks: ToolCallBlock[]): ToolCallDiffEntry[
   });
 }
 
-function mergeToolCallDiffEntries(existing: ToolCallDiffEntry[], incoming: ToolCallDiffEntry[]): ToolCallDiffEntry[] {
-  const incomingByPath = new Map<string, ToolCallDiffEntry[]>();
-  const pathlessIncoming: ToolCallDiffEntry[] = [];
-  incoming.forEach((entry) => {
-    if (!entry.path) {
-      pathlessIncoming.push(entry);
-      return;
-    }
-    const entries = incomingByPath.get(entry.path) || [];
-    entries.push(entry);
-    incomingByPath.set(entry.path, entries);
-  });
-
-  const replacedPaths = new Set<string>();
-  const merged: ToolCallDiffEntry[] = [];
-  existing.forEach((entry) => {
-    const incomingForPath = entry.path ? incomingByPath.get(entry.path) : undefined;
-    if (!incomingForPath) {
-      merged.push(entry);
-      return;
-    }
-    if (!replacedPaths.has(entry.path)) {
-      merged.push(...incomingForPath);
-      replacedPaths.add(entry.path);
-    }
-  });
-
-  incomingByPath.forEach((entries, path) => {
-    if (!replacedPaths.has(path)) merged.push(...entries);
-  });
-  merged.push(...pathlessIncoming);
-  return merged;
-}
-
 // Unified chunk processing - one path for both streaming and replay chunks.
 
 function applyPromptDone(messages: Message[], chunk: ContentChunk): Message[] {
@@ -81,7 +59,7 @@ function applyPromptDone(messages: Message[], chunk: ContentChunk): Message[] {
     if (message.role !== 'assistant') continue;
 
     const next = [...messages];
-    const finalizedMessage: Message = {
+    next[i] = {
       ...message,
       agentId: chunk.agentId ?? message.agentId,
       agentName: chunk.agentName ?? message.agentName,
@@ -93,7 +71,6 @@ function applyPromptDone(messages: Message[], chunk: ContentChunk): Message[] {
       contentBlocks: failPendingToolStatuses(message.contentBlocks),
       metaComplete: true,
     };
-    next[i] = finalizedMessage;
     return next;
   }
 
@@ -121,7 +98,7 @@ function applyOneChunk(messages: Message[], chunk: ContentChunk): Message[] {
     const newMsg: Message = {
       id: nextMessageId(chunk.role),
       role: chunk.role,
-      content: chunk.type === 'text' ? (displayText || '') : '',
+      content: plainTextFromBlocks(blocks),
       timestamp: chunk.isReplay ? undefined : Date.now()
     };
     if (chunk.role === 'assistant') {
@@ -162,7 +139,7 @@ function applyOneChunk(messages: Message[], chunk: ContentChunk): Message[] {
       } else {
         // Add new thinking entry
         prevEntries.push({
-          toolCallId: nextThinkingId(),
+          toolCallId: thinkingId(chunk),
           kind: 'thinking',
           text: displayText || '',
           rawJson: ''
@@ -177,19 +154,16 @@ function applyOneChunk(messages: Message[], chunk: ContentChunk): Message[] {
         isStreaming: !chunk.isReplay,
         isReplay: chunk.isReplay,
         entries: [{
-          toolCallId: nextThinkingId(),
+          toolCallId: thinkingId(chunk),
           kind: 'thinking',
           text: displayText || '',
           rawJson: ''
         }]
       });
     }
-  } else if (chunk.type === 'image') {
-    blocks.push({ type: 'image', data: chunk.data!, mimeType: chunk.mimeType! } as any);
-  } else if (chunk.type === 'audio') {
-    blocks.push({ type: 'audio', data: chunk.data!, mimeType: chunk.mimeType! } as any);
-  } else if (chunk.type === 'video') {
-    blocks.push({ type: 'video', data: chunk.data!, mimeType: chunk.mimeType! } as any);
+  } else if (chunk.type === 'image' || chunk.type === 'audio' || chunk.type === 'video'
+      || chunk.type === 'file' || chunk.type === 'code_ref') {
+    blocks.push(...buildBlocks(chunk));
   } else if (chunk.type === 'tool_call') {
     handleToolCall(blocks, lastBlock, chunk);
   } else if (chunk.type === 'tool_call_update') {
@@ -200,9 +174,7 @@ function applyOneChunk(messages: Message[], chunk: ContentChunk): Message[] {
   }
 
   // Final rebuild
-  const txt = blocks.filter((b): b is TextBlock => b.type === 'text').map(b => b.text).join('');
-  const finalMsg = setBlocks({ ...lastMsg, content: txt }, blocks);
-  newMessages[newMessages.length - 1] = finalMsg;
+  newMessages[newMessages.length - 1] = setBlocks({ ...lastMsg, content: plainTextFromBlocks(blocks) }, blocks);
   return newMessages;
 }
 
@@ -214,14 +186,14 @@ function buildBlocks(chunk: ContentChunk): RichContentBlock[] {
         isStreaming: !chunk.isReplay,
         isReplay: chunk.isReplay,
         entries: [{
-          toolCallId: nextThinkingId(),
+          toolCallId: thinkingId(chunk),
           kind: 'thinking',
           text: chunk.text || '',
           rawJson: ''
         }]
       }];
     case 'image':
-      return [{ type: 'image', data: chunk.data!, mimeType: chunk.mimeType! } as any];
+      return [{ type: 'image', data: chunk.data!, mimeType: chunk.mimeType!, isInline: chunk.isInline } as any];
     case 'audio':
       return [{ type: 'audio', data: chunk.data!, mimeType: chunk.mimeType! } as any];
     case 'video':
@@ -233,6 +205,14 @@ function buildBlocks(chunk: ContentChunk): RichContentBlock[] {
         mimeType: chunk.mimeType || 'application/octet-stream',
         data: chunk.data,
         path: chunk.path
+      } as any];
+    case 'code_ref':
+      return [{
+        type: 'code_ref',
+        name: chunk.name || chunk.path || 'reference',
+        path: chunk.path || '',
+        startLine: chunk.startLine,
+        endLine: chunk.endLine,
       } as any];
     case 'tool_call': {
       const entry = buildToolCallEntry(chunk);

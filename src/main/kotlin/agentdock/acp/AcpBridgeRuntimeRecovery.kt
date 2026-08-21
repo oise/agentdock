@@ -21,7 +21,10 @@ internal fun AcpBridge.recoverRuntimeAfterFailure(reason: String) {
     promptJobs.clear()
     livePromptCaptures.clear()
     historyReplayCaptures.clear()
+    replayFreshnessProbes.clear()
     suppressReplayForChatIds.clear()
+    todoToolCallKeys.clear()
+    emittedTodoPlanKeys.clear()
 
     val affectedChatIds = lastStatusByChatId
         .filterValues { status -> status == "prompting" || status == "initializing" }

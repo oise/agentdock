@@ -94,9 +94,13 @@ function CopilotUsageSection() {
 export function AgentManagementView({
   initialAgents = [],
   isActive = false,
+  hasOpenConversationsForAdapter,
+  onUpdateAgent,
 }: {
   initialAgents?: AgentOption[];
   isActive?: boolean;
+  hasOpenConversationsForAdapter: (adapterId: string) => boolean;
+  onUpdateAgent: (adapterId: string) => void;
 }) {
   const [agents, setAgents] = useState<AgentOption[]>(() => {
     if (Object.keys(serviceProviderAgentSnapshots).length > 0) {
@@ -189,9 +193,9 @@ export function AgentManagementView({
   };
 
   const performUpdate = () => {
-    if (confirmUpdateId && window.__updateAgent) {
+    if (confirmUpdateId) {
       setInstallingIds(prev => new Set(prev).add(confirmUpdateId));
-      window.__updateAgent(confirmUpdateId);
+      onUpdateAgent(confirmUpdateId);
       setConfirmUpdateId(null);
     }
   };
@@ -262,12 +266,12 @@ export function AgentManagementView({
             const usesAcpLogin = agent.loginMethod === 'acp';
             const usesCliLogin = agent.loginMethod === 'cli';
             const hasLoginMenu = usesAcpLogin || usesCliLogin;
-            const showLogin = agent.loggedIn !== true;
-            const showLogout = agent.logoutAvailable === true && agent.loggedIn === true;
-            const showCliAuthFallback = agent.loggedIn === true && agent.logoutAvailable !== true;
+            const isStarting = !!agent.initializing;
+            const showLogin = !isStarting && agent.loggedIn !== true;
+            const showLogout = !isStarting && agent.logoutAvailable === true && agent.loggedIn === true;
+            const showCliAuthFallback = !isStarting && agent.loggedIn === true && agent.logoutAvailable !== true;
             const showUsage = agent.loginStatusSupported !== true || agent.loggedIn === true;
             const isLast = index === agents.length - 1;
-            const isStarting = !!agent.initializing;
             const initializationDetail = agent.initializationDetail?.trim();
             const canResolveStatus = isDownloaded && agent.readyKnown === true;
             const isStatusUnknown = isDownloaded && !isStarting && !canResolveStatus;
@@ -504,7 +508,10 @@ export function AgentManagementView({
       <ConfirmationModal
         isOpen={confirmUpdateId !== null}
         title="Update Service Provider"
-        message={`Do you want to update ${agents.find(a => a.id === confirmUpdateId)?.name || 'this service provider'} to the latest version?`}
+        message={`Do you want to update ${agents.find(a => a.id === confirmUpdateId)?.name || 'this service provider'} to the latest version?${
+          confirmUpdateId && hasOpenConversationsForAdapter(confirmUpdateId)
+            ? '\n\nOpen conversations using this service provider will be closed, and active prompts will be cancelled.' : ''
+        }`}
         onConfirm={performUpdate}
         onCancel={() => setConfirmUpdateId(null)}
       />

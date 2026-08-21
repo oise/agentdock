@@ -18,14 +18,14 @@ class UndoFileHandlerTest {
         file.parentFile.mkdirs()
         file.writeText("fun main() = Unit")
 
-        assertTrue(UndoFileHandler.isPathInsideProject(projectDir.path, file.path))
+        assertTrue(LocalFilePathPolicy.isInsideProject(projectDir.path, file.path))
     }
 
     @Test
     fun `project directory itself is allowed`() {
         val projectDir = Files.createTempDirectory("agent-dock-project-").toFile()
 
-        assertTrue(UndoFileHandler.isPathInsideProject(projectDir.path, projectDir.path))
+        assertTrue(LocalFilePathPolicy.isInsideProject(projectDir.path, projectDir.path))
     }
 
     @Test
@@ -38,7 +38,7 @@ class UndoFileHandlerTest {
         siblingFile.parentFile.mkdirs()
         siblingFile.writeText("fun main() = Unit")
 
-        assertFalse(UndoFileHandler.isPathInsideProject(projectDir.path, siblingFile.path))
+        assertFalse(LocalFilePathPolicy.isInsideProject(projectDir.path, siblingFile.path))
     }
 
     @Test
@@ -51,7 +51,7 @@ class UndoFileHandlerTest {
 
         val traversedPath = projectDir.resolve("../outside.txt").path
 
-        assertFalse(UndoFileHandler.isPathInsideProject(projectDir.path, traversedPath))
+        assertFalse(LocalFilePathPolicy.isInsideProject(projectDir.path, traversedPath))
     }
 
     @Test
@@ -149,6 +149,40 @@ class UndoFileHandlerTest {
 
         assertEquals(1, stats?.additions)
         assertEquals(1, stats?.deletions)
+    }
+
+    @Test
+    fun `file stats include every line of a deleted file`() {
+        val projectDir = Files.createTempDirectory("agent-dock-project-").toFile()
+        val deletedFile = projectDir.resolve("Deleted.kt")
+        val project = projectWithBasePath(projectDir.path)
+
+        val stats = AgentChangeCalculator.computeFileStats(
+            project,
+            deletedFile.path,
+            "M",
+            listOf(UndoOperation("first\nsecond\nthird\n", ""))
+        )
+
+        assertEquals(0, stats?.additions)
+        assertEquals(3, stats?.deletions)
+    }
+
+    @Test
+    fun `undo restores a deleted file`() {
+        val projectDir = Files.createTempDirectory("agent-dock-project-").toFile()
+        val deletedFile = projectDir.resolve("Deleted.kt")
+        val project = projectWithBasePath(projectDir.path)
+
+        val result = UndoFileHandler.undoSingleFile(
+            project,
+            deletedFile.path,
+            "M",
+            listOf(UndoOperation("first\nsecond\n", ""))
+        )
+
+        assertTrue(result.success, result.toString())
+        assertEquals("first\nsecond\n", deletedFile.readText())
     }
 
     private fun projectWithBasePath(basePath: String): Project {

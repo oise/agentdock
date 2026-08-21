@@ -7,7 +7,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import agentdock.IdeTheme
-import agentdock.utils.escapeForJsString
+import agentdock.utils.jsStringLiteral
 import com.intellij.openapi.diagnostic.Logger
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -174,28 +174,22 @@ private fun AcpBridge.buildAdapterPayload(
 
     val savedPreference = preferences.agents[info.id]
     val rawRuntimeMetadata = service.adapterRuntimeMetadata(info.id)
-        ?: AcpClientService.AdapterRuntimeMetadata(emptyList())
+        ?: info.fallbackRuntimeMetadata()
     val preferredValues = savedPreference?.configOptions.orEmpty()
     val modelOption = rawRuntimeMetadata.configOptions.firstOrNull { it.matchesCategory("model") }
     val selectedModelId = modelOption?.id?.let { preferredValues[it] }
         ?.takeIf { preferred -> modelOption?.accepts(preferred) == true }
         ?: rawRuntimeMetadata.currentModelId
+    val modelConfigOptions = rawRuntimeMetadata.configOptionsForModel(selectedModelId)
     val runtimeMetadata = rawRuntimeMetadata.copy(
-        configOptions = rawRuntimeMetadata.configOptions.map { option ->
-            val values = if (
-                option.matchesCategory("thought_level") || option.matchesCategory("reasoning_effort")
-            ) {
-                rawRuntimeMetadata.reasoningEffortsByModel[selectedModelId] ?: option.options
-            } else {
-                option.options
-            }
+        configOptions = modelConfigOptions.map { option ->
             val candidate = preferredValues[option.id]
             val resolved = candidate
-                ?.takeIf { option.copy(options = values).accepts(it) }
-                ?: option.currentValue.takeIf { option.type != "select" || values.any { value -> value.value == it } }
-                ?: values.firstOrNull()?.value
+                ?.takeIf(option::accepts)
+                ?: option.currentValue.takeIf { option.type != "select" || option.options.any { value -> value.value == it } }
+                ?: option.options.firstOrNull()?.value
                 ?: option.currentValue
-            option.copy(currentValue = resolved, options = values)
+            option.copy(currentValue = resolved)
         }
     )
 
@@ -217,7 +211,7 @@ private fun AcpBridge.buildAdapterPayload(
             it.toReasoningEffortPayload()
         },
         configOptions = runtimeMetadata.configOptions,
-        reasoningEffortsByModel = runtimeMetadata.reasoningEffortsByModel,
+        configOptionsByModel = runtimeMetadata.configOptionsByModel,
         downloaded = downloaded,
         downloadedKnown = downloadedKnown,
         downloadPath = if (downloaded == true) AcpAdapterPaths.getDownloadPath(info.id, target) else "",
@@ -371,10 +365,10 @@ internal fun AcpBridge.pushAdapters(
         }
 
         val payload = adapterJson.encodeToString(adapters)
-        val escaped = payload.escapeForJsString()
+        val escaped = payload.jsStringLiteral()
         runOnEdt {
             browser.cefBrowser.executeJavaScript(
-                "if(window.__onAdapters) window.__onAdapters(JSON.parse('$escaped'));",
+                "if(window.__onAdapters) window.__onAdapters(JSON.parse($escaped));",
                 browser.cefBrowser.url, 0
             )
         }

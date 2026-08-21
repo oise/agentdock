@@ -9,6 +9,7 @@ import {
 } from '../../types/chat';
 import { ACPBridge } from '../../utils/bridge';
 import { useAvailableAgents } from '../useAvailableAgents';
+import { useHistoryConversationIndex } from '../useHistoryConversationIndex';
 import { useHistoryTitleSync } from '../useHistoryTitleSync';
 import { useAppTabUiState } from './useAppTabUiState';
 
@@ -99,6 +100,51 @@ export function useAppController() {
   }, [cleanupTabUiState]);
 
   useHistoryTitleSync(setTabs);
+  const historyConversationIndex = useHistoryConversationIndex();
+
+  const conversationKeyOf = (tab: ChatTab) => tab.historySession?.conversationId || tab.conversationId;
+
+  const renamableTabIds = useMemo(
+    () => new Set(tabs.filter((tab) => tab.type === 'chat').map((tab) => tab.id)),
+    [tabs]
+  );
+
+  const handleRenameTab = useCallback((tabId: string, newTitle: string) => {
+    const title = newTitle.trim();
+    if (!title) return;
+    const tab = tabsRef.current.find((item) => item.id === tabId);
+    if (!tab || tab.type !== 'chat') return;
+
+    const conversationId = conversationKeyOf(tab);
+    const projectPath = historyConversationIndex.get(conversationId);
+    if (projectPath) {
+      ACPBridge.renameHistoryConversation(projectPath, conversationId, title);
+      return;
+    }
+
+    // Not registered in the history index yet, so the conversation has no prompt. The title
+    // lives on the tab until then: metadataTitleOverride makes the first registration use it.
+    setTabs((prev) => prev.map((item) => (
+      item.id === tabId ? { ...item, title, metadataTitleOverride: title, pendingTitle: title } : item
+    )));
+  }, [historyConversationIndex]);
+
+  // Registration only forces the title once; renaming marks it user-set, so it also survives sync.
+  useEffect(() => {
+    const flushedTabIds = new Set<string>();
+    tabsRef.current.forEach((tab) => {
+      if (!tab.pendingTitle) return;
+      const conversationId = conversationKeyOf(tab);
+      const projectPath = historyConversationIndex.get(conversationId);
+      if (!projectPath) return;
+      ACPBridge.renameHistoryConversation(projectPath, conversationId, tab.pendingTitle);
+      flushedTabIds.add(tab.id);
+    });
+    if (flushedTabIds.size === 0) return;
+    setTabs((prev) => prev.map((tab) => (
+      flushedTabIds.has(tab.id) ? { ...tab, pendingTitle: undefined } : tab
+    )));
+  }, [historyConversationIndex]);
 
   useEffect(() => {
     return ACPBridge.onHistoryDeleteResult((e) => {
@@ -392,6 +438,25 @@ export function useAppController() {
     }
   }, [activeTabId, cleanupTabUi, tabs]);
 
+  const tabUsesAdapter = (tab: ChatTab, adapterId: string) =>
+    tab.type === 'chat' && (tabSessionState[tab.id]?.adapterName || tab.agentId) === adapterId;
+
+  const hasOpenConversationsForAdapter = (adapterId: string) =>
+    tabs.some((tab) => tabUsesAdapter(tab, adapterId));
+
+  const handleUpdateAgent = (adapterId: string) => {
+    if (typeof window.__updateAgent !== 'function') return;
+
+    const currentTabs = tabsRef.current;
+    currentTabs.filter((tab) => tabUsesAdapter(tab, adapterId)).forEach((tab) => {
+      try { window.__stopAgent?.(tab.conversationId); } catch (_) {}
+      cleanupTabUi(tab.id);
+    });
+    setTabs(currentTabs.filter((tab) => !tabUsesAdapter(tab, adapterId)));
+
+    window.__updateAgent(adapterId);
+  };
+
   const handleReorderTabs = useCallback((draggedId: string, targetId: string, position: 'before' | 'after') => {
     if (draggedId === targetId) {
       return;
@@ -473,6 +538,8 @@ export function useAppController() {
     tabs,
     activeTabId,
     tabUi,
+    renamableTabIds,
+    handleRenameTab,
     availableAgents,
     runnableAgents,
     agentAvailabilityResolved,
@@ -483,6 +550,8 @@ export function useAppController() {
     handleReorderTabs,
     handleCloseTab,
     handleCloseAllTabs,
+    hasOpenConversationsForAdapter,
+    handleUpdateAgent,
     handleNewTab,
     handleOpenHistory,
     openSingletonTab,

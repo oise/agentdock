@@ -18,7 +18,7 @@ repositories {
 
 dependencies {
     intellijPlatform {
-        intellijIdeaCommunity("2025.1")
+        intellijIdea("2025.3")
         jetbrainsRuntime()
         bundledPlugin("org.jetbrains.plugins.terminal")
     }
@@ -44,13 +44,18 @@ kotlin {
 
 intellijPlatform {
     buildSearchableOptions = false
+    pluginConfiguration {
+        ideaVersion {
+            sinceBuild = "253"
+        }
+    }
     signing {
         privateKeyFile.set(layout.projectDirectory.file("signing/private.pem"))
         certificateChainFile.set(layout.projectDirectory.file("signing/chain.crt"))
     }
     pluginVerification {
         ides {
-            create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.1")
+            create(IntelliJPlatformType.IntellijIdea, "2025.3")
             create(IntelliJPlatformType.PhpStorm, "2026.1")
             create(IntelliJPlatformType.PhpStorm, "2026.2")
             create(IntelliJPlatformType.IntellijIdea, "261.24374.34")
@@ -63,6 +68,7 @@ val devMode = providers.gradleProperty("devMode").map { it.toBoolean() }.getOrEl
 val generateBuildConfig by tasks.registering {
     val outputDir = layout.buildDirectory.dir("generated/buildConfig")
     val isDev = devMode
+    inputs.property("devMode", isDev)
     outputs.dir(outputDir)
     doLast {
         val file = outputDir.get().asFile.resolve("agentdock/BuildConfig.kt")
@@ -77,6 +83,19 @@ tasks {
     val npmBuild by registering(Exec::class) {
         workingDir = file("frontend")
         commandLine(npm, "run", "build")
+
+        inputs.dir("frontend/src")
+        inputs.files(
+            "frontend/index.html",
+            "frontend/package.json",
+            "frontend/package-lock.json",
+            "frontend/postcss.config.js",
+            "frontend/tailwind.config.js",
+            "frontend/tsconfig.json",
+            "frontend/tsconfig.node.json",
+            "frontend/vite.config.ts",
+        )
+        outputs.dir("src/main/resources/webview")
     }
 
     compileKotlin {

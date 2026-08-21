@@ -4,6 +4,7 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 
 /**
  * Configuration for ACP adapters.
@@ -99,6 +100,7 @@ object AcpAdapterConfig {
         val launchBinary: PlatformBinary? = null,
         val disabledModels: List<String> = emptyList(),
         val disabledModes: List<String> = emptyList(),
+        val configOptions: JsonArray = JsonArray(emptyList()),
         val args: List<String> = emptyList(),
         val patchRoot: PatchRoot = PatchRoot.PACKAGE,
         val patches: List<String> = emptyList(),
@@ -108,14 +110,7 @@ object AcpAdapterConfig {
         val loginArgs: List<String> = listOf("login"),
         val logoutArgs: List<String> = listOf("logout"),
         val agentVersionConfig: AgentVersionConfig? = null,
-        val cli: CliConfig? = null,
-        /**
-         * How to handle model changes mid-session:
-         * - "restart-resume": restart ACP process and resume the previous session (preserves history)
-         * - "in-session": call sess.setModel() without restarting (works if adapter supports it)
-         * Default: "in-session"
-         */
-        val modelChangeStrategy: String = "in-session"
+        val cli: CliConfig? = null
     ) {
         fun getConfiguredVersion(): String = distribution.version
 

@@ -13,7 +13,7 @@ import {
   SessionMetadataUpdatePayload,
   ToolCallEvent,
 } from '../types/chat';
-import { extractToolCallDiffEntries } from './toolCallUtils';
+import { extractToolCallDiffEntries, ToolCallRawInputCache } from './toolCallUtils';
 import { McpServerConfig } from '../types/mcp';
 import { PromptLibraryItem } from '../types/promptLibrary';
 import { SystemInstruction } from '../types/systemInstructions';
@@ -56,7 +56,7 @@ let fileChangeStatsCounter = 0;
 let bridgeOperationCounter = 0;
 const availableCommandsByAdapter = new Map<string, AvailableCommand[]>();
 const pendingRpcMethodsById = new Map<string | number, string>();
-const toolCallRawInputById = new Map<string, Record<string, any>>();
+const toolCallRawInputCache = new ToolCallRawInputCache();
 const BRIDGE_REQUEST_TIMEOUT_MS = 120_000;
 const BRIDGE_OPERATION_TIMEOUT_MS = 10_000;
 const CANCEL_PROMPT_OPERATION_TIMEOUT_MS = 15_000;
@@ -116,15 +116,12 @@ function awaitBridgeOperation(
   });
 }
 
-
 const FILE_ICON_REQUEST_TIMEOUT_MS = 5_000;
+const FILE_ICON_CACHE_LIMIT = 512;
 const fileIconCache = new Map<string, string>();
 const pendingFileIconRequests = new Map<string, Promise<string | null>>();
-let fileIconCacheEpoch = 0;
-
-function fileIconCacheKey(path: string): string {
-  return `path:${path.replace(/\\/g, '/')}`;
-}
+// Bumped on theme change so icons resolved against the previous theme are not cached.
+let fileIconEpoch = 0;
 
 export const ACPBridge = {
   initialize: () => {
@@ -138,9 +135,12 @@ export const ACPBridge = {
           const raw = chunk.toolRawJson ? JSON.parse(chunk.toolRawJson) : {};
           const toolCallId = chunk.toolCallId || raw.toolCallId || '';
           if (chunk.type === 'tool_call' && toolCallId && raw.rawInput && typeof raw.rawInput === 'object') {
-            toolCallRawInputById.set(toolCallId, raw.rawInput);
+            toolCallRawInputCache.set(chunk.chatId, toolCallId, raw.rawInput);
           }
-          const diffs = extractToolCallDiffEntries(raw, toolCallId ? toolCallRawInputById.get(toolCallId) : undefined)
+          const diffs = extractToolCallDiffEntries(
+            raw,
+            toolCallId ? toolCallRawInputCache.get(chunk.chatId, toolCallId) : undefined
+          )
             .map((diff) => ({ path: diff.path, oldText: diff.oldText, newText: diff.newText }));
           const status = chunk.toolStatus || raw.status;
           if (diffs.length > 0) {
@@ -149,7 +149,6 @@ export const ACPBridge = {
               title: chunk.toolTitle || raw.title || '',
               kind: chunk.toolKind || raw.kind,
               status,
-              isReplay: chunk.isReplay,
               diffs,
               locations: raw.locations,
             };
@@ -161,13 +160,12 @@ export const ACPBridge = {
               title: chunk.toolTitle || raw.title || '',
               kind: chunk.toolKind || raw.kind,
               status,
-              isReplay: chunk.isReplay,
               diffs: [],
             };
             window.dispatchEvent(new CustomEvent(EVENT_NAMES.TOOL_CALL_UPDATE, { detail: { chatId: chunk.chatId, payload } }));
           }
-          if (chunk.type === 'tool_call_update' && toolCallId && status && !['pending', 'running', 'in_progress', 'active'].includes(String(status).toLowerCase())) {
-            toolCallRawInputById.delete(toolCallId);
+          if (toolCallId && status && !['pending', 'running', 'in_progress', 'active'].includes(String(status).toLowerCase())) {
+            toolCallRawInputCache.delete(chunk.chatId, toolCallId);
           }
         } catch (e) {
           console.warn('[bridge] Failed to process tool call chunk', e);
@@ -184,6 +182,7 @@ export const ACPBridge = {
     };
 
     window.__onSessionId = (chatId, id) => {
+      toolCallRawInputCache.rememberSession(chatId, id);
       window.dispatchEvent(new CustomEvent(EVENT_NAMES.SESSION_ID, { detail: { chatId, sessionId: id } }));
     };
 
@@ -223,7 +222,8 @@ export const ACPBridge = {
         try {
           parsed = JSON.parse(payload.json);
         } catch (_) {}
-        if (isDev) console.log('[ACP JSON]', payload.direction, parsed);
+        const endpointDirection = payload.direction === 'SENT' ? 'TO' : 'FROM';
+        if (isDev) console.log('[ACP JSON]', payload.direction, endpointDirection, payload.adapterId, parsed);
 
         const message = parsed as Record<string, any> | null;
         if (message && typeof message === 'object') {
@@ -326,6 +326,16 @@ export const ACPBridge = {
       window.dispatchEvent(new CustomEvent(EVENT_NAMES.ADAPTER_DELETED, { detail: { adapterId } }));
     };
 
+    window.__onFileIconResult = (result) => {
+      window.dispatchEvent(new CustomEvent('acp-file-icon-result', { detail: result }));
+    };
+
+    window.__onThemeChanged = () => {
+      fileIconEpoch += 1;
+      fileIconCache.clear();
+      window.dispatchEvent(new CustomEvent('acp-theme-changed'));
+    };
+
     window.__onFilesResult = (filesJson) => {
       let files = [];
       try {
@@ -334,17 +344,6 @@ export const ACPBridge = {
         console.warn('[bridge] Failed to parse files result', e);
       }
       window.dispatchEvent(new CustomEvent("acp-files-result", { detail: { files } }));
-    };
-
-    window.__onFileIconResult = (result) => {
-      window.dispatchEvent(new CustomEvent('acp-file-icon-result', { detail: result }));
-    };
-
-    window.__onThemeChanged = () => {
-      fileIconCacheEpoch += 1;
-      fileIconCache.clear();
-      pendingFileIconRequests.clear();
-      window.dispatchEvent(new CustomEvent('acp-theme-changed'));
     };
 
     if (window.__notifyReady) window.__notifyReady();
@@ -377,6 +376,10 @@ export const ACPBridge = {
 
   requestAdapters: (forceRefresh = false) => {
     window.__requestAdapters?.(forceRefresh);
+  },
+
+  rememberAgentConfigOption: (adapterId: string, configId: string, value: string) => {
+    window.__rememberAgentConfigOption?.(adapterId, configId, value);
   },
 
   startAgent: (conversationId: string, adapterId?: string, configValues?: Record<string, string>) => {
@@ -414,6 +417,10 @@ export const ACPBridge = {
       },
       CANCEL_PROMPT_OPERATION_TIMEOUT_MS,
     );
+  },
+
+  clearConversationToolCache: (conversationId: string) => {
+    toolCallRawInputCache.clearChat(conversationId);
   },
 
   recoverRuntime: (reason?: string) => {
@@ -568,39 +575,43 @@ export const ACPBridge = {
     window.addEventListener('acp-files-result', fn);
     return () => window.removeEventListener('acp-files-result', fn);
   },
+
   requestFileIcon: (path: string): Promise<string | null> => {
-    const cacheKey = fileIconCacheKey(path);
-    const cachedIcon = fileIconCache.get(cacheKey);
-    if (cachedIcon) return Promise.resolve(cachedIcon);
+    const cached = fileIconCache.get(path);
+    if (cached) return Promise.resolve(cached);
 
-    const pendingRequest = pendingFileIconRequests.get(cacheKey);
-    if (pendingRequest) return pendingRequest;
+    const pending = pendingFileIconRequests.get(path);
+    if (pending) return pending;
 
-    const requestEpoch = fileIconCacheEpoch;
+    const requestEpoch = fileIconEpoch;
     const request = new Promise<string | null>((resolve) => {
       let timeout: number | undefined;
-      const handler = (e: Event) => {
-        const detail = (e as CustomEvent).detail as { path: string; icon: string };
-        if (!detail || detail.path !== path) return;
-        finish(requestEpoch === fileIconCacheEpoch ? detail.icon || null : null);
-      };
 
       const finish = (icon: string | null) => {
-        if (timeout !== undefined) window.clearTimeout(timeout);
+        window.clearTimeout(timeout);
         window.removeEventListener('acp-file-icon-result', handler);
-        if (icon && requestEpoch === fileIconCacheEpoch) fileIconCache.set(cacheKey, icon);
+        if (icon && requestEpoch === fileIconEpoch) {
+          const oldest = fileIconCache.size >= FILE_ICON_CACHE_LIMIT ? fileIconCache.keys().next().value : undefined;
+          if (oldest !== undefined) fileIconCache.delete(oldest);
+          fileIconCache.set(path, icon);
+        }
         resolve(icon);
+      };
+
+      const handler = (e: Event) => {
+        const detail = (e as CustomEvent).detail as { path: string; icon: string };
+        if (detail?.path === path) finish(detail.icon || null);
       };
 
       window.addEventListener('acp-file-icon-result', handler);
       timeout = window.setTimeout(() => finish(null), FILE_ICON_REQUEST_TIMEOUT_MS);
-      if (typeof window.__requestFileIcon !== 'function') finish(null);
-      else window.__requestFileIcon(path);
+      if (typeof window.__requestFileIcon === 'function') window.__requestFileIcon(path);
+      else finish(null);
     });
 
-    pendingFileIconRequests.set(cacheKey, request);
+    pendingFileIconRequests.set(path, request);
     void request.then(() => {
-      if (pendingFileIconRequests.get(cacheKey) === request) pendingFileIconRequests.delete(cacheKey);
+      if (pendingFileIconRequests.get(path) === request) pendingFileIconRequests.delete(path);
     });
     return request;
   },
@@ -609,8 +620,6 @@ export const ACPBridge = {
     window.addEventListener('acp-theme-changed', callback);
     return () => window.removeEventListener('acp-theme-changed', callback);
   },
-
-
 
   loadMcpServers: () => {
     window.__loadMcpServers?.();

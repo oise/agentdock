@@ -1,50 +1,52 @@
-import React from 'react';
-import { File } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { File, FileAudio, FileText, FileVideo } from 'lucide-react';
 import { ACPBridge } from '../../../utils/bridge';
 
 interface FileIconProps {
-  fileName: string;
   filePath?: string;
-  icon?: string;
+  mimeType?: string;
   className?: string;
 }
 
-export function FileIcon({
-  fileName,
-  filePath,
-  icon,
-  className = 'h-3 w-3 flex-shrink-0 object-contain'
-}: FileIconProps) {
-  const [resolvedIcon, setResolvedIcon] = React.useState<string | null>(icon ?? null);
-  const iconPath = filePath || fileName;
+function FallbackIcon({ mimeType, className }: { mimeType?: string; className: string }) {
+  if (mimeType?.startsWith('audio/')) return <FileAudio className={className} />;
+  if (mimeType?.startsWith('video/')) return <FileVideo className={className} />;
+  if (mimeType === 'application/pdf') return <FileText className={className} />;
+  return <File className={className} />;
+}
 
-  React.useEffect(() => {
-    let isMounted = true;
-    const requestIcon = () => {
-      setResolvedIcon(null);
-      ACPBridge.requestFileIcon(iconPath).then((iconDataUri) => {
-        if (isMounted) setResolvedIcon(iconDataUri);
+/**
+ * Shows the icon the IDE resolves for a file. Falls back to a Lucide icon while the
+ * icon is loading, when the path is unknown, or when the IDE has nothing to offer.
+ */
+export function FileIcon({ filePath, mimeType, className = "h-[14px] w-[14px] flex-shrink-0" }: FileIconProps) {
+  const [icon, setIcon] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!filePath) return;
+    let active = true;
+    const load = () => {
+      ACPBridge.requestFileIcon(filePath).then(result => {
+        if (active) setIcon(result);
       });
     };
-
-    if (icon) setResolvedIcon(icon);
-    else if (iconPath) requestIcon();
-
-    const unsubscribe = iconPath ? ACPBridge.onThemeChanged(() => {
-      if (!isMounted) return;
-      requestIcon();
-    }) : undefined;
+    load();
+    const unsubscribe = ACPBridge.onThemeChanged(load);
     return () => {
-      isMounted = false;
-      unsubscribe?.();
+      active = false;
+      unsubscribe();
     };
-  }, [icon, iconPath]);
+  }, [filePath]);
 
-  if (resolvedIcon) {
-    return (
-      <img src={resolvedIcon} alt='' aria-hidden='true' className={className} onError={() => setResolvedIcon(null)} />
-    );
-  }
+  if (!icon) return <FallbackIcon mimeType={mimeType} className={className} />;
 
-  return <File className={`${className} text-foreground`} aria-hidden='true' />;
+  return (
+    <img
+      src={icon}
+      alt=""
+      aria-hidden="true"
+      className={`${className} object-contain`}
+      onError={() => setIcon(null)}
+    />
+  );
 }

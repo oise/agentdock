@@ -2,7 +2,9 @@ package agentdock.acp
 
 import org.cef.browser.CefBrowser
 import agentdock.BuildConfig
-import agentdock.utils.escapeForJsString
+import agentdock.utils.jsStringLiteral
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 
 /**
@@ -13,6 +15,7 @@ import agentdock.utils.escapeForJsString
 internal fun AcpBridge.injectDebugApi(cefBrowser: CefBrowser) {
     val startAgentInject = startAgentQuery?.inject("JSON.stringify({ requestId: (requestId || ''), chatId: chatId, adapterId: (adapterId || ''), configValues: (configValues || {}) })") ?: ""
     val listAdaptersInject = listAdaptersQuery?.inject("(forceRefresh === true ? 'refresh' : '')") ?: ""
+    val rememberConfigOptionInject = rememberConfigOptionQuery?.inject("JSON.stringify({ adapterId: adapterId, configValues: { [configId]: value } })") ?: ""
     val sendPromptInject = sendPromptQuery?.inject("JSON.stringify({ requestId: (requestId || ''), chatId: chatId, text: message, forkBase: forkBase || null, adapterId: (adapterId || ''), configValues: (configValues || {}) })") ?: ""
     val cancelPromptInject = cancelPromptQuery?.inject("JSON.stringify({ requestId: (requestId || ''), chatId: chatId })") ?: ""
     val stopAgentInject = stopAgentQuery?.inject("chatId") ?: ""
@@ -37,7 +40,6 @@ internal fun AcpBridge.injectDebugApi(cefBrowser: CefBrowser) {
     val undoAllFilesInject = undoAllFilesQuery?.inject("payload") ?: ""
     val processFileInject = processFileQuery?.inject("payload") ?: ""
     val keepAllInject = keepAllQuery?.inject("payload") ?: ""
-    val removeProcessedFilesInject = removeProcessedFilesQuery?.inject("payload") ?: ""
     val getChangesStateInject = getChangesStateQuery?.inject("payload") ?: ""
     val computeFileChangeStatsInject = computeFileChangeStatsQuery?.inject("payload") ?: ""
     val showDiffInject = showDiffQuery?.inject("payload") ?: ""
@@ -53,6 +55,9 @@ internal fun AcpBridge.injectDebugApi(cefBrowser: CefBrowser) {
             window.__IS_DEV = ${BuildConfig.IS_DEV};
             window.__requestAdapters = function(forceRefresh) {
                 try { $listAdaptersInject } catch (e) { }
+            };
+            window.__rememberAgentConfigOption = function(adapterId, configId, value) {
+                try { $rememberConfigOptionInject } catch (e) { }
             };
             window.__startAgent = function(chatId, adapterId, configValues, requestId) {
                 try {
@@ -127,9 +132,6 @@ internal fun AcpBridge.injectDebugApi(cefBrowser: CefBrowser) {
             window.__keepAll = function(payload) {
                 try { $keepAllInject } catch (e) { }
             };
-            window.__removeProcessedFiles = function(payload) {
-                try { $removeProcessedFilesInject } catch (e) { }
-            };
             window.__getChangesState = function(payload) {
                 try { $getChangesStateInject } catch (e) { }
             };
@@ -188,9 +190,6 @@ internal fun AcpBridge.injectReadySignal(cefBrowser: CefBrowser) {
         window.__onPermissionRequest = window.__onPermissionRequest || function(request) {};
         window.__respondPermission = window.__respondPermission || function(requestId, decision) {};
         window.__stopAgent = window.__stopAgent || function(chatId) {};
-        window.__onToolCall = window.__onToolCall || function(chatId, payload) {};
-        window.__onToolCallUpdate = window.__onToolCallUpdate || function(chatId, payload) {};
-        window.__onPlan = window.__onPlan || function(chatId, payload) {};
         window.__onUndoResult = window.__onUndoResult || function(chatId, result) {};
         window.__onChangesState = window.__onChangesState || function(chatId, state) {};
         window.__onFileChangeStats = window.__onFileChangeStats || function(payload) {};
@@ -204,6 +203,7 @@ internal fun AcpBridge.injectReadySignal(cefBrowser: CefBrowser) {
             window.__pendingAdapterRefresh =
                 window.__pendingAdapterRefresh === true || forceRefresh === true;
         };
+        window.__rememberAgentConfigOption = window.__rememberAgentConfigOption || function(adapterId, configId, value) {};
         window.__downloadAgent = window.__downloadAgent || function(id) {};
         window.__cancelAgentInstall = window.__cancelAgentInstall || function(id) {};
         window.__deleteAgent = window.__deleteAgent || function(id) {};
@@ -232,12 +232,17 @@ internal fun AcpBridge.injectReadySignal(cefBrowser: CefBrowser) {
 }
 
 internal fun AcpBridge.pushLogEntry(entry: AcpLogEntry) {
-    if (!BuildConfig.IS_DEV) return
-    val payload = """{"direction":"${entry.direction}","category":"${entry.category}","json":${escapeJsonString(entry.json)},"timestamp":${entry.timestampMillis}}"""
-    val escaped = payload.escapeForJsString()
+    if (!BuildConfig.IS_DEV || browser.isDisposed) return
+    val payload = buildJsonObject {
+        put("adapterId", entry.adapterId)
+        put("direction", entry.direction.toString())
+        put("category", entry.category.toString())
+        put("json", entry.json)
+        put("timestamp", entry.timestampMillis)
+    }.toString().jsStringLiteral()
     runOnEdt {
         browser.cefBrowser.executeJavaScript(
-            "if(window.__onAcpLog) window.__onAcpLog(JSON.parse('$escaped'));",
+            "if(window.__onAcpLog) window.__onAcpLog(JSON.parse($payload));",
             browser.cefBrowser.url, 0
         )
     }

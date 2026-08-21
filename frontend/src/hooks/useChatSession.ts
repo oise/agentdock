@@ -8,8 +8,7 @@ import {
   Message,
   PendingHandoffContext,
   PermissionRequest,
-  RichContentBlock,
-  SessionConfigOptionsPayload
+  RichContentBlock
 } from '../types/chat';
 import {ACPBridge} from '../utils/bridge';
 import {buildReplayMessages} from '../utils/replay';
@@ -38,6 +37,9 @@ import {QueuedPrompt} from './chatSession/promptQueueTypes';
 
 const EMPTY_ADAPTER_NAMES: string[] = [];
 const APPROVAL_MODE_STORAGE_KEY = 'chat-approval-mode';
+// The backend always reports a terminal status for a session start within its own
+// start timeout, so a deferred prompt that outlives it will never be sent.
+const PENDING_PROMPT_READY_TIMEOUT_MS = 375_000;
 
 function loadApprovalMode(): ApprovalMode {
   return localStorage.getItem(APPROVAL_MODE_STORAGE_KEY) === 'auto' ? 'auto' : 'ask';
@@ -47,40 +49,11 @@ function saveApprovalMode(mode: ApprovalMode) {
   localStorage.setItem(APPROVAL_MODE_STORAGE_KEY, mode);
 }
 
-function normalizePermissionText(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-}
-
-function isDenyPermissionOption(option: PermissionRequest['options'][number]): boolean {
-  const text = normalizePermissionText(`${option.optionId} ${option.label}`);
-  return /\b(deny|reject|cancel|no|block|disallow)\b/.test(text);
-}
-
-function isPersistentPermissionOption(option: PermissionRequest['options'][number]): boolean {
-  const text = normalizePermissionText(`${option.optionId} ${option.label}`);
-  return /\b(always|forever|permanent|persist|remember)\b/.test(text);
-}
-
-function isPositivePermissionOption(option: PermissionRequest['options'][number]): boolean {
-  const text = normalizePermissionText(`${option.optionId} ${option.label}`);
-  return /\b(allow|approve|accept|yes|ok|continue|proceed|run|execute|apply)\b/.test(text);
-}
-
+// ACP marks every permission option with a kind. `allow_once` is the only one that grants a
+// single operation without persisting the grant, so it is the only one auto mode may pick.
+// When an agent offers none, the request falls through to the normal dialog and the user decides.
 function findAutoApproveOption(request: PermissionRequest): PermissionRequest['options'][number] | null {
-  const transientOptions = request.options.filter((option) =>
-    !isDenyPermissionOption(option) && !isPersistentPermissionOption(option)
-  );
-
-  const positiveOption = transientOptions.find(isPositivePermissionOption);
-  if (positiveOption) return positiveOption;
-
-  const hasDenyOption = request.options.some(isDenyPermissionOption);
-  const firstOption = request.options[0];
-  if (hasDenyOption && firstOption && transientOptions[0] === firstOption) {
-    return firstOption;
-  }
-
-  return null;
+  return request.options.find((option) => option.kind === 'allow_once') ?? null;
 }
 
 function respondToPermission(request: PermissionRequest, decision: string): boolean {
@@ -89,22 +62,37 @@ function respondToPermission(request: PermissionRequest, decision: string): bool
   return true;
 }
 
-export function useChatSession(
-  conversationId: string,
-  availableAgents: AgentOption[],
-  initialAgentId?: string,
-  historySession?: HistorySessionMeta,
-  pendingHandoff?: PendingHandoffContext,
-  initialMessages: Message[] = [],
-  metadataTitleOverride?: string,
-  inheritedAdapterNames: string[] = EMPTY_ADAPTER_NAMES,
-  forkBase?: ForkConversationBase,
-  onHandoffConsumed?: (handoffId: string) => void,
-  onUserMessageSent?: () => void
-) {
+export interface UseChatSessionOptions {
+  conversationId: string;
+  availableAgents: AgentOption[];
+  initialAgentId?: string;
+  historySession?: HistorySessionMeta;
+  pendingHandoff?: PendingHandoffContext;
+  initialMessages?: Message[];
+  metadataTitleOverride?: string;
+  inheritedAdapterNames?: string[];
+  forkBase?: ForkConversationBase;
+  onHandoffConsumed?: (handoffId: string) => void;
+  onUserMessageSent?: () => void;
+}
+
+export function useChatSession({
+  conversationId,
+  availableAgents,
+  initialAgentId,
+  historySession,
+  pendingHandoff,
+  initialMessages = [],
+  metadataTitleOverride,
+  inheritedAdapterNames = EMPTY_ADAPTER_NAMES,
+  forkBase,
+  onHandoffConsumed,
+  onUserMessageSent,
+}: UseChatSessionOptions) {
   const [historyMessages, setHistoryMessages] = useState<Message[]>(initialMessages);
   const [liveMessages, setLiveMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
+  const [composerLoadRevision, setComposerLoadRevision] = useState(0);
   const [status, setStatus] = useState<string>('not started');
   const [isSending, setIsSending] = useState(false);
   const [isHistoryReplaying, setIsHistoryReplaying] = useState(!!historySession);
@@ -113,9 +101,18 @@ export function useChatSession(
   const permissionRequest = permissionQueue[0] ?? null;
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [acpSessionId, setAcpSessionId] = useState<string>('');
-  const [sessionConfigOptions, setSessionConfigOptions] = useState<SessionConfigOptionsPayload>();
   const messages = useMemo(() => [...historyMessages, ...liveMessages], [historyMessages, liveMessages]);
   const selectedAgentId = initialAgentId || '';
+
+  const pendingPromptWatchdogRef = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    ACPBridge.clearConversationToolCache(conversationId);
+    if (pendingPromptWatchdogRef.current !== null) {
+      window.clearTimeout(pendingPromptWatchdogRef.current);
+      pendingPromptWatchdogRef.current = null;
+    }
+  }, [conversationId]);
 
   const pendingPromptRef = useRef<any[] | null>(null);
   const pendingHandoffRef = useRef<PendingHandoffContext | null>(null);
@@ -132,7 +129,6 @@ export function useChatSession(
   const lastMetadataFingerprintRef = useRef<string>('');
   const allowMetadataUpdateRef = useRef(!historySession);
   const touchUpdatedAtRef = useRef(!historySession);
-  const ignoreReplayChunksRef = useRef(!!historySession);
   const pinnedAgentSnapshotRef = useRef<PinnedAgentSnapshot | null>(null);
   const recoveryInFlightRef = useRef(false);
   const initialUserMessageCountRef = useRef(initialMessages.filter((message) => message.role === 'user').length);
@@ -196,14 +192,6 @@ export function useChatSession(
   const availableCommands = useAvailableCommands(availableAgents, selectedAgentId);
   const effectiveSelectedAgent = resolvedSelectedAgent;
 
-  useEffect(() => ACPBridge.onSessionConfigOptions((event) => {
-    if (event.detail.payload.chatId === conversationId) {
-      setSessionConfigOptions(event.detail.payload);
-    }
-  }), [conversationId]);
-
-  useEffect(() => setSessionConfigOptions(undefined), [selectedAgentId]);
-
   const {
     availableModels,
     availableModes,
@@ -215,8 +203,9 @@ export function useChatSession(
     configValues,
     selectedConfigOptions,
     modelIdForStart,
-    markConfigValuesSubmitted,
+    handleSessionConfigOptions,
     handleModelChange,
+    handleReportedModeChange,
     handleModeChange,
     handleReasoningEffortChange,
     handleConfigOptionChange,
@@ -224,9 +213,14 @@ export function useChatSession(
     availableAgents,
     effectiveSelectedAgent,
     selectedAgentId,
-    historySession,
-    sessionConfigOptions,
+    sessionActive: status === 'ready' || status === 'prompting',
   });
+
+  useEffect(() => ACPBridge.onSessionConfigOptions((event) => {
+    if (event.detail.payload.chatId === conversationId) {
+      handleSessionConfigOptions(event.detail.payload);
+    }
+  }), [conversationId, handleSessionConfigOptions]);
 
   const adapterDisplayName = resolvedSelectedAgent?.name || '';
   const agentOptions = useMemo(
@@ -318,6 +312,23 @@ export function useChatSession(
     selectedConfigOptions,
   ]);
 
+  const clearPendingPromptWatchdog = useCallback(() => {
+    if (pendingPromptWatchdogRef.current === null) return;
+    window.clearTimeout(pendingPromptWatchdogRef.current);
+    pendingPromptWatchdogRef.current = null;
+  }, []);
+
+  // A deferred prompt must never wait forever: if the agent never reports back,
+  // fail the prompt locally so the user sees the reason instead of a spinner.
+  const armPendingPromptWatchdog = useCallback(() => {
+    clearPendingPromptWatchdog();
+    pendingPromptWatchdogRef.current = window.setTimeout(() => {
+      pendingPromptWatchdogRef.current = null;
+      if (!pendingPromptRef.current) return;
+      failActivePromptLocally('The agent never became ready, so the message was not sent. Send it again to retry.');
+    }, PENDING_PROMPT_READY_TIMEOUT_MS);
+  }, [clearPendingPromptWatchdog, failActivePromptLocally]);
+
   const requestRuntimeRecovery = useCallback((reason: string) => {
     if (recoveryInFlightRef.current) return;
     recoveryInFlightRef.current = true;
@@ -333,9 +344,9 @@ export function useChatSession(
       });
   }, []);
 
-  useEffect(() => {
-    allowMetadataUpdateRef.current = false;
-    lastMetadataFingerprintRef.current = '';
+  // Drops the session back to its pre-start state. Every value the agent start records has to be
+  // cleared together, so both reset paths go through here rather than repeating the list.
+  const resetSessionToNotStarted = useCallback(() => {
     statusRef.current = 'not started';
     setStatus('not started');
     setAcpSessionId('');
@@ -343,7 +354,13 @@ export function useChatSession(
     startedModelIdRef.current = '';
     startedModeIdRef.current = '';
     startedReasoningEffortIdRef.current = '';
-  }, [selectedAgentId]);
+  }, []);
+
+  useEffect(() => {
+    allowMetadataUpdateRef.current = false;
+    lastMetadataFingerprintRef.current = '';
+    resetSessionToNotStarted();
+  }, [resetSessionToNotStarted, selectedAgentId]);
 
   useEffect(() => {
     if (!historySession) return;
@@ -371,7 +388,6 @@ export function useChatSession(
       clearBufferedChunks();
       statusRef.current = 'initializing';
       setStatus('initializing');
-      markConfigValuesSubmitted();
       ACPBridge.startAgent(
         conversationId,
         selectedAgentId,
@@ -387,7 +403,27 @@ export function useChatSession(
       console.warn('[useChatSession] Failed to auto-start agent:', e);
       return false;
     }
-  }, [clearBufferedChunks, configValues, conversationId, failActivePromptLocally, historySession, markConfigValuesSubmitted, modelIdForStart, requestRuntimeRecovery, selectedAgent, selectedAgentId, selectedModeId, selectedReasoningEffortId]);
+  }, [clearBufferedChunks, configValues, conversationId, failActivePromptLocally, historySession, modelIdForStart, requestRuntimeRecovery, selectedAgent, selectedAgentId, selectedModeId, selectedReasoningEffortId]);
+
+  // Restarts whatever backend work can bring the session back to 'ready' after it
+  // broke, so a prompt does not have to wait for a session that nobody restarts.
+  const restartSessionForPendingPrompt = useCallback((): boolean => {
+    if (!historySession) return startSelectedAgent();
+    if (!historySession.projectPath || !historySession.conversationId) return false;
+
+    // The stored replay already holds every finished turn, so keep only the prompt
+    // being sent; reloading it back into history would otherwise duplicate them.
+    setLiveMessages((prev) => prev.slice(-2));
+    clearBufferedChunks();
+    statusRef.current = 'initializing';
+    setStatus('initializing');
+    ACPBridge.loadHistoryConversation(
+      conversationId,
+      historySession.projectPath,
+      historySession.conversationId
+    );
+    return true;
+  }, [clearBufferedChunks, conversationId, historySession, startSelectedAgent]);
 
   useEffect(() => {
     if (!pendingHandoff) return;
@@ -399,15 +435,11 @@ export function useChatSession(
   // Chat Event Listeners (filtered by conversationId)
   // =========================================================================
   useEffect(() => {
-    // --- UNIFIED content handler: one handler for both streaming and replay ---
     const unsubContent = ACPBridge.onContentChunk((e) => {
       const chunk = e.detail.chunk;
       if (chunk.chatId !== conversationId) return;
-      if (chunk.isReplay && ignoreReplayChunksRef.current) {
-        return;
-      }
       enqueueChunk(chunk);
-      if (!chunk.isReplay && chunk.type === 'prompt_done') {
+      if (chunk.type === 'prompt_done') {
         markFlushUnscheduled();
         applyBufferedChunks('prompt-done');
       }
@@ -416,7 +448,6 @@ export function useChatSession(
     const unsubConversationReplayLoaded = ACPBridge.onConversationReplayLoaded((e) => {
       const payload = e.detail.payload;
       if (payload.chatId !== conversationId) return;
-      ignoreReplayChunksRef.current = true;
       clearBufferedChunks();
       setHistoryMessages(buildReplayMessages(payload.data));
       setIsHistoryReplaying(false);
@@ -428,19 +459,14 @@ export function useChatSession(
       statusRef.current = s;
       if (s === 'ready' && resetSessionAfterInitialCancelRef.current) {
         resetSessionAfterInitialCancelRef.current = false;
-        statusRef.current = 'not started';
-        setStatus('not started');
-        setAcpSessionId('');
-        startedAgentIdRef.current = '';
-        startedModelIdRef.current = '';
-        startedModeIdRef.current = '';
-        startedReasoningEffortIdRef.current = '';
+        resetSessionToNotStarted();
         setIsSending(false);
       } else {
         setStatus(s);
       }
 
       if (s === 'ready' || s === 'error') {
+        clearPendingPromptWatchdog();
         startTimeRef.current = null;
 
         // Flush any remaining buffered chunks through the same path as RAF flush.
@@ -464,7 +490,6 @@ export function useChatSession(
 
         // Assistant message is already added in handleSend, we just need to trigger the actual send
         const forkBaseToPersist = forkBaseRef.current;
-        markConfigValuesSubmitted();
         ACPBridge.sendPrompt(
           conversationId,
           JSON.stringify(blocksToSend),
@@ -493,6 +518,7 @@ export function useChatSession(
     const unsubMode = ACPBridge.onMode((e) => {
       if (e.detail.chatId !== conversationId) return;
       startedModeIdRef.current = e.detail.modeId;
+      handleReportedModeChange(e.detail.modeId);
     });
 
     // Permission request - filter by chatId when available
@@ -522,17 +548,19 @@ export function useChatSession(
     enqueueChunk,
     applyBufferedChunks,
     clearBufferedChunks,
+    clearPendingPromptWatchdog,
     markFlushUnscheduled,
     consumeHandoff,
     failActivePromptLocally,
     finishActivePromptAfterError,
     requestRuntimeRecovery,
-    markConfigValuesSubmitted,
+    resetSessionToNotStarted,
     configValues,
     selectedAgentId,
     selectedModelId,
     selectedModeId,
     selectedReasoningEffortId,
+    handleReportedModeChange,
   ]);
 
   useEffect(() => {
@@ -561,7 +589,6 @@ export function useChatSession(
     setLiveMessages([]);
     setStatus('initializing');
     setIsHistoryReplaying(true);
-    ignoreReplayChunksRef.current = true;
 
     startedAgentIdRef.current = historySession.adapterName;
     startedModelIdRef.current = historySession.modelId || '';
@@ -662,13 +689,16 @@ export function useChatSession(
       // Defer the active prompt until the agent finishes starting.
       pendingPromptRef.current = outgoingBlocks;
       if (status === 'not started' || status === 'error') {
-        startSelectedAgent();
+        if (!restartSessionForPendingPrompt()) {
+          failActivePromptLocally('The agent is not available and the session could not be restarted, so the message was not sent.');
+          return;
+        }
       }
+      armPendingPromptWatchdog();
       return;
     }
 
     const forkBaseToPersist = forkBaseRef.current;
-    markConfigValuesSubmitted();
     ACPBridge.sendPrompt(
       conversationId,
       JSON.stringify(outgoingBlocks),
@@ -688,11 +718,7 @@ export function useChatSession(
   // Refs (pendingHandoffRef, allowMetadataUpdateRef, touchUpdatedAtRef, startTimeRef)
   // are intentionally excluded — their identity is stable across renders.
   }, [status, conversationId, selectedAgentId,
-      adapterDisplayName, selectedModelId, selectedModeId, selectedReasoningEffortId, configValues, selectedConfigOptions, markConfigValuesSubmitted, startSelectedAgent, consumeHandoff, failActivePromptLocally, requestRuntimeRecovery, onUserMessageSent]);
-
-  const rebuildQueuedPromptBlocks = useCallback((text: string, queuedAttachments: ChatAttachment[]) => {
-    return normalizeOutgoingBlocks(buildPromptBlocks(text, queuedAttachments));
-  }, []);
+      adapterDisplayName, selectedModelId, selectedModeId, selectedReasoningEffortId, configValues, selectedConfigOptions, armPendingPromptWatchdog, restartSessionForPendingPrompt, consumeHandoff, failActivePromptLocally, requestRuntimeRecovery, onUserMessageSent]);
 
   const canDrainQueuedPrompts = status === 'ready'
     && !isSending
@@ -725,7 +751,8 @@ export function useChatSession(
     enqueuePrompt,
     clearQueue,
     removeQueuedPrompt,
-    updateQueuedPromptText,
+    takeQueuedPrompt,
+    reorderQueuedPrompt,
     sendQueuedPromptNow,
   } = usePromptQueue({
     enabled: true,
@@ -733,8 +760,15 @@ export function useChatSession(
     canPreempt: canPreemptQueuedPrompts,
     onDrain: handleDrainQueuedPrompt,
     onPreempt: preemptActivePromptForQueue,
-    rebuildBlocks: rebuildQueuedPromptBlocks,
   });
+
+  const editQueuedPrompt = useCallback((id: string) => {
+    const prompt = takeQueuedPrompt(id);
+    if (!prompt) return;
+    setInputValue(prompt.composerText);
+    setAttachments([...prompt.attachments]);
+    setComposerLoadRevision((revision) => revision + 1);
+  }, [takeQueuedPrompt]);
 
   const handleSend = useCallback(() => {
     const text = inputValue.trim();
@@ -761,6 +795,7 @@ export function useChatSession(
 
     const enqueued = enqueuePrompt({
       text: plainTextFromBlocks(normalizedBlocks),
+      composerText: inputValue,
       blocks: normalizedBlocks,
       attachments: [...attachments],
     });
@@ -831,12 +866,14 @@ export function useChatSession(
     messages,
     inputValue,
     setInputValue,
+    composerLoadRevision,
     status,
     isSending,
     isHistoryReplaying,
     queuedPrompts,
     removeQueuedPrompt,
-    updateQueuedPromptText,
+    editQueuedPrompt,
+    reorderQueuedPrompt,
     sendQueuedPromptNow,
     selectedAgentId,
     agentOptions,
@@ -849,7 +886,6 @@ export function useChatSession(
     reasoningEffortOptions,
     handleReasoningEffortChange,
     additionalConfigOptions,
-    configValues,
     handleConfigOptionChange,
     approvalMode,
     setApprovalMode,
@@ -863,7 +899,6 @@ export function useChatSession(
     setAttachments,
     availableCommands,
     acpSessionId,
-    adapterName: selectedAgentId,
     adapterDisplayName,
     adapterIconPath: resolvedSelectedAgent?.iconPath || ''
   };

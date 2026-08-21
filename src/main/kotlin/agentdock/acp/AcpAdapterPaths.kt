@@ -42,10 +42,6 @@ object AcpAdapterPaths {
 
     internal fun getExecutionTarget(): AcpExecutionTarget = currentTarget()
 
-    internal fun getTargetDependenciesPath(
-        target: AcpExecutionTarget = currentTarget()
-    ): String = resolveTargetDependenciesPath(target)
-
     internal fun getDownloadPath(
         adapterName: String? = null,
         target: AcpExecutionTarget = currentTarget()
@@ -78,12 +74,6 @@ object AcpAdapterPaths {
         return deleteLocalAdapterRuntime(File(getDependenciesDir(), adapterInfo.id), adapterInfo.id, target)
     }
 
-    suspend fun getAdapterRoot(adapterName: String? = null): File? {
-        val adapterInfo = getAdapterInfo(adapterName)
-        val runtimeDir = File(getDependenciesDir(), adapterInfo.id)
-        return if (isDownloaded(adapterName, AcpExecutionTarget.LOCAL)) runtimeDir else null
-    }
-
     fun applyPatches(
         adapterRoot: File,
         adapterInfo: AcpAdapterConfig.AdapterInfo,
@@ -93,14 +83,6 @@ object AcpAdapterPaths {
         adapterInfo.patches.forEach { patchContent ->
             statusCallback?.invoke("Applying patch...")
             AcpPatchService.applyPatch(patchRoot, patchContent)
-        }
-    }
-
-    internal fun ensurePatched(adapterName: String? = null, target: AcpExecutionTarget = currentTarget()) {
-        val adapterInfo = getAdapterInfo(adapterName)
-        val runtimeDir = File(getDependenciesDir(), adapterInfo.id)
-        if (runtimeDir.isDirectory) {
-            applyPatches(runtimeDir, adapterInfo)
         }
     }
 
@@ -139,7 +121,9 @@ object AcpAdapterPaths {
             ?: installedVersionFromRuntimeDir(targetDir, resolvedAdapterInfo)
         val downloaded = hasLaunchExecutable &&
             isInstalledVersionSupported(resolvedAdapterInfo, installedVersion)
-        if (downloaded) writeInstallMetadata(targetDir, resolvedAdapterInfo.distribution.version)
+        if (downloaded && resolvedAdapterInfo.distribution.type == AcpAdapterConfig.DistributionType.ARCHIVE) {
+            writeInstallMetadata(targetDir, resolvedAdapterInfo.distribution.version)
+        }
         return downloaded
     }
 
@@ -159,12 +143,6 @@ object AcpAdapterPaths {
             "ACP adapter name is required. Provide it explicitly or set system property '$ADAPTER_NAME_OVERRIDE_PROPERTY'."
         )
     }
-
-    internal fun resolveLaunchFile(
-        adapterRoot: File,
-        adapterInfo: AcpAdapterConfig.AdapterInfo,
-        target: AcpExecutionTarget = currentTarget()
-    ): File? = resolveAdapterLaunchFile(adapterRoot, adapterInfo, target)
 
     internal fun resolveLaunchPath(
         adapterRootPath: String,

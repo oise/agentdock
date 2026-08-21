@@ -5,10 +5,14 @@ import com.intellij.ui.jcef.JBCefBrowser
 import com.intellij.ui.jcef.JBCefJSQuery
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import agentdock.utils.escapeForJsString
+import kotlinx.coroutines.sync.Mutex
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
+internal class HistoryLoadMutexEntry {
+    val mutex = Mutex()
+    var references = 0
+}
 
 /**
  * Connects AcpClientService to the JCEF/React UI.
@@ -23,6 +27,7 @@ class AcpBridge(
     internal var sendPromptQuery: JBCefJSQuery? = null
     internal var startAgentQuery: JBCefJSQuery? = null
     internal var listAdaptersQuery: JBCefJSQuery? = null
+    internal var rememberConfigOptionQuery: JBCefJSQuery? = null
     internal var cancelPromptQuery: JBCefJSQuery? = null
     internal var stopAgentQuery: JBCefJSQuery? = null
     internal var respondPermissionQuery: JBCefJSQuery? = null
@@ -33,7 +38,6 @@ class AcpBridge(
     internal var cancelAgentInstallQuery: JBCefJSQuery? = null
     internal var deleteAgentQuery: JBCefJSQuery? = null
     internal var updateAgentQuery: JBCefJSQuery? = null
-    internal var toggleAgentEnabledQuery: JBCefJSQuery? = null
     internal var loginAgentQuery: JBCefJSQuery? = null
     internal var logoutAgentQuery: JBCefJSQuery? = null
     internal var cancelAgentAuthQuery: JBCefJSQuery? = null
@@ -42,7 +46,6 @@ class AcpBridge(
     internal var undoAllFilesQuery: JBCefJSQuery? = null
     internal var processFileQuery: JBCefJSQuery? = null
     internal var keepAllQuery: JBCefJSQuery? = null
-    internal var removeProcessedFilesQuery: JBCefJSQuery? = null
     internal var getChangesStateQuery: JBCefJSQuery? = null
     internal var computeFileChangeStatsQuery: JBCefJSQuery? = null
     internal var showDiffQuery: JBCefJSQuery? = null
@@ -79,9 +82,10 @@ class AcpBridge(
     internal val initialAdapterRefreshStarted = AtomicBoolean(false)
     internal val fullAdapterRefreshInProgress = AtomicBoolean(false)
     internal val fullAdapterRefreshDispatching = AtomicBoolean(false)
-    internal val replaySeqByChatId = ConcurrentHashMap<String, Int>()
     internal val livePromptCaptures = ConcurrentHashMap<String, LivePromptCapture>()
     internal val historyReplayCaptures = ConcurrentHashMap<String, HistoryReplayCapture>()
+    internal val historyLoadMutexes = ConcurrentHashMap<String, HistoryLoadMutexEntry>()
+    internal val replayFreshnessProbes = ConcurrentHashMap<String, ReplayFreshnessProbe>()
     internal val suppressReplayForChatIds: MutableSet<String> = ConcurrentHashMap.newKeySet<String>()
     internal val todoToolCallKeys: MutableSet<String> = ConcurrentHashMap.newKeySet<String>()
     internal val emittedTodoPlanKeys: MutableSet<String> = ConcurrentHashMap.newKeySet<String>()
@@ -101,42 +105,13 @@ class AcpBridge(
         installConversationQueries()
         installFileChangeQueries()
         installMiscQueries()
-        installFileIconProvider()
-    }
-
-    internal fun nextReplaySeq(chatId: String, isReplay: Boolean): Int? {
-        if (!isReplay) return null
-        return replaySeqByChatId.compute(chatId) { _, prev -> (prev ?: 0) + 1 }
+        installFileIconQuery()
     }
 
     internal fun runOnEdt(action: () -> Unit) = ApplicationManager.getApplication().invokeLater(action)
 
-    internal fun escapeJsonString(s: String): String = buildString(s.length + 2) {
-        append('"')
-        s.forEach { ch ->
-            when (ch) {
-                '\\' -> append("\\\\")
-                '"' -> append("\\\"")
-                '\b' -> append("\\b")
-                '\u000C' -> append("\\f")
-                '\n' -> append("\\n")
-                '\r' -> append("\\r")
-                '\t' -> append("\\t")
-                else -> {
-                    if (ch.code < 0x20) {
-                        append("\\u")
-                        append(ch.code.toString(16).padStart(4, '0'))
-                    } else {
-                        append(ch)
-                    }
-                }
-            }
-        }
-        append('"')
-    }
-    internal fun jsStringLiteral(value: String) = "'${value.escapeForJsString()}'"
-
     internal fun dispatchContentChunkJson(json: String) {
+        if (browser.isDisposed) return
         runOnEdt {
             browser.cefBrowser.executeJavaScript(
                 """

@@ -7,11 +7,8 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import agentdock.utils.atomicWriteText
 import java.io.File
-import java.nio.file.Files
 
 internal object HistoryReplayStore {
-    private const val CONVERSATION_REPLAY_STALE_TOLERANCE_MS = 10_000L
-
     fun readConversationData(file: File): ConversationReplayData? {
         if (!file.exists() || !file.isFile) return null
         return runCatching {
@@ -19,7 +16,8 @@ internal object HistoryReplayStore {
         }.getOrNull()
     }
 
-    fun writeConversationData(file: File, data: ConversationReplayData) {
+    fun writeConversationData(projectPath: String, conversationId: String, data: ConversationReplayData) {
+        val file = HistoryStorage.conversationDataFile(projectPath, conversationId)
         file.atomicWriteText(HistoryStorage.json.encodeToString(data))
     }
 
@@ -125,27 +123,8 @@ internal object HistoryReplayStore {
             }
         }
 
-        writeConversationData(targetFile, ConversationReplayData(sessions = mergedSessions))
+        writeConversationData(projectPath, cleanTargetConversationId, ConversationReplayData(sessions = mergedSessions))
         deleteHistoryFileIfExists(sourceFile)
-    }
-
-    fun resolveFreshConversationReplayFile(projectPath: String, conversationId: String): File? {
-        val replayFile = HistoryStorage.conversationDataFile(projectPath, conversationId)
-        if (!replayFile.exists() || !replayFile.isFile) return null
-
-        val latestSourceFile = latestConversationSourceSessionFile(projectPath, conversationId)
-        val latestSourceUpdatedAt = latestSourceFile?.lastModified()?.takeIf { it > 0L } ?: return replayFile
-        val replayUpdatedAt = replayFile.lastModified().coerceAtLeast(0L)
-        val replayStillFresh = replayUpdatedAt + CONVERSATION_REPLAY_STALE_TOLERANCE_MS >= latestSourceUpdatedAt
-        if (replayStillFresh) return replayFile
-
-        val deleted = runCatching { Files.deleteIfExists(replayFile.toPath()) }.getOrElse { cause ->
-            throw IllegalStateException("Failed to delete stale conversation replay '$conversationId': ${cause.message ?: cause}")
-        }
-        if (!deleted && replayFile.exists()) {
-            throw IllegalStateException("Failed to delete stale conversation replay '$conversationId'")
-        }
-        return null
     }
 
     private fun normalizeReplayPrompt(prompt: ConversationPromptReplayEntry): ConversationPromptReplayEntry {
@@ -173,16 +152,5 @@ internal object HistoryReplayStore {
             .trim()
         if (text.isBlank()) return null
         return if (text.length <= 64) text else "${text.take(64)}..."
-    }
-
-    private fun latestConversationSourceSessionFile(projectPath: String, conversationId: String): File? {
-        val conversation = HistoryStorage.readExistingProjectIndex(projectPath)
-            .firstOrNull { it.id == conversationId }
-            ?: return null
-        val latestSession = conversation.sessions.maxByOrNull { it.updatedAt } ?: return null
-        val sourceFilePath = latestSession.sourceFilePath?.trim().orEmpty()
-        if (sourceFilePath.isBlank()) return null
-        val sourceFile = File(sourceFilePath)
-        return sourceFile.takeIf { it.exists() && it.isFile }
     }
 }

@@ -1,7 +1,6 @@
 package agentdock.acp
 
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -332,21 +331,23 @@ class AcpRuntimeMetadataTest {
     }
 
     @Test
-    fun `fresh snapshot replaces adapter options and preserves untouched model effort catalog`() {
+    fun `fresh snapshot replaces current model options and preserves untouched model snapshots`() {
+        val modelAReasoning = AcpConfigOption(
+            "reasoning_effort", "Reasoning", category = "thought_level", type = "select",
+            currentValue = "high",
+            options = listOf(AcpConfigOptionValue("high", "High"))
+        )
+        val modelBFastMode = AcpConfigOption(
+            "fast_mode", "Fast mode", type = "boolean", currentValue = "true"
+        )
         val existing = CachedAdapterConfigOptions(
             adapterId = "codex",
             adapterVersion = "1.0.0",
             refreshedAtMillis = 100L,
-            configOptions = listOf(
-                AcpConfigOption(
-                    "reasoning_effort", "Reasoning", category = "thought_level", type = "select",
-                    currentValue = "high",
-                    options = listOf(AcpConfigOptionValue("high", "High"))
-                )
-            ),
-            reasoningEffortsByModel = mapOf(
-                "model-a" to listOf(AcpConfigOptionValue("high", "High", null)),
-                "model-b" to listOf(AcpConfigOptionValue("low", "Low", null))
+            configOptions = listOf(modelAReasoning),
+            configOptionsByModel = mapOf(
+                "model-a" to listOf(modelAReasoning),
+                "model-b" to listOf(modelBFastMode)
             )
         )
         val fresh = AcpClientService.AdapterRuntimeMetadata(
@@ -368,12 +369,16 @@ class AcpRuntimeMetadataTest {
         val updated = existing.updatedWithSnapshot(adapterInfo(), "1.0.0", fresh)
 
         assertEquals(100L, updated.refreshedAtMillis)
-        assertEquals(emptyList(), updated.reasoningEffortsByModel["model-a"])
-        assertEquals(listOf("low"), updated.reasoningEffortsByModel["model-b"]?.map { it.value })
-        assertEquals("reasoning_effort", updated.configOptions.first { it.isReasoning() }.id)
+        assertEquals(listOf("model", "mode"), updated.configOptionsByModel["model-a"]?.map { it.id })
+        assertEquals(listOf("fast_mode"), updated.configOptionsByModel["model-b"]?.map { it.id })
+        assertEquals(listOf("model", "mode"), updated.configOptions.map { it.id })
         val runtime = updated.toRuntimeMetadata(adapterInfo())
-        assertEquals("new-mode", runtime.currentModeId)
+        // The cached catalog never carries current values; those come from the live
+        // session, or from the preferences file when a conversation starts.
+        assertEquals(null, runtime.currentModeId)
         assertEquals(null, runtime.currentReasoningEffortId)
+        assertEquals(listOf("model", "mode"), runtime.configOptionsForModel("model-a").map { it.id })
+        assertEquals(listOf("fast_mode"), runtime.configOptionsForModel("model-b").map { it.id })
     }
 
     @Test
@@ -400,11 +405,14 @@ class AcpRuntimeMetadataTest {
         val cached = existing.updatedWithSnapshot(adapterInfo(), "1.0.0", metadata, refreshedAtMillis = 100L)
         val restored = cached.toRuntimeMetadata(adapterInfo())
 
-        assertEquals("build", restored.currentModeId)
+        // The option catalog survives the cache round-trip, but current values are
+        // intentionally dropped: they come from the live session, or from the
+        // preferences file when a conversation starts.
         assertEquals(listOf("build"), restored.availableModes.map { it.id })
-        assertEquals("medium", restored.currentReasoningEffortId)
         assertEquals(listOf("medium"), restored.availableReasoningEfforts.map { it.id })
-        assertEquals("brief", restored.configOptions.first { it.id == "verbosity" }.currentValue)
+        assertEquals(null, restored.currentModeId)
+        assertEquals(null, restored.currentReasoningEffortId)
+        assertEquals("", restored.configOptions.first { it.id == "verbosity" }.currentValue)
     }
 
     @Test

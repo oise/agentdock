@@ -14,7 +14,7 @@ marked.use(
   markedHighlight({
     highlight(code, lang) {
       const language = hljs.getLanguage(lang) ? lang : 'plaintext';
-      return hljs.highlight(decodeHtmlEntitiesDeep(code), { language }).value;
+      return hljs.highlight(code, { language }).value;
     }
   })
 );
@@ -184,20 +184,6 @@ function decodeHtmlHref(href: string): string {
   return textarea.value;
 }
 
-function decodeHtmlEntitiesDeep(value: string): string {
-  const textarea = document.createElement('textarea');
-  let current = value;
-
-  for (let i = 0; i < 5; i++) {
-    textarea.innerHTML = current;
-    const decoded = textarea.value;
-    if (decoded === current) break;
-    current = decoded;
-  }
-
-  return current;
-}
-
 function parseLocalFileTarget(href: string): { path: string; line?: number } | null {
   const trimmed = href.trim();
   if (!trimmed) {
@@ -210,7 +196,7 @@ function parseLocalFileTarget(href: string): { path: string; line?: number } | n
   }
 
   const normalized = normalizedHref.replace(/\\/g, '/');
-  const hashLineMatch = normalized.match(/^(.*?)(?:#L(\d+))$/i);
+  const hashLineMatch = normalized.match(/^(.*?)#L(\d+)$/i);
   const pathWithOptionalLine = hashLineMatch
     ? { path: hashLineMatch[1], line: Number(hashLineMatch[2]) - 1 }
     : { path: normalized, line: undefined };

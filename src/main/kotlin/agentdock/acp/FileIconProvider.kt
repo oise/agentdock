@@ -1,93 +1,79 @@
 package agentdock.acp
 
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
-import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiManager
 import com.intellij.util.IconUtil
 import java.io.ByteArrayOutputStream
-import java.io.File
 import java.util.Base64
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicLong
+import java.util.Collections
 import javax.imageio.ImageIO
+import javax.imageio.stream.MemoryCacheImageOutputStream
 
-private const val ICON_SIZE = 16
+// Rendered at twice the 16px display size so icons stay sharp on HiDPI screens.
+private const val ICON_PX = 32
+private const val CACHE_LIMIT = 256
 
 /**
- * Renders the icon IntelliJ resolves for a real project file to a base64 PNG
- * data URI. Resolving through [PsiManager] includes generic IconProviders
- * (such as Atom Material Icons), virtual-file providers, and icon patchers.
+ * Renders the icon the IDE shows for a file into a base64 PNG data URI.
+ *
+ * Resolution goes through [PsiManager] so icons contributed by IconProvider extensions
+ * (Atom Material Icons and friends) are honoured. The cache is keyed by file name
+ * because such providers key on the name rather than on the individual file.
  */
 internal class FileIconProvider(private val project: Project) {
-    private val cache = ConcurrentHashMap<String, String>()
-    private val epoch = AtomicLong()
+    private val cache = Collections.synchronizedMap(
+        object : LinkedHashMap<String, String>(16, 0.75f, true) {
+            override fun removeEldestEntry(eldest: Map.Entry<String, String>) = size > CACHE_LIMIT
+        }
+    )
 
-    /** Must be called under a read action. */
+    fun invalidate() = cache.clear()
+
+    /**
+     * Must be called in a read action *off* the EDT. Icons that a provider derives from file
+     * contents (Kotlin picks between class, object and plain-file icons that way) are deferred,
+     * and a deferred icon asked to resolve on the EDT hands back its placeholder instead.
+     */
     fun iconForPath(path: String): String? {
         if (project.isDisposed) return null
-        val virtualFile = findVirtualFile(path)
-        return virtualFile?.let(::iconForVirtualFile) ?: fallbackIcon(path)
-    }
-
-    /** Must be called under a read action. */
-    fun iconForVirtualFile(virtualFile: VirtualFile): String? {
-        if (project.isDisposed || !virtualFile.isValid) return null
-        val cacheKey = "file:${virtualFile.url}"
+        val cacheKey = fileIconCacheKey(path) ?: return null
         cache[cacheKey]?.let { return it }
-
-        while (true) {
-            val renderEpoch = epoch.get()
-            val psiFile = PsiManager.getInstance(project).findFile(virtualFile)
-            val icon = psiFile?.getIcon(0)
-                ?: IconUtil.getIcon(virtualFile, 0, project)
-                ?: virtualFile.fileType.icon
-                ?: AllIcons.FileTypes.Any_type
-            val dataUri = renderIcon(icon) ?: return null
-            if (epoch.get() == renderEpoch) return cache.putIfAbsent(cacheKey, dataUri) ?: dataUri
-        }
+        val fileName = cacheKey.substringAfterLast('/')
+        return renderIcon(resolveIcon(path, fileName))?.also { cache[cacheKey] = it }
     }
 
-    fun invalidate() {
-        epoch.incrementAndGet()
-        cache.clear()
+    private fun resolveIcon(path: String, fileName: String): javax.swing.Icon {
+        val virtualFile = findVirtualFile(path)?.takeIf { it.isValid }
+        return virtualFile?.let { PsiManager.getInstance(project).findFile(it)?.getIcon(0) ?: it.fileType.icon }
+            ?: FileTypeManager.getInstance().getFileTypeByFileName(fileName).icon
+            ?: AllIcons.FileTypes.Any_type
     }
 
-    private fun fallbackIcon(path: String): String? {
-        val fileName = path.substringAfterLast('/').substringAfterLast('\\')
-        val cacheKey = "fallback:$fileName"
-        cache[cacheKey]?.let { return it }
-
-        while (true) {
-            val renderEpoch = epoch.get()
-            val icon = com.intellij.openapi.fileTypes.FileTypeManager.getInstance()
-                .getFileTypeByFileName(fileName)
-                .icon
-                ?: AllIcons.FileTypes.Any_type
-            val dataUri = renderIcon(icon) ?: return null
-            if (epoch.get() == renderEpoch) return cache.putIfAbsent(cacheKey, dataUri) ?: dataUri
-        }
-    }
-
-    private fun findVirtualFile(path: String): VirtualFile? {
-        if (path.isBlank()) return null
+    private fun findVirtualFile(path: String) = runCatching {
         val fileSystem = LocalFileSystem.getInstance()
-        val normalizedPath = path.replace('\\', '/')
-        if (File(normalizedPath).isAbsolute) return fileSystem.findFileByPath(normalizedPath)
+        val normalized = path.replace('\\', '/')
+        fileSystem.findFileByPath(normalized)
+            ?: project.basePath?.let { fileSystem.findFileByPath("${it.trimEnd('/', '\\')}/${normalized.trimStart('/')}") }
+    }.getOrNull()
 
-        val projectPath = project.basePath?.trimEnd('/', '\\') ?: return fileSystem.findFileByPath(normalizedPath)
-        return fileSystem.findFileByPath("$projectPath/$normalizedPath")
-            ?: fileSystem.findFileByPath(normalizedPath)
-    }
-
-    private fun renderIcon(icon: javax.swing.Icon?): String? {
-        if (icon == null) return null
-        return runCatching {
-            val image = IconUtil.toBufferedImage(IconUtil.toSize(icon, ICON_SIZE, ICON_SIZE))
-            val pngOutputStream = ByteArrayOutputStream()
-            ImageIO.write(image, "png", pngOutputStream)
-            "data:image/png;base64," + Base64.getEncoder().encodeToString(pngOutputStream.toByteArray())
-        }.getOrNull()
-    }
+    private fun renderIcon(icon: javax.swing.Icon) = runCatching {
+        val scaled = if (icon.iconHeight == ICON_PX) icon
+        else IconUtil.scale(icon, null, ICON_PX.toFloat() / icon.iconHeight)
+        val bytes = ByteArrayOutputStream()
+        // An explicit memory-cached stream keeps ImageIO from spilling temp files to disk.
+        MemoryCacheImageOutputStream(bytes).use { ImageIO.write(IconUtil.toBufferedImage(scaled), "png", it) }
+        "data:image/png;base64," + Base64.getEncoder().encodeToString(bytes.toByteArray())
+    }.getOrNull()
 }
+
+/**
+ * Key a rendered icon is cached under, or null when [path] names no file. Keyed by the whole
+ * path rather than the file name because providers derive the icon from file contents, so two
+ * files sharing a name can legitimately differ. Separators are normalised because paths reach
+ * us from agents on any platform.
+ */
+internal fun fileIconCacheKey(path: String): String? =
+    path.trim().replace('\\', '/').takeIf { it.substringAfterLast('/').isNotBlank() }

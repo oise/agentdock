@@ -25,8 +25,8 @@ import agentdock.acp.AcpClientService
 import agentdock.acp.AcpBridge
 import agentdock.acp.pushAdapters
 import agentdock.acp.injectDebugApi
+import agentdock.acp.initializeDownloadedAdaptersInBackground
 import agentdock.acp.injectReadySignal
-import agentdock.acp.shutdown
 import agentdock.history.HistoryBridge
 import agentdock.mcp.McpBridge
 import agentdock.promptlibrary.PromptLibraryBridge
@@ -73,6 +73,12 @@ class AgentDockToolWindowFactory : ToolWindowFactory, DumbAware {
             } catch (e: Exception) {
                 startupError = e
                 false
+            }
+
+            // The tool window can be restored while the project is still opening, so adapter
+            // initialization is warmed up here rather than relying on AcpStartupActivity ordering.
+            if (!project.isDisposed) {
+                runCatching { AcpClientService.getInstance(project).initializeDownloadedAdaptersInBackground() }
             }
 
             try {
@@ -218,16 +224,12 @@ class AgentDockToolWindowFactory : ToolWindowFactory, DumbAware {
                                 }
                                 ExternalCodeReferenceDispatcher.unregister(project, browser)
                                 dropTarget.component = null
+                                service.releaseUiCallbacks(acpBridge)
                             }
                         })
                         Disposer.register(content, object : Disposable {
                             override fun dispose() {
                                 scope.coroutineContext[Job]?.cancel()
-                            }
-                        })
-                        Disposer.register(content, object : Disposable {
-                            override fun dispose() {
-                                service.shutdown()
                             }
                         })
 
@@ -270,8 +272,12 @@ class AgentDockToolWindowFactory : ToolWindowFactory, DumbAware {
         val connection = ApplicationManager.getApplication().messageBus.connect(browser)
         connection.subscribe(LafManagerListener.TOPIC, LafManagerListener {
             val script = IdeTheme.generateCssUpdateScript()
+            acpBridge.fileIconProvider?.invalidate()
             ApplicationManager.getApplication().invokeLater({
                 browser.cefBrowser.executeJavaScript(script, browser.cefBrowser.url ?: "", 0)
+                browser.cefBrowser.executeJavaScript(
+                    "if(window.__onThemeChanged) window.__onThemeChanged();", browser.cefBrowser.url ?: "", 0
+                )
             }, ModalityState.any())
             acpBridge.pushAdapters()
         })

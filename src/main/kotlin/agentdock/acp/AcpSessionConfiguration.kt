@@ -20,14 +20,27 @@ internal fun AcpClientService.updateSessionRuntimeMetadata(
     freshMetadata: AcpClientService.AdapterRuntimeMetadata,
     context: AcpClientService.AgentContext
 ): AcpClientService.AdapterRuntimeMetadata {
-    val metadata = AcpConfigOptionsCache.updateFromSnapshot(adapterInfo, freshMetadata)
+    val cachedCatalog = AcpConfigOptionsCache.updateFromSnapshot(adapterInfo, freshMetadata)
         .toRuntimeMetadata(adapterInfo)
+    val optionsByModel = cachedCatalog.configOptionsByModel.toMutableMap()
+    freshMetadata.currentModelId?.let { modelId ->
+        optionsByModel[modelId] = freshMetadata.configOptions
+    }
+    val metadata = freshMetadata.copy(configOptionsByModel = optionsByModel)
     context.runtimeMetadataRef.set(metadata)
     context.activeModelIdRef.set(metadata.currentModelId)
     context.activeModeIdRef.set(metadata.currentModeId)
     context.activeReasoningEffortIdRef.set(metadata.currentReasoningEffortId)
     context.activeConfigValues.clear()
     context.activeConfigValues.putAll(metadata.configOptions.associate { it.id to it.currentValue })
-    runCatching { sessionConfigOptionsHandler?.invoke(context.chatId, metadata) }
+    if (!context.configOptionsUpdateInProgress) {
+        publishSessionConfigOptions(context)
+    }
     return metadata
+}
+
+internal fun AcpClientService.publishSessionConfigOptions(context: AcpClientService.AgentContext) {
+    context.runtimeMetadataRef.get()?.let { metadata ->
+        runCatching { sessionConfigOptionsHandler?.invoke(context.chatId, metadata) }
+    }
 }

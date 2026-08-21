@@ -114,10 +114,9 @@ private fun AcpBridge.mergeStoredToolEvent(events: List<JsonObject>, event: Json
         ?: existingRaw?.get("kind")?.jsonPrimitive?.contentOrNull
         ?: mergedRaw["kind"]?.jsonPrimitive?.contentOrNull
         ?: ""
-    val mergedRawFinal = if (mergedKind == "edit") {
-        preserveEditDiffContent(existingRaw, incomingRaw, mergedRaw)
-    } else {
-        mergedRaw
+    val mergedRawFinal = when (mergedKind) {
+        "edit" -> mergeEditDiffContent(existingRaw, incomingRaw, mergedRaw)
+        else -> mergeStoredToolOutput(existingRaw, incomingRaw, mergedRaw)
     }
     val mergedRawJson = storedToolRawJson(mergedRawFinal.toString())
 
@@ -146,7 +145,133 @@ private fun AcpBridge.mergeStoredToolEvent(events: List<JsonObject>, event: Json
     }
 }
 
-private fun preserveEditDiffContent(
+internal fun mergeStoredToolOutput(
+    existingRaw: JsonObject?,
+    incomingRaw: JsonObject,
+    mergedRaw: JsonObject
+): JsonObject {
+    val existingContent = (existingRaw?.get("content") as? JsonArray).orEmpty()
+    val incomingContent = (incomingRaw["content"] as? JsonArray).orEmpty()
+    val existingOutput = extractStoredToolOutputText(existingRaw)
+    val incomingOutput = extractStoredToolOutputText(incomingRaw)
+    if (existingContent.isEmpty() && incomingContent.isEmpty()
+        && (existingOutput == null || incomingOutput == null)
+    ) return mergedRaw
+
+    return buildJsonObject {
+        mergedRaw.forEach { (key, value) ->
+            if (key != "content") put(key, value)
+        }
+        put(
+            "content",
+            mergeStoredToolContent(
+                existingContent,
+                incomingContent,
+                existingOutput,
+                incomingOutput
+            )
+        )
+    }
+}
+
+private fun mergeStoredToolContent(
+    existingContent: List<JsonElement>,
+    incomingContent: List<JsonElement>,
+    existingOutput: String?,
+    incomingOutput: String?
+): JsonArray {
+    val mergedOutput = if (existingOutput != null && incomingOutput != null) {
+        mergeStoredExecuteOutput(existingOutput, incomingOutput)
+    } else {
+        incomingOutput ?: existingOutput
+    }
+    val incomingTextBlocks = incomingContent.filter { extractToolContentText(it) != null }
+    val incomingStructuredBlocks = incomingContent.filter { extractToolContentText(it) == null }
+    val existingHasTextBlock = existingContent.any { extractToolContentText(it) != null }
+    val isIncomingSnapshot = existingOutput != null
+        && incomingOutput != null
+        && mergedOutput == incomingOutput
+    val keepsExistingText = existingOutput != null
+        && incomingOutput != null
+        && mergedOutput == existingOutput
+
+    return buildJsonArray {
+        if (isIncomingSnapshot) {
+            var insertedText = false
+            existingContent.forEach { item ->
+                if (extractToolContentText(item) == null) {
+                    add(item)
+                } else if (!insertedText) {
+                    if (incomingTextBlocks.isEmpty()) {
+                        mergedOutput?.let { add(storedToolTextContent(it)) }
+                    } else {
+                        incomingTextBlocks.forEach { add(it) }
+                    }
+                    insertedText = true
+                }
+            }
+            if (!insertedText) {
+                if (incomingTextBlocks.isEmpty()) {
+                    mergedOutput?.let { add(storedToolTextContent(it)) }
+                } else {
+                    incomingTextBlocks.forEach { add(it) }
+                }
+            }
+            incomingStructuredBlocks.forEach { item ->
+                if (item !in existingContent) add(item)
+            }
+        } else {
+            existingContent.forEach { add(it) }
+            incomingContent.forEach { item ->
+                if (extractToolContentText(item) != null) {
+                    if (!keepsExistingText) add(item)
+                } else if (item !in existingContent) {
+                    add(item)
+                }
+            }
+            if (existingOutput != null && incomingOutput != null && incomingTextBlocks.isEmpty()) {
+                add(storedToolTextContent(
+                    if (existingHasTextBlock && !keepsExistingText) incomingOutput else mergedOutput.orEmpty()
+                ))
+            }
+        }
+    }
+}
+
+private fun storedToolTextContent(text: String): JsonObject = buildJsonObject {
+    put("type", "content")
+    put("content", buildJsonObject {
+        put("type", "text")
+        put("text", text)
+    })
+}
+
+private fun extractStoredToolOutputText(raw: JsonObject?): String? {
+    if (raw == null) return null
+    val contentTexts = (raw["content"] as? JsonArray)
+        ?.mapNotNull(::extractToolContentText)
+        .orEmpty()
+    if (contentTexts.isNotEmpty()) return contentTexts.joinToString("\n\n")
+
+    (raw["text"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotEmpty() }?.let { return it }
+    val rawOutput = raw["rawOutput"] as? JsonObject
+    return listOf("message", "content")
+        .asSequence()
+        .mapNotNull { key -> (rawOutput?.get(key) as? JsonPrimitive)?.contentOrNull }
+        .firstOrNull { it.isNotEmpty() }
+}
+
+private fun mergeStoredExecuteOutput(existing: String, incoming: String): String {
+    val normalizedExisting = existing.replace("\r\n", "\n").replace('\r', '\n')
+    val normalizedIncoming = incoming.replace("\r\n", "\n").replace('\r', '\n')
+    if (normalizedIncoming == normalizedExisting || normalizedIncoming.startsWith(normalizedExisting)) {
+        return incoming
+    }
+    if (normalizedExisting.endsWith(normalizedIncoming)) return existing
+    return "$existing\n\n$incoming"
+}
+
+internal fun mergeEditDiffContent(
     existingRaw: JsonObject?,
     incomingRaw: JsonObject,
     mergedRaw: JsonObject
@@ -155,14 +280,62 @@ private fun preserveEditDiffContent(
     if (!existingContent.any(::isDiffLikePayload)) return mergedRaw
 
     val incomingContent = incomingRaw["content"] as? JsonArray ?: return mergedRaw
-    if (incomingContent.any(::isDiffLikePayload)) return mergedRaw
+    val incomingDiffs = incomingContent.filter(::isDiffLikePayload)
+    if (incomingDiffs.isEmpty()) {
+        return buildJsonObject {
+            mergedRaw.forEach { (key, value) ->
+                if (key != "content") put(key, value)
+            }
+            put("content", existingContent)
+        }
+    }
+
+    val incomingDiffsByPath = incomingDiffs
+        .mapNotNull { diff -> diffPath(diff)?.let { path -> path to diff } }
+        .groupBy({ it.first }, { it.second })
+    val emittedPaths = mutableSetOf<String>()
+    val mergedContent = buildJsonArray {
+        existingContent.forEach { item ->
+            val path = diffPath(item)
+            val replacements = path?.let(incomingDiffsByPath::get)
+            if (replacements == null) {
+                add(item)
+            } else if (emittedPaths.add(path)) {
+                replacements.forEach { replacement -> add(replacement) }
+            }
+        }
+
+        incomingContent.forEach { item ->
+            if (!isDiffLikePayload(item)) {
+                add(item)
+                return@forEach
+            }
+            val path = diffPath(item)
+            if (path == null || emittedPaths.add(path)) {
+                if (path == null) {
+                    add(item)
+                } else {
+                    incomingDiffsByPath[path].orEmpty().forEach { replacement -> add(replacement) }
+                }
+            }
+        }
+    }
 
     return buildJsonObject {
         mergedRaw.forEach { (key, value) ->
             if (key != "content") put(key, value)
         }
-        put("content", existingContent)
+        put("content", mergedContent)
     }
+}
+
+private fun diffPath(element: JsonElement): String? {
+    if (!isDiffLikePayload(element)) return null
+    return (element as? JsonObject)
+        ?.get("path")
+        ?.jsonPrimitive
+        ?.contentOrNull
+        ?.takeIf { it.isNotBlank() }
 }
 
 private fun parseStoredToolRawJson(rawJson: String): JsonObject? =
@@ -202,16 +375,6 @@ internal fun AcpBridge.storedReplayPromptBlockFromContentBlock(content: ContentB
     return buildJsonObject {
         put("type", serialized.type)
         put("text", sanitizedText)
-        serialized.data?.let { put("data", it) }
-        serialized.mimeType?.let { put("mimeType", it) }
-    }
-}
-
-internal fun AcpBridge.storedPromptBlockFromContentBlock(content: ContentBlock): JsonObject? {
-    val serialized = serializeContentBlock(content) ?: return null
-    return buildJsonObject {
-        put("type", serialized.type)
-        serialized.text?.let { put("text", it) }
         serialized.data?.let { put("data", it) }
         serialized.mimeType?.let { put("mimeType", it) }
     }

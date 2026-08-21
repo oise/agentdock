@@ -9,7 +9,7 @@ import kotlinx.serialization.json.Json
 import java.io.File
 import java.time.Instant
 
-private const val CONFIG_OPTIONS_CACHE_SCHEMA_VERSION = 5
+private const val CONFIG_OPTIONS_CACHE_SCHEMA_VERSION = 7
 private const val CONFIG_OPTIONS_CACHE_MAX_AGE_MILLIS = 7L * 24L * 60L * 60L * 1000L
 
 @Serializable
@@ -18,7 +18,7 @@ internal data class CachedAdapterConfigOptions(
     val adapterVersion: String,
     val refreshedAtMillis: Long,
     val configOptions: List<AcpConfigOption> = emptyList(),
-    val reasoningEffortsByModel: Map<String, List<AcpConfigOptionValue>> = emptyMap()
+    val configOptionsByModel: Map<String, List<AcpConfigOption>> = emptyMap()
 )
 
 @Serializable
@@ -117,7 +117,10 @@ internal object AcpConfigOptionsCache {
             val file = cacheFile()
             val parent = file.parentFile
             if (!parent.exists()) parent.mkdirs()
-            val versioned = content.copy(schemaVersion = CONFIG_OPTIONS_CACHE_SCHEMA_VERSION)
+            val versioned = content.copy(
+                schemaVersion = CONFIG_OPTIONS_CACHE_SCHEMA_VERSION,
+                adapters = content.adapters.mapValues { (_, options) -> options.withoutCurrentValues() }
+            )
             file.atomicWriteText(json.encodeToString(versioned))
             memoryCache = versioned
             true
@@ -134,33 +137,34 @@ internal fun CachedAdapterConfigOptions?.updatedWithSnapshot(
     metadata: AcpClientService.AdapterRuntimeMetadata,
     refreshedAtMillis: Long = this?.refreshedAtMillis ?: Instant.now().toEpochMilli()
 ): CachedAdapterConfigOptions {
-    val effortsByModel = this?.reasoningEffortsByModel.orEmpty().toMutableMap()
-    metadata.currentModelId?.let { modelId ->
-        effortsByModel[modelId] = metadata.configOptions.firstOrNull { it.isReasoning() }
-            ?.options
-            .orEmpty()
-    }
-    val cachedReasoning = this?.configOptions?.firstOrNull { it.isReasoning() }
-    val configOptions = if (
-        cachedReasoning != null && metadata.configOptions.none { it.isReasoning() }
-    ) {
-        metadata.configOptions + cachedReasoning.copy(currentValue = "", options = emptyList())
+    val optionsByModel = this?.configOptionsByModel.orEmpty().toMutableMap()
+    if (metadata.usesAdapterConfigOptions) {
+        optionsByModel.clear()
     } else {
-        metadata.configOptions
+        metadata.currentModelId?.let { modelId -> optionsByModel[modelId] = metadata.configOptions }
     }
     return CachedAdapterConfigOptions(
         adapterId = adapterInfo.id,
         adapterVersion = adapterVersion,
         refreshedAtMillis = refreshedAtMillis,
-        configOptions = configOptions,
-        reasoningEffortsByModel = effortsByModel
+        configOptions = metadata.configOptions.takeUnless { metadata.usesAdapterConfigOptions }.orEmpty(),
+        configOptionsByModel = optionsByModel
     )
+}
+
+private fun CachedAdapterConfigOptions.withoutCurrentValues(): CachedAdapterConfigOptions = copy(
+    configOptions = configOptions.withoutCurrentValues(),
+    configOptionsByModel = configOptionsByModel.mapValues { (_, options) -> options.withoutCurrentValues() }
+)
+
+private fun List<AcpConfigOption>.withoutCurrentValues(): List<AcpConfigOption> = map { option ->
+    option.copy(currentValue = "")
 }
 
 internal fun CachedAdapterConfigOptions.toRuntimeMetadata(
     adapterInfo: AcpAdapterConfig.AdapterInfo
 ): AcpClientService.AdapterRuntimeMetadata {
-    val filteredOptions = configOptions.map { option ->
+    fun filterOptions(options: List<AcpConfigOption>) = options.map { option ->
         val values = when {
             option.matchesCategory("model") -> option.options.filterNot { model ->
                 adapterInfo.disabledModels.any { disabled ->
@@ -173,12 +177,12 @@ internal fun CachedAdapterConfigOptions.toRuntimeMetadata(
             else -> option.options
         }
         option.copy(
-            currentValue = option.currentValue.takeIf { current ->
-                option.type != "select" || values.any { it.value == current }
-            }.orEmpty(),
+            currentValue = "",
             options = values
         )
     }
+    val usesAdapterConfigOptions = configOptions.isEmpty() && adapterInfo.configOptions.isNotEmpty()
+    val filteredOptions = filterOptions(configOptions.ifEmpty(adapterInfo::fallbackConfigOptions))
     val modelIds = filteredOptions
         .firstOrNull { it.matchesCategory("model") }
         ?.options
@@ -186,6 +190,9 @@ internal fun CachedAdapterConfigOptions.toRuntimeMetadata(
         .mapTo(mutableSetOf()) { it.value }
     return AcpClientService.AdapterRuntimeMetadata(
         configOptions = filteredOptions,
-        reasoningEffortsByModel = reasoningEffortsByModel.filterKeys(modelIds::contains)
+        configOptionsByModel = configOptionsByModel
+            .filterKeys(modelIds::contains)
+            .mapValues { (_, options) -> filterOptions(options) },
+        usesAdapterConfigOptions = usesAdapterConfigOptions
     )
 }

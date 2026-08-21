@@ -9,7 +9,7 @@ interface TooltipProps {
   showOnFocus?: boolean;
   contentClassName?: string;
   variant?: 'default' | 'minimal';
-  position?: 'top' | 'bottom';
+  placement?: 'top' | 'bottom';
 }
 
 function cx(...values: Array<string | false | null | undefined>) {
@@ -24,7 +24,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
   showOnFocus = true,
   contentClassName,
   variant = 'default',
-  position = 'top',
+  placement = 'top',
 }) => {
   const [visible, setVisible] = useState(false);
   const [coords, setCoords] = useState({ x: 0, y: 0 });
@@ -38,7 +38,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
       const rect = triggerRef.current.getBoundingClientRect();
       setCoords({
         x: rect.left + rect.width / 2,
-        y: rect.top
+        y: placement === 'bottom' ? rect.bottom : rect.top
       });
     }
   };
@@ -114,9 +114,9 @@ export const Tooltip: React.FC<TooltipProps> = ({
           className="fixed z-[9999] pointer-events-none"
           style={{ 
             left: coords.x, 
-            top: position === 'bottom' ? coords.y + 6 : coords.y,
-            transform: position === 'bottom'
-              ? `translate(calc(-50% + ${offset}px), 0px)`
+            top: coords.y,
+            transform: placement === 'bottom'
+              ? `translate(calc(-50% + ${offset}px), 6px)`
               : `translate(calc(-50% + ${offset}px), calc(-100% - 6px))`,
             animation: 'tooltip-in 250ms ease-out forwards',
           }}

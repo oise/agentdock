@@ -5,6 +5,7 @@ import agentdock.history.ConversationReplayData
 import com.intellij.ui.jcef.JBCefJSQuery
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.booleanOrNull
@@ -75,76 +76,107 @@ private fun parseContinueConversationPayload(payload: String?): ContinueConversa
     }.getOrNull()
 }
 
+private suspend fun AcpBridge.importConversationFromAgent(
+    chatId: String,
+    projectPath: String,
+    conversationId: String,
+    sessionId: String,
+    adapterName: String,
+    modelId: String? = null,
+    modeId: String? = null
+) {
+    pushStatus(chatId, "initializing")
+    startHistoryReplayCapture(chatId, projectPath, conversationId)
+    beginImportedReplaySession(chatId, sessionId, adapterName)
+    withTimeout(AcpBridge.START_AGENT_TIMEOUT_MS) {
+        service.loadSession(chatId, adapterName, sessionId, modelId, modeId)
+    }
+    val capturedConversation = flushHistoryReplayCapture(chatId)
+    pushAdapters()
+    pushConversationReplayLoaded(chatId, capturedConversation ?: ConversationReplayData())
+    pushStatus(chatId, service.status(chatId).name.lowercase())
+    pushSessionId(chatId, service.sessionId(chatId))
+}
+
 internal fun AcpBridge.installConversationHistoryQueries() {
     loadConversationQuery = JBCefJSQuery.create(browser as com.intellij.ui.jcef.JBCefBrowserBase).apply {
         addHandler { payload ->
             val (chatId, projectPath, conversationId) = parseConversationLoadPayload(payload)
             if (chatId != null && projectPath != null && conversationId != null) {
                 scope.launch(Dispatchers.Default) {
-                    replaySeqByChatId[chatId] = 0
+                    // Capture/probe state is keyed by chatId, so two loads for the same
+                    // chat must cover their entire replay lifecycle one at a time.
+                    // Count queued loads too, so cleanup cannot let a new load bypass them.
+                    val loadEntry = historyLoadMutexes.compute(chatId) { _, existing ->
+                        (existing ?: HistoryLoadMutexEntry()).also { it.references++ }
+                    }!!
                     try {
-                        val storedConversation = AgentDockHistoryService.loadConversationReplay(projectPath, conversationId)
-                        if (storedConversation != null) {
-                            pushConversationReplayLoaded(chatId, storedConversation)
+                        loadEntry.mutex.withLock {
+                            try {
+                                val storedConversation = AgentDockHistoryService.loadConversationReplay(projectPath, conversationId)
+                                if (storedConversation != null) {
+                                    pushConversationReplayLoaded(chatId, storedConversation)
 
-                            val lastStoredSession = storedConversation.sessions.lastOrNull()
-                                ?: throw IllegalStateException("Conversation replay '$conversationId' is empty")
-                            pushSessionId(chatId, lastStoredSession.sessionId)
+                                    val lastStoredSession = storedConversation.sessions.lastOrNull()
+                                        ?: throw IllegalStateException("Conversation replay '$conversationId' is empty")
+                                    pushSessionId(chatId, lastStoredSession.sessionId)
 
-                            scope.launch(Dispatchers.Default) {
-                                try {
+                                    val probe = ReplayFreshnessProbe()
+                                    replayFreshnessProbes[chatId] = probe
                                     suppressReplayForChatIds.add(chatId)
                                     try {
                                         withTimeout(AcpBridge.START_AGENT_TIMEOUT_MS) {
                                             service.loadSession(
                                                 chatId = chatId,
                                                 adapterName = lastStoredSession.adapterName,
-                                                sessionId = lastStoredSession.sessionId,
-                                                deliverReplay = false
+                                                sessionId = lastStoredSession.sessionId
                                             )
                                         }
                                     } finally {
                                         suppressReplayForChatIds.remove(chatId)
+                                        replayFreshnessProbes.remove(chatId)
                                     }
-                                    pushAdapters()
-                                    pushStatus(chatId, service.status(chatId).name.lowercase())
-                                    pushSessionId(chatId, service.sessionId(chatId))
-                                    pushMode(chatId, service.activeModeId(chatId))
-                                } catch (e: Exception) {
-                                    pushStatus(chatId, "error")
-                                    pushConversationError(chatId, e)
+                                    probe.closeMessage()
+                                    if (!livePromptCaptures.containsKey(chatId) &&
+                                        conversationWasContinuedElsewhere(probe, storedConversation)
+                                    ) {
+                                        importConversationFromAgent(
+                                            chatId, projectPath, conversationId,
+                                            lastStoredSession.sessionId, lastStoredSession.adapterName
+                                        )
+                                    } else {
+                                        pushAdapters()
+                                        pushStatus(chatId, service.status(chatId).name.lowercase())
+                                        pushSessionId(chatId, service.sessionId(chatId))
+                                    }
+                                } else {
+                                    val sessionsChain = AgentDockHistoryService.getConversationSessions(projectPath, conversationId)
+                                    if (sessionsChain.isEmpty()) {
+                                        throw IllegalStateException("Conversation '$conversationId' not found")
+                                    }
+                                    val lastSession = sessionsChain.last()
+                                    importConversationFromAgent(
+                                        chatId, projectPath, conversationId,
+                                        lastSession.sessionId, lastSession.adapterName,
+                                        lastSession.modelId, lastSession.modeId
+                                    )
                                 }
+                            } catch (e: Exception) {
+                                discardHistoryReplayCapture(chatId)
+                                pushStatus(chatId, "error")
+                                pushConversationError(chatId, e)
                             }
-                        } else {
-                            val sessionsChain = AgentDockHistoryService.getConversationSessions(projectPath, conversationId)
-                            if (sessionsChain.isEmpty()) {
-                                throw IllegalStateException("Conversation '$conversationId' not found")
-                            }
-                            pushStatus(chatId, "initializing")
-                            startHistoryReplayCapture(chatId, projectPath, conversationId)
-                            val lastSession = sessionsChain.last()
-                            beginImportedReplaySession(chatId, lastSession.sessionId, lastSession.adapterName)
-                            withTimeout(AcpBridge.START_AGENT_TIMEOUT_MS) {
-                                service.loadSession(
-                                    chatId,
-                                    lastSession.adapterName,
-                                    lastSession.sessionId,
-                                    lastSession.modelId,
-                                    lastSession.modeId
-                                )
-                            }
-                            val capturedConversation = flushHistoryReplayCapture(chatId)
-                            pushAdapters()
-                            pushConversationReplayLoaded(chatId, capturedConversation ?: ConversationReplayData())
-                            pushStatus(chatId, service.status(chatId).name.lowercase())
-                            pushSessionId(chatId, service.sessionId(chatId))
-                            pushMode(chatId, service.activeModeId(chatId))
                         }
-                    } catch (e: Exception) {
-                        discardHistoryReplayCapture(chatId)
-                        replaySeqByChatId.remove(chatId)
-                        pushStatus(chatId, "error")
-                        pushConversationError(chatId, e)
+                    } finally {
+                        historyLoadMutexes.computeIfPresent(chatId) { _, current ->
+                            if (current !== loadEntry) {
+                                current
+                            } else if (--current.references == 0) {
+                                null
+                            } else {
+                                current
+                            }
+                        }
                     }
                 }
             }

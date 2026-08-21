@@ -17,14 +17,12 @@ export default function FileMentionMenu({
   layout,
   menuRef,
   onHover,
-  onSelect
+  onSelect,
 }: FileMentionMenuProps) {
-  const items = files.map((file) => ({
+  const items = files.map(file => ({
     primary: file.name,
     secondary: file.path,
-    fileName: file.name,
     filePath: file.path,
-    icon: file.icon
   }));
 
   return (

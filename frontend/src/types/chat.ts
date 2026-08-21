@@ -6,6 +6,7 @@ export interface ToolCallDiffEntry {
 }
 
 export interface AcpLogEntryPayload {
+  adapterId: string;
   direction: 'SENT' | 'RECEIVED';
   category: 'PROTOCOL' | 'INTERNAL' | 'STDERR';
   json: string;
@@ -80,8 +81,6 @@ export interface Message {
   // Meta-information
   agentId?: string;
   agentName?: string;
-  modelName?: string;
-  modeName?: string;
   configOptions?: MessageConfigOption[];
   promptStartedAtMillis?: number;
   duration?: number;
@@ -120,14 +119,14 @@ export interface ConfigOption {
   description?: string;
   category?: string;
   type: 'select' | 'boolean';
-  currentValue: string;
+  currentValue?: string;
   options: ConfigOptionValue[];
 }
 
 export interface SessionConfigOptionsPayload {
   chatId: string;
   configOptions: ConfigOption[];
-  reasoningEffortsByModel: Record<string, ConfigOptionValue[]>;
+  configOptionsByModel: Record<string, ConfigOption[]>;
 }
 
 export interface AvailableCommand {
@@ -154,7 +153,7 @@ export interface AgentOption {
   currentReasoningEffortId?: string;
   availableReasoningEfforts?: ReasoningEffortOption[];
   configOptions?: ConfigOption[];
-  reasoningEffortsByModel?: Record<string, ConfigOptionValue[]>;
+  configOptionsByModel?: Record<string, ConfigOption[]>;
   downloaded?: boolean;
   downloadedKnown?: boolean;
   downloadPath?: string;
@@ -191,8 +190,8 @@ export function isAgentRunnable(agent: AgentOption): boolean {
 export interface PermissionRequest {
   requestId: string;
   chatId?: string;
-  title?: string;
-  options: { optionId: string; label: string }[];
+  title: string;
+  options: { optionId: string; label: string; kind: string }[];
 }
 
 export type ApprovalMode = 'ask' | 'auto';
@@ -219,12 +218,14 @@ export type TabType = 'chat' | 'management' | 'design' | 'history' | 'mcp' | 'sy
 export interface ChatTab {
   id: string;
   type: TabType;
-  title?: string;
+  title: string;
   conversationId: string;
   agentId?: string; // If pre-selected
   historySession?: HistorySessionMeta;
   initialMessages?: Message[];
   metadataTitleOverride?: string;
+  /** Title given before the first prompt, written to the history index once the conversation is registered. */
+  pendingTitle?: string;
   inheritedAdapterNames?: string[];
   forkBase?: ForkConversationBase;
 }
@@ -260,14 +261,17 @@ export interface HistorySessionMeta {
 export interface ContentChunk {
   chatId: string;
   role: 'user' | 'assistant';
-  type: 'text' | 'thinking' | 'image' | 'audio' | 'video' | 'file' | 'tool_call' | 'tool_call_update' | 'plan' | 'prompt_done';
+  type: 'text' | 'thinking' | 'image' | 'audio' | 'video' | 'file' | 'code_ref' | 'tool_call' | 'tool_call_update' | 'plan' | 'prompt_done';
   text?: string;
   data?: string;
   path?: string;
   name?: string;
   mimeType?: string;
-  isReplay: boolean;
-  replaySeq?: number;
+  isInline?: boolean;
+  startLine?: number;
+  endLine?: number;
+  /** Set only for chunks synthesized from stored conversation data, never for live agent output. */
+  isReplay?: boolean;
   // tool_call specific
   toolCallId?: string;
   toolKind?: string;
@@ -343,11 +347,11 @@ export interface ToolCallDiff {
 }
 
 export interface ToolCallEvent {
+  eventId?: string;
   toolCallId: string;
-  title?: string;
+  title: string;
   kind?: string;
   status?: string;
-  isReplay?: boolean;
   diffs: ToolCallDiff[];
   locations?: { path: string; line?: number }[];
 }
@@ -364,7 +368,7 @@ export interface FileChangeSummary {
   additions: number;
   deletions: number;
   operations: FileChangeOperation[];
-  latestToolCallIndex: number;
+  toolCallIds: string[];
 }
 
 export interface FileChangeStatsPayload {
@@ -380,13 +384,13 @@ export interface FileChangeStatsResultPayload {
 
 export interface ProcessedFileState {
   filePath: string;
-  toolCallIndex: number;
+  toolCallIds: string[];
 }
 
 export interface ChangesState {
   sessionId: string;
   adapterName: string;
-  baseToolCallIndex: number;
+  keptToolCallIds: string[];
   processedFileStates: ProcessedFileState[];
   hasPluginEdits?: boolean;
 }
@@ -516,6 +520,7 @@ declare global {
       configValues?: Record<string, string>
     ) => void;
     __requestAdapters?: (forceRefresh?: boolean) => void;
+    __rememberAgentConfigOption?: (adapterId: string, configId: string, value: string) => void;
     __notifyReady?: () => void;
     __respondPermission?: (requestId: string, decision: string) => void;
     __cancelPrompt?: (conversationId: string, requestId?: string) => void;
@@ -540,7 +545,6 @@ declare global {
     __undoAllFiles?: (payload: string) => void;
     __processFile?: (payload: string) => void;
     __keepAll?: (payload: string) => void;
-    __removeProcessedFiles?: (payload: string) => void;
     __getChangesState?: (payload: string) => void;
     __computeFileChangeStats?: (payload: string) => void;
     __showDiff?: (payload: string) => void;
@@ -579,9 +583,9 @@ declare global {
     __onMcpStatus?: (update: unknown) => void;
     __onFilesResult?: (filesJson: unknown) => void;
     __searchFiles?: (query: string) => void;
+    __requestFileIcon?: (path: string) => void;
     __onFileIconResult?: (result: { path: string; icon: string }) => void;
     __onThemeChanged?: () => void;
-    __requestFileIcon?: (path: string) => void;
     __loadMcpServers?: () => void;
     __saveMcpServers?: (json: string) => void;
     __checkMcpStatus?: () => void;

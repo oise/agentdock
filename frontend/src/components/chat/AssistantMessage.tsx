@@ -163,7 +163,7 @@ export const AssistantMessage = memo(({ message, onImageClick, showBorder, agent
                   onClick={onFork}
                   aria-label="Fork from here"
                 >
-                  <GitFork size={13} />
+                  <GitFork size={16} />
                 </button>
               </Tooltip>
             )}

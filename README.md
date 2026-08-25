@@ -26,6 +26,7 @@ Currently supported AI agents:
 - Codex
 - Cursor
 - GitHub Copilot
+- Google Antigravity
 - Grok Build
 - Kilo
 - Kimi Code
@@ -57,7 +58,7 @@ Currently supported AI agents:
 
 ## Requirements
 
-- JetBrains IDE based on IntelliJ Platform 2025.3 or newer.
+- JetBrains IDE 2025.3+ with Web Browser (JCEF) support.
 - Some agents use JetBrains IDE terminal for authentication.
 - On macOS and Linux, installing some agents requires `curl` and `tar`.
 

@@ -236,7 +236,7 @@ function formatFileChanges(fileChanges: FileChangeSummary[]): string {
   if (fileChanges.length === 0) return 'No plugin-managed file edits were recorded.';
   return fileChanges
     .map((file) => {
-      const changeType = file.status === 'A' ? 'added' : 'modified';
+      const changeType = file.status === 'A' ? 'added' : file.status === 'D' ? 'deleted' : 'modified';
       const operationLabel =
         file.operations.length === 1 ? '1 edit operation' : `${file.operations.length} edit operations`;
       return sanitizeTranscriptContent(

@@ -487,6 +487,7 @@ export interface GitCommitGenerationSettings {
   enabled: boolean;
   adapterId: string;
   modelId: string;
+  reasoningEffortId: string;
   instructions: string;
 }
 

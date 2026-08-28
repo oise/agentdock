@@ -33,6 +33,6 @@ dependencyResolutionManagement {
 
 include("shared")
 include("frontend")
-include("frontend-vcs")
 include("backend")
+include("backend-libraries")
 include("frontend-terminal")

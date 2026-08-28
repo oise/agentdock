@@ -42,7 +42,7 @@
         </ul>
         <h4>Requirements:</h4>
         <ul>
-            <li>JetBrains IDE 2025.3+ with Web Browser (JCEF) support.</li>
+            <li>JetBrains IDE 2026.1+ with Web Browser (JCEF) support.</li>
             <li>Some agents use JetBrains IDE terminal for authentication.</li>
             <li>On macOS and Linux, installing some agents requires curl and tar.</li>
         </ul>
@@ -52,14 +52,15 @@
         <ul>
             <li>Added JetBrains Remote Development split-mode support.</li>
             <li>Added Google Antigravity support.</li>
+            <li>Raised the minimum IDE version to 2026.1 to work around a JetBrains plugin verification bug.</li>
             <li>Fixed minor bugs.</li>
         </ul>
     ]]></change-notes>
 
     <content>
         <module name="agent-dock.shared" loading="required"/>
+        <module name="agent-dock.backend-libraries" loading="embedded"/>
         <module name="agent-dock.frontend"/>
-        <module name="agent-dock.frontend-vcs"/>
         <module name="agent-dock.frontend-terminal"/>
         <module name="agent-dock.backend"/>
     </content>

@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { GitCommitHorizontal } from 'lucide-react';
 import {
   AgentOption,
+  ConfigOption,
   GitCommitGenerationSettings as GitCommitGenerationSettingsValue,
-  ModelOption
 } from '../../types/chat';
-import { SettingsToggleCard } from './SettingsToggleCard';
+import { SettingsCheckbox, SettingsField } from './SettingsLayout';
 import { DropdownOption, DropdownSelect } from '../ui/DropdownSelect';
 
 interface GitCommitGenerationSettingsProps {
@@ -16,44 +15,26 @@ interface GitCommitGenerationSettingsProps {
 
 function resolveModelId(agent: AgentOption | undefined, preferredModelId: string): string {
   const models = agent?.availableModels ?? [];
-  if (models.length === 0) return '';
-  if (models.some((model) => model.modelId === preferredModelId)) {
-    return preferredModelId;
-  }
-  if (agent?.currentModelId && models.some((model) => model.modelId === agent.currentModelId)) {
-    return agent.currentModelId;
-  }
-  return models[0]?.modelId ?? '';
+  const known = (id?: string) => models.some((model) => model.modelId === id);
+  return [preferredModelId, agent?.currentModelId].find(known) ?? models[0]?.modelId ?? '';
 }
 
-function selectedModelValue(models: ModelOption[], modelId: string): string {
-  if (models.some((model) => model.modelId === modelId)) {
-    return modelId;
-  }
-  return models[0]?.modelId ?? '';
+const matches = (option: ConfigOption, category: string) =>
+  option.id === category || option.category === category;
+
+const isReasoningEffort = (option: ConfigOption) =>
+  matches(option, 'thought_level') || matches(option, 'reasoning_effort');
+
+function resolveReasoningOption(agent: AgentOption | undefined, modelId: string): ConfigOption | undefined {
+  const options = agent?.configOptionsByModel?.[modelId] ?? agent?.configOptions ?? [];
+  return options.find(isReasoningEffort);
+}
+
+function resolveReasoningEffortId(option: ConfigOption | undefined, preferredEffortId: string): string {
+  return option?.options.some((effort) => effort.value === preferredEffortId) ? preferredEffortId : '';
 }
 
 export function GitCommitGenerationSettings({ settings, installedAgents, onChange }: GitCommitGenerationSettingsProps) {
-  if (installedAgents.length === 0) {
-    return null;
-  }
-
-  const fallbackAgent = installedAgents[0];
-  const activeAgent = installedAgents.find((agent) => agent.id === settings.adapterId) ?? fallbackAgent;
-  const models = activeAgent?.availableModels ?? [];
-  const activeModelId = selectedModelValue(models, settings.modelId);
-  const agentOptions: DropdownOption[] = installedAgents.map((agent) => ({
-    value: agent.id,
-    label: agent.name
-  }));
-  const modelOptions: DropdownOption[] =
-    models.length === 0
-      ? [{ value: '', label: 'No models available' }]
-      : models.map((model) => ({
-          value: model.modelId,
-          label: model.name
-        }));
-
   const [localInstructions, setLocalInstructions] = useState(settings.instructions);
   const isFocusedRef = useRef(false);
 
@@ -63,88 +44,113 @@ export function GitCommitGenerationSettings({ settings, installedAgents, onChang
     }
   }, [settings.instructions]);
 
-  const update = (next: Partial<GitCommitGenerationSettingsValue>) => {
-    onChange({
-      ...settings,
-      ...next
-    });
-  };
+  if (installedAgents.length === 0) {
+    return null;
+  }
 
-  const handleToggle = () => {
-    if (settings.enabled) {
-      update({ enabled: false });
-      return;
-    }
+  const activeAgent = installedAgents.find((agent) => agent.id === settings.adapterId) ?? installedAgents[0];
+  const models = activeAgent?.availableModels ?? [];
+  const activeModelId = resolveModelId(activeAgent, settings.modelId);
+  const reasoningOption = resolveReasoningOption(activeAgent, activeModelId);
+  const reasoningEffortId = resolveReasoningEffortId(reasoningOption, settings.reasoningEffortId);
+  const agentOptions: DropdownOption[] = installedAgents.map((agent) => ({ value: agent.id, label: agent.name }));
+  const modelOptions: DropdownOption[] =
+    models.length === 0
+      ? [{ value: '', label: 'No models available' }]
+      : models.map((model) => ({ value: model.modelId, label: model.name }));
+  const reasoningOptions: DropdownOption[] = [
+    { value: '', label: 'Default' },
+    ...(reasoningOption?.options.map((effort) => ({ value: effort.value, label: effort.name })) ?? []),
+  ];
 
-    update({
-      enabled: true,
-      adapterId: activeAgent?.id ?? '',
-      modelId: resolveModelId(activeAgent, settings.modelId)
-    });
-  };
+  const update = (next: Partial<GitCommitGenerationSettingsValue>) => onChange({ ...settings, ...next });
+
+  const handleToggle = () =>
+    update(
+      settings.enabled
+        ? { enabled: false }
+        : {
+            enabled: true,
+            adapterId: activeAgent.id,
+            modelId: activeModelId,
+            reasoningEffortId,
+          }
+    );
 
   const handleAgentChange = (adapterId: string) => {
     const nextAgent = installedAgents.find((agent) => agent.id === adapterId) ?? installedAgents[0];
-    update({
-      adapterId,
-      modelId: resolveModelId(nextAgent, settings.modelId)
-    });
+    const modelId = resolveModelId(nextAgent, settings.modelId);
+    const effortId = resolveReasoningEffortId(
+      resolveReasoningOption(nextAgent, modelId),
+      settings.reasoningEffortId,
+    );
+    update({ adapterId, modelId, reasoningEffortId: effortId });
   };
 
-  const handleInstructionsBlur = () => {
-    isFocusedRef.current = false;
-    update({ instructions: localInstructions });
+  const handleModelChange = (modelId: string) => {
+    const effortId = resolveReasoningEffortId(
+      resolveReasoningOption(activeAgent, modelId),
+      settings.reasoningEffortId,
+    );
+    update({ modelId, reasoningEffortId: effortId });
   };
 
   return (
-    <SettingsToggleCard
-      icon={GitCommitHorizontal}
+    <SettingsCheckbox
       title='Git Commit Message Generation'
-      description='Generate commit messages using an installed agent'
-      enabled={settings.enabled}
+      description='Enable the button for AI commit message generation'
+      checked={settings.enabled}
       onToggle={handleToggle}
       ariaLabel='Enable Git commit generation'
-      className='justify-center'
     >
       {settings.enabled && (
-        <div className='grid max-w-[560px] grid-cols-1 items-center gap-x-3 gap-y-2 min-[420px]:grid-cols-[88px_minmax(0,260px)]'>
-          <span className='text-ide-small text-foreground-secondary'>AI Agent</span>
-          <div>
+        <>
+          <SettingsField label='AI Agent' colon>
             <DropdownSelect
-              value={activeAgent?.id ?? ''}
+              value={activeAgent.id}
               onChange={handleAgentChange}
               options={agentOptions}
-              className='w-full'
+              className='max-w-full'
             />
-          </div>
-
-          <span className='text-ide-small text-foreground-secondary'>Model</span>
-          <div>
+          </SettingsField>
+          <SettingsField label='Model' colon>
             <DropdownSelect
               value={activeModelId}
-              onChange={(modelId) => update({ modelId })}
+              onChange={handleModelChange}
               disabled={models.length === 0}
               options={modelOptions}
-              className='w-full'
+              className='max-w-full'
             />
-          </div>
-
-          <span className='self-start pt-2 text-ide-small text-foreground-secondary'>Instructions</span>
-          <div className='min-w-0'>
+          </SettingsField>
+          {reasoningOption && reasoningOption.options.length > 0 && (
+            <SettingsField label={reasoningOption.name || 'Reasoning Effort'} colon>
+              <DropdownSelect
+                value={reasoningEffortId}
+                onChange={(nextEffortId) => update({ reasoningEffortId: nextEffortId })}
+                options={reasoningOptions}
+                className='max-w-full'
+              />
+            </SettingsField>
+          )}
+          <SettingsField label='Custom Instructions (optional)' stacked>
             <textarea
               value={localInstructions}
               onChange={(event) => setLocalInstructions(event.target.value)}
-              onFocus={() => { isFocusedRef.current = true; }}
-              onBlur={handleInstructionsBlur}
+              onFocus={() => {
+                isFocusedRef.current = true;
+              }}
+              onBlur={() => {
+                isFocusedRef.current = false;
+                update({ instructions: localInstructions });
+              }}
               rows={5}
               placeholder='Describe how commit messages should be written.'
               aria-label='Custom commit message instructions'
-              className='w-full resize-none rounded-[4px] px-3 py-2 text-ide-small'
+              className='w-full max-w-[520px] resize-y rounded-[3px] px-2 py-1'
             />
-            <div className='mt-1 text-xs text-foreground-secondary'>Optional</div>
-          </div>
-        </div>
+          </SettingsField>
+        </>
       )}
-    </SettingsToggleCard>
+    </SettingsCheckbox>
   );
 }

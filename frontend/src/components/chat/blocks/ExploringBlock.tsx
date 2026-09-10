@@ -110,13 +110,13 @@ export const ExploringBlock: React.FC<Props> = ({ block, isActivePrompt = false 
           );
         }
         if (entry.kind === 'read') {
-          return <ReadActivity key={entry.toolCallId || i} entry={entry} onOpenFile={handleOpenFile} />;
+          return <ReadActivity key={entry.toolCallId || i} entry={entry} onOpenFile={handleOpenFile} isActivePrompt={isActivePrompt} />;
         }
         if (entry.kind === 'fetch') {
-          return <FetchActivity key={entry.toolCallId || i} entry={entry} onOpenUrl={handleOpenUrl} />;
+          return <FetchActivity key={entry.toolCallId || i} entry={entry} onOpenUrl={handleOpenUrl} isActivePrompt={isActivePrompt} />;
         }
         if (entry.kind === 'search') {
-          return <SearchActivity key={entry.toolCallId || i} entry={entry} />;
+          return <SearchActivity key={entry.toolCallId || i} entry={entry} isActivePrompt={isActivePrompt} />;
         }
         if (entry.kind === 'execute') {
           return <ExecuteActivity key={entry.toolCallId || i} entry={entry} isActivePrompt={isActivePrompt} />;

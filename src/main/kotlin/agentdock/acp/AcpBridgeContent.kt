@@ -163,7 +163,7 @@ internal fun AcpBridge.recordUsageUpdate(
         val capture = historyReplayCaptures[chatId] ?: return
         if (sessionId.isBlank() || adapterName.isBlank()) return
         val session = getOrCreateReplaySession(capture, sessionId, adapterName)
-        val prompt = getOrCreateReplayPrompt(session, startNewIfNeeded = false)
+        val prompt = getOrCreateReplayPrompt(session)
         val current = prompt.assistantMeta ?: buildAssistantMetadata(
             adapterName = adapterName
         )
@@ -260,6 +260,7 @@ internal fun AcpBridge.pushPlanChunk(chatId: String, entries: JsonArray) {
 }
 
 internal fun AcpBridge.pushStatus(chatId: String, status: String) {
+    if (status != "ready") awaitingBackgroundOutput.remove(chatId)
     val previousStatus = lastStatusByChatId.put(chatId, status)
     val escapedStatus = status.jsStringLiteral()
     val escapedChatId = chatId.jsStringLiteral()
@@ -278,13 +279,15 @@ internal fun AcpBridge.pushMode(chatId: String, modeId: String?) {
 
 internal fun AcpBridge.pushSessionConfigOptions(
     chatId: String,
-    metadata: AcpClientService.AdapterRuntimeMetadata
+    metadata: AcpClientService.AdapterRuntimeMetadata,
+    applyCurrentValues: Boolean
 ) {
     val payload = Json.encodeToString(
         SessionConfigOptionsPayload(
             chatId = chatId,
             configOptions = metadata.configOptions,
-            configOptionsByModel = metadata.configOptionsByModel
+            configOptionsByModel = metadata.configOptionsByModel,
+            applyCurrentValues = applyCurrentValues
         )
     ).jsStringLiteral()
     host.eval("if(window.__onSessionConfigOptions) window.__onSessionConfigOptions(JSON.parse($payload));")
@@ -403,6 +406,9 @@ internal fun AcpBridge.pushPromptDoneChunk(
     metadata: ConversationAssistantMetadata,
     outcome: String
 ) {
+    if (metadata.agentId == "antigravity" || metadata.agentId.isNullOrBlank()) {
+        AcpUsageDataFetcher.invalidateAntigravityCache()
+    }
     val json = buildJsonObject {
         put("chatId", chatId)
         put("role", "assistant")

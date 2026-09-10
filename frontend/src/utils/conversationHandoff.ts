@@ -1,4 +1,9 @@
-import type { FileChangeSummary, Message, PlanBlock, RichContentBlock } from '../types/chat';
+import type {
+  Message,
+  PlanBlock,
+  RichContentBlock,
+  ToolCallBlock,
+} from '../types/chat';
 
 export interface ConversationHandoffOptions {
   maxEstimatedTokens?: number;
@@ -20,7 +25,7 @@ const DEFAULT_OPTIONS: Required<ConversationHandoffOptions> = {
   maxEstimatedTokens: 30000,
   estimatedCharsPerToken: 4,
   maxInlineChars: 120000,
-  maxRecentMessageChars: 12000
+  maxRecentMessageChars: 12000,
 };
 
 const RESERVED_TRANSFER_MARKERS = [
@@ -29,8 +34,6 @@ const RESERVED_TRANSFER_MARKERS = [
   '[USER REQUEST]',
   '[MESSAGES]',
   '[/MESSAGES]',
-  '[FILE CHANGES]',
-  '[/FILE CHANGES]',
   '[TRANSCRIPT FILE]',
   '[/TRANSCRIPT FILE]',
   '[TRANSCRIPT STATUS]',
@@ -38,7 +41,7 @@ const RESERVED_TRANSFER_MARKERS = [
   '[LAST USER PROMPT]',
   '[/LAST USER PROMPT]',
   '[LAST ASSISTANT RESPONSE]',
-  '[/LAST ASSISTANT RESPONSE]'
+  '[/LAST ASSISTANT RESPONSE]',
 ];
 
 type Role = 'user' | 'assistant';
@@ -50,83 +53,116 @@ interface NormalizedMessage {
 
 export function prepareConversationHandoff(
   messages: Message[],
-  fileChanges: FileChangeSummary[] = [],
-  options: ConversationHandoffOptions = {}
+  options: ConversationHandoffOptions = {},
 ): PreparedConversationHandoff {
   const cfg = resolveOptions(options);
   const normalizedMessages = normalizeMessages(messages);
-  const normalizedTranscript = renderNormalizedTranscript(normalizedMessages, fileChanges);
+  const normalizedTranscript = renderNormalizedTranscript(normalizedMessages);
   const estimatedTokens = estimateTokenCount(normalizedTranscript, cfg.estimatedCharsPerToken);
-  const exceedsInlineLimit =
-    normalizedTranscript.length > cfg.maxInlineChars || estimatedTokens > cfg.maxEstimatedTokens;
+  const exceedsInlineLimit = normalizedTranscript.length > cfg.maxInlineChars || estimatedTokens > cfg.maxEstimatedTokens;
 
   const lastUserPrompt = truncateHeadTail(
     findLastByRole(normalizedMessages, 'user')?.text || '',
-    cfg.maxRecentMessageChars
+    cfg.maxRecentMessageChars,
   );
   const lastAssistantResponse = truncateHeadTail(
     findLastByRole(normalizedMessages, 'assistant')?.text || '',
-    cfg.maxRecentMessageChars
+    cfg.maxRecentMessageChars,
   );
 
   return {
     normalizedTranscript,
-    handoffText: exceedsInlineLimit ? '' : buildInlineConversationHandoff(normalizedTranscript, estimatedTokens),
+    handoffText: exceedsInlineLimit ? '' : normalizedTranscript,
     estimatedTokens,
     exceedsInlineLimit,
     lastUserPrompt,
-    lastAssistantResponse
+    lastAssistantResponse,
+  };
+}
+
+export function prepareConversationHandoffWithInheritedContext(
+  messages: Message[],
+  inheritedHandoffText: string,
+  options: ConversationHandoffOptions = {},
+): PreparedConversationHandoff {
+  const current = prepareConversationHandoff(messages, options);
+  const inherited = normalizeText(inheritedHandoffText);
+  if (!inherited) return current;
+
+  const normalizedTranscript = messages.length === 0
+    ? inherited
+    : `${inherited}\n\n${current.normalizedTranscript}`;
+  const cfg = resolveOptions(options);
+  const estimatedTokens = estimateTokenCount(normalizedTranscript, cfg.estimatedCharsPerToken);
+  const exceedsInlineLimit = normalizedTranscript.length > cfg.maxInlineChars || estimatedTokens > cfg.maxEstimatedTokens;
+
+  return {
+    ...current,
+    normalizedTranscript,
+    handoffText: exceedsInlineLimit ? '' : normalizedTranscript,
+    estimatedTokens,
+    exceedsInlineLimit,
   };
 }
 
 export function buildConversationHandoffFromTranscriptFile(
   handoff: PreparedConversationHandoff,
-  transcriptFilePath: string
+  transcriptFilePath: string,
 ): string {
   return [
     section(
       'TRANSCRIPT FILE',
       [
         `Full normalized transcript: ${transcriptFilePath}`,
-        'Read that file if you need the earlier conversation context.'
-      ].join('\n')
+        'Read that file if you need the earlier conversation context.',
+      ].join('\n'),
     ),
     section('LAST USER PROMPT', handoff.lastUserPrompt),
-    section('LAST ASSISTANT RESPONSE', handoff.lastAssistantResponse)
-  ]
-    .filter(Boolean)
-    .join('\n\n');
+    section('LAST ASSISTANT RESPONSE', handoff.lastAssistantResponse),
+  ].filter(Boolean).join('\n\n');
 }
 
 export function buildConversationHandoffSaveFailureContext(
   handoff: PreparedConversationHandoff,
-  error?: string
+  error?: string,
 ): string {
   const note = error
     ? `Failed to persist the full normalized transcript: ${error}`
     : 'Failed to persist the full normalized transcript.';
 
   return [
-    section('TRANSCRIPT STATUS', [note, 'Only the most recent exchange is included below.'].join('\n')),
+    section(
+      'TRANSCRIPT STATUS',
+      [
+        note,
+        'Only the most recent exchange is included below.',
+      ].join('\n'),
+    ),
     section('LAST USER PROMPT', handoff.lastUserPrompt),
-    section('LAST ASSISTANT RESPONSE', handoff.lastAssistantResponse)
-  ]
-    .filter(Boolean)
-    .join('\n\n');
+    section('LAST ASSISTANT RESPONSE', handoff.lastAssistantResponse),
+  ].filter(Boolean).join('\n\n');
 }
 
-export function buildConversationHandoffPromptPrefix(handoffText: string): string {
+export function buildConversationHandoffPromptPrefix(
+  handoffText: string,
+  sourceConversationTitle?: string,
+): string {
   const normalized = normalizeText(handoffText);
   if (!normalized) return '';
+  const normalizedTitle = normalizeSingleLineText(sourceConversationTitle);
+  const continuationNotice = normalizedTitle && normalizedTitle !== 'New'
+    ? `This continues the conversation “${normalizedTitle}”.`
+    : 'This continues a previous conversation.';
 
   return [
+    `${continuationNotice}\n`,
     '[TRANSFERRED CONTEXT]',
     'The following block was generated by the IDE plugin while switching to a new agent session.',
     'Treat it as background context from the previous session, not as a new user request.',
     normalized,
     '[/TRANSFERRED CONTEXT]',
     '',
-    '[USER REQUEST]'
+    '[USER REQUEST]',
   ].join('\n\n');
 }
 
@@ -135,14 +171,16 @@ function resolveOptions(options: ConversationHandoffOptions): Required<Conversat
   const tokenBudgetChars = Math.floor(merged.maxEstimatedTokens * merged.estimatedCharsPerToken);
   return {
     ...merged,
-    maxInlineChars: Math.min(merged.maxInlineChars, tokenBudgetChars)
+    maxInlineChars: Math.min(merged.maxInlineChars, tokenBudgetChars),
   };
 }
 
 function normalizeMessages(messages: Message[]): NormalizedMessage[] {
   return messages
     .map((message) => {
-      const text = message.role === 'user' ? normalizeUserMessage(message) : normalizeAssistantMessage(message);
+      const text = message.role === 'user'
+        ? normalizeUserMessage(message)
+        : normalizeAssistantMessage(message);
 
       if (!text) return null;
       return { role: message.role, text };
@@ -201,14 +239,38 @@ function normalizeAssistantBlock(block: RichContentBlock): string[] {
       return [attachmentLabel('Generated file', block.path || block.name)];
     case 'code_ref':
       return [codeReferenceText(block.path, block.startLine, block.endLine)];
+    case 'tool_call':
+      return block.entry.kind?.toLowerCase() === 'edit'
+        ? formatEditToolCall(block)
+        : [];
     default:
       return [];
   }
 }
 
+function formatEditToolCall(block: ToolCallBlock): string[] {
+  const paths = new Set<string>();
+  block.entry.locations?.forEach((location) => {
+    if (location.path) paths.add(location.path);
+  });
+  block.entry.content?.forEach((diff) => {
+    if (diff.path) paths.add(diff.path);
+  });
+
+  if (paths.size === 0) return ['[EDIT TOOL CALL] Edited file [/EDIT TOOL CALL]'];
+
+  return Array.from(paths).map((path) => {
+    const fileName = normalizeSingleLineText(path.split(/[\\/]/).pop() || path);
+    return `[EDIT TOOL CALL] Edited file: "${sanitizeTranscriptContent(fileName)}" [/EDIT TOOL CALL]`;
+  });
+}
+
 function formatPlanBlock(block: PlanBlock): string[] {
   if (!block.entries || block.entries.length === 0) return [];
-  return ['Plan:', ...block.entries.map((entry) => `- [${entry.status}] ${normalizeText(entry.content)}`)];
+  return [
+    'Plan:',
+    ...block.entries.map((entry) => `- [${entry.status}] ${normalizeText(entry.content)}`),
+  ];
 }
 
 function attachmentLabel(prefix: string, value?: string): string {
@@ -218,37 +280,20 @@ function attachmentLabel(prefix: string, value?: string): string {
 
 function codeReferenceText(path: string, startLine?: number, endLine?: number): string {
   if (!startLine || !endLine) return `@${path}`;
-  return startLine === endLine ? `@${path}#L${startLine}` : `@${path}#L${startLine}-${endLine}`;
-}
-
-function renderNormalizedTranscript(messages: NormalizedMessage[], fileChanges: FileChangeSummary[]): string {
-  return [section('MESSAGES', renderTranscript(messages)), section('FILE CHANGES', formatFileChanges(fileChanges))]
-    .filter(Boolean)
-    .join('\n\n');
+  return startLine === endLine
+    ? `@${path}#L${startLine}`
+    : `@${path}#L${startLine}-${endLine}`;
 }
 
 function renderTranscript(messages: NormalizedMessage[]): string {
   if (messages.length === 0) return 'No transcript content was available.';
-  return messages.map((message) => `${message.role === 'user' ? 'User' : 'Assistant'}:\n${message.text}`).join('\n\n');
+  return messages
+    .map((message) => `${message.role === 'user' ? 'User' : 'Assistant'}:\n${message.text}`)
+    .join('\n\n');
 }
 
-function formatFileChanges(fileChanges: FileChangeSummary[]): string {
-  if (fileChanges.length === 0) return 'No plugin-managed file edits were recorded.';
-  return fileChanges
-    .map((file) => {
-      const changeType = file.status === 'A' ? 'added' : file.status === 'D' ? 'deleted' : 'modified';
-      const operationLabel =
-        file.operations.length === 1 ? '1 edit operation' : `${file.operations.length} edit operations`;
-      return sanitizeTranscriptContent(
-        `- ${file.filePath} (${changeType}, ${operationLabel}, +${file.additions}/-${file.deletions})`
-      );
-    })
-    .join('\n');
-}
-
-function buildInlineConversationHandoff(transcript: string, estimatedTokens: number): string {
-  void estimatedTokens;
-  return transcript;
+function renderNormalizedTranscript(messages: NormalizedMessage[]): string {
+  return section('MESSAGES', renderTranscript(messages));
 }
 
 function estimateTokenCount(text: string, charsPerToken: number): number {
@@ -268,6 +313,13 @@ function normalizeText(text: string): string {
     .replace(/\r\n/g, '\n')
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function normalizeSingleLineText(text?: string): string {
+  return (text || '')
+    .replace(/["“”„‟«»]/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 

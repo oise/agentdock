@@ -1,10 +1,8 @@
-import { RefObject } from 'react';
+import { ReactNode, RefObject } from 'react';
 import {
   CornerDownLeft,
   Keyboard as KeyboardIcon,
   ListPlus,
-  LoaderCircle,
-  Mic,
   Plus,
   SendHorizontal,
   ShieldCheck,
@@ -42,15 +40,11 @@ interface ChatInputControlsProps {
   contextTokensUsed?: number;
   contextWindowSize?: number;
   inputValue: string;
-  collapsedAgentDropdown: boolean;
   showAuxIndicators: boolean;
-  showVoiceButton: boolean;
-  isTranscribing: boolean;
-  isRecording: boolean;
+  voiceInputButton: ReactNode;
   agentSlashItems: SlashCommandItem[];
   promptLibrarySlashItems: SlashCommandItem[];
   handleInsertSlashItem: (itemId: string, items: SlashCommandItem[]) => void;
-  handleVoiceInput: () => void;
   onAgentChange: (id: string) => void;
   onModelChange: (id: string, targetAgentId?: string) => void;
   onModeChange: (id: string) => void;
@@ -85,15 +79,11 @@ export function ChatInputControls({
   contextTokensUsed,
   contextWindowSize,
   inputValue,
-  collapsedAgentDropdown,
   showAuxIndicators,
-  showVoiceButton,
-  isTranscribing,
-  isRecording,
+  voiceInputButton,
   agentSlashItems,
   promptLibrarySlashItems,
   handleInsertSlashItem,
-  handleVoiceInput,
   onAgentChange,
   onModelChange,
   onModeChange,
@@ -122,6 +112,7 @@ export function ChatInputControls({
               <span className="invisible w-0" aria-hidden="true">&nbsp;</span>
             </div>
           }
+          className="shrink-0"
           onChange={(id) => {
             if (id === 'add-files' && typeof window.__attachFile === 'function') {
               window.__attachFile(conversationId);
@@ -145,11 +136,10 @@ export function ChatInputControls({
           options={isSending ? agentOptions.filter((option) => option.id === selectedAgentId) : agentOptions}
           placeholder="Select Agent"
           disabled={false}
-          collapsed={collapsedAgentDropdown}
           showSubValueInTrigger={true}
           onChange={onAgentChange}
           onSubChange={(_agentId, modelId) => onModelChange(modelId, _agentId)}
-          className="ml-0.5"
+          className="ml-0.5 flex-1 max-w-max"
         />
 
         {modeOptions.length > 0 && (
@@ -159,7 +149,7 @@ export function ChatInputControls({
             placeholder="Mode"
             disabled={!hasSelectedAgent}
             onChange={onModeChange}
-            className="ml-0.5"
+            className="ml-0.5 flex-1 max-w-max"
           />
         )}
 
@@ -170,7 +160,7 @@ export function ChatInputControls({
             placeholder="Reasoning"
             disabled={!hasSelectedAgent}
             onChange={onReasoningEffortChange}
-            className="ml-0.5"
+            className="ml-0.5 flex-1 max-w-max"
           />
         )}
 
@@ -249,7 +239,7 @@ export function ChatInputControls({
               onConfigOptionChange(parentId, subId);
             }
           }}
-          className="ml-0.5 mr-1"
+          className="ml-0.5 mr-1 shrink-0"
         />
 
         {showAuxIndicators && selectedAgentId && (
@@ -264,30 +254,7 @@ export function ChatInputControls({
       </div>
 
       <div className="ml-auto flex shrink-0 items-stretch">
-        {showVoiceButton && (isTranscribing ? (
-            <button type="button" disabled={true} className="flex items-center h-full px-1.5 rounded appearance-none
-              border-0 bg-editor-bg outline-none text-ide-small text-foreground-secondary
-              focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]"
-            >
-              <LoaderCircle size={16} className="animate-spin" />
-              <span className="invisible w-0" aria-hidden="true">&nbsp;</span>
-            </button>
-          ) : (
-            <button type="button" onClick={handleVoiceInput} disabled={isSending}
-              className={`flex items-center h-full px-1.5 rounded appearance-none border-0 outline-none text-ide-small 
-                focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)] 
-                ${isRecording ? 'bg-[#db5c5c] text-foreground' : 'bg-editor-bg text-foreground hover:text-foreground ' +
-                'hover:bg-hover focus-visible:bg-hover focus-visible:text-foreground'}`}
-            >
-              <Tooltip variant="minimal" content={isRecording ? 'Stop recording' : 'Voice input'}>
-                <div className="flex items-center">
-                  <Mic size={16} className="block translate-y-px" />
-                  <span className="invisible w-0" aria-hidden="true">&nbsp;</span>
-                </div>
-              </Tooltip>
-            </button>
-          )
-        )}
+        {voiceInputButton}
 
         {isSending ? (
           <>

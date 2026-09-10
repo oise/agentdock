@@ -37,7 +37,9 @@ object AcpAdapterConfig {
     @Serializable
     data class PlatformBinary(
         val win: String? = null,
-        val unix: String? = null
+        val unix: String? = null,
+        val macos: String? = null,
+        val linux: String? = null
     )
 
     @Serializable
@@ -45,7 +47,8 @@ object AcpAdapterConfig {
         val executable: PlatformBinary,
         val entryPath: String? = null,
         val args: List<String> = emptyList(),
-        val resumeArgs: List<String> = emptyList()
+        val resumeArgs: List<String> = emptyList(),
+        val minimumVersion: String? = null
     )
 
     @Serializable

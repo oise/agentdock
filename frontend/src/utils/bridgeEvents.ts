@@ -3,7 +3,6 @@ import {
   AudioRecordingStatePayload,
   AudioTranscriptionFeatureState,
   AudioTranscriptionResultPayload,
-  AudioTranscriptionSettings,
   AvailableCommand,
   ChangesState,
   ContentChunk,
@@ -24,6 +23,7 @@ import { PromptLibraryItem } from '../types/promptLibrary';
 import { SystemInstruction } from '../types/systemInstructions';
 export interface ContentChunkEvent { chunk: ContentChunk; }
 export interface StatusEvent { chatId: string; status: string; }
+export interface AssistantActivityEvent { chatId: string; }
 export interface SessionIdEvent { chatId: string; sessionId: string; }
 export interface ModeEvent { chatId: string; modeId: string; }
 export interface SessionConfigOptionsEvent { payload: SessionConfigOptionsPayload; }
@@ -47,13 +47,13 @@ export interface SystemInstructionsEvent { instructions: SystemInstruction[]; }
 export interface AudioTranscriptionFeatureEvent { state: AudioTranscriptionFeatureState; }
 export interface AudioTranscriptionResultEvent { payload: AudioTranscriptionResultPayload; }
 export interface AudioRecordingStateEvent { payload: AudioRecordingStatePayload; }
-export interface AudioTranscriptionSettingsEvent { settings: AudioTranscriptionSettings; }
 export interface GlobalSettingsEvent { payload: GlobalSettingsPayload; }
 export interface AdapterDeletedEvent { adapterId: string; }
 
 export const EVENT_NAMES = {
   ADAPTER_DELETED: 'acp-adapter-deleted',
   CONTENT_CHUNK: 'acp-content-chunk',
+  ASSISTANT_ACTIVITY: 'acp-assistant-activity',
   MCP_SERVERS: 'mcp-servers',
   MCP_STATUS: 'mcp-status',
   PROMPT_LIBRARY: 'prompt-library',
@@ -82,7 +82,6 @@ export const EVENT_NAMES = {
   AUDIO_TRANSCRIPTION_FEATURE: 'audio-transcription-feature',
   AUDIO_TRANSCRIPTION_RESULT: 'audio-transcription-result',
   AUDIO_RECORDING_STATE: 'audio-recording-state',
-  AUDIO_TRANSCRIPTION_SETTINGS: 'audio-transcription-settings',
   GLOBAL_SETTINGS: 'global-settings',
 } as const;
 

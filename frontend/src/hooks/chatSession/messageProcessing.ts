@@ -36,6 +36,13 @@ function thinkingId(chunk: ContentChunk): string {
   return chunk.toolCallId || nextThinkingId();
 }
 
+function isCommandlessBashToolCall(chunk: ContentChunk): boolean {
+  if (chunk.type !== 'tool_call') return false;
+  const json = safeParseJson(chunk.toolRawJson);
+  const title = chunk.toolTitle || json.title;
+  return String(title || '').trim().toLowerCase() === 'bash' && !json.rawInput?.command;
+}
+
 function collectToolCallDiffEntries(blocks: ToolCallBlock[]): ToolCallDiffEntry[] {
   return blocks.flatMap((block) => {
     const content = block.entry.content;
@@ -88,6 +95,7 @@ function applyOneChunk(messages: Message[], chunk: ContentChunk): Message[] {
 
   // Skip empty text/thinking chunks
   if ((chunk.type === 'text' || chunk.type === 'thinking') && !displayText) return messages;
+  if (isCommandlessBashToolCall(chunk)) return messages;
 
   const newMessages = [...messages];
   let lastMsg = newMessages.length > 0 ? { ...newMessages[newMessages.length - 1] } : null;
@@ -214,7 +222,8 @@ function buildBlocks(chunk: ContentChunk): RichContentBlock[] {
         startLine: chunk.startLine,
         endLine: chunk.endLine,
       } as any];
-    case 'tool_call': {
+    case 'tool_call':
+    case 'tool_call_update': {
       const entry = buildToolCallEntry(chunk);
       const json = safeParseJson(chunk.toolRawJson);
       const diffs = extractToolCallDiffEntries(json);
@@ -355,6 +364,12 @@ function handleToolCallUpdate(blocks: RichContentBlock[], chunk: ContentChunk) {
           ? replaceToolOutput(resultText, undefined, currentKind)
           : appendToolOutput(updatedBaseEntry.result, resultText, undefined, currentKind);
         updatedBaseEntry.result = merged.text;
+      }
+      if (isExploringChunk({ ...chunk, toolKind: updatedBaseEntry.kind, toolTitle: updatedBaseEntry.title })) {
+        blocks.splice(matchingIndexes[0], matchingIndexes.length, {
+          type: 'exploring', isStreaming: !chunk.isReplay, isReplay: chunk.isReplay, entries: [updatedBaseEntry],
+        });
+        return;
       }
       const replacements = createToolCallBlocks(updatedBaseEntry, chunk.isReplay);
       const mergedBlocks = replacements.map((replacement, index) => {

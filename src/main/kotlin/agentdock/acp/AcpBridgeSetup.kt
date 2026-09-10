@@ -25,11 +25,13 @@ internal fun AcpBridge.installServiceCallbacks() {
     service.setOnAdapterInitializationStateChanged { _, _, _ ->
         scope.launch(Dispatchers.IO) { pushAdapters() }
     }
-    service.setOnSessionConfigOptionsChanged { chatId, metadata ->
+    service.setOnSessionConfigOptionsChanged { chatId, metadata, applyCurrentValues ->
         val adapterId = service.activeAdapterName(chatId) ?: return@setOnSessionConfigOptionsChanged
-        AcpAgentPreferencesStore.rememberConfigOptions(adapterId, metadata.configOptions.associate { it.id to it.currentValue })
+        if (applyCurrentValues) {
+            AcpAgentPreferencesStore.rememberConfigOptions(adapterId, metadata.configOptions.associate { it.id to it.currentValue })
+        }
         pushAdapters()
-        pushSessionConfigOptions(chatId, metadata)
+        pushSessionConfigOptions(chatId, metadata, applyCurrentValues)
     }
     service.setOnSessionUpdate { chatId: String, update: SessionUpdate, isReplay: Boolean, _meta: JsonElement? ->
         if (isReplay && suppressReplayForChatIds.contains(chatId)) {
@@ -55,10 +57,26 @@ internal fun AcpBridge.installServiceCallbacks() {
         } else {
             service.activeAdapterName(chatId).orEmpty()
         }
+        val hasAssistantOutput = when (update) {
+            is SessionUpdate.AgentMessageChunk -> contentBlockHasVisibleOutput(update.content)
+            is SessionUpdate.AgentThoughtChunk -> contentBlockHasVisibleOutput(update.content, textType = "thinking")
+            else -> false
+        }
+        if (!isReplay && hasAssistantOutput && awaitingBackgroundOutput.remove(chatId, sessionId)) {
+            val escapedChatId = chatId.jsStringLiteral()
+            host.eval("if(window.__onAssistantActivity) window.__onAssistantActivity($escapedChatId);")
+            host.eval("if(window.__agentDockPlaySound) window.__agentDockPlaySound('backgroundResumed');")
+        }
         when (update) {
             is SessionUpdate.UserMessageChunk -> {
                 if (isReplay) {
-                    recordReplayUserBlock(chatId, sessionId, adapterName, update.content)
+                    recordReplayUserBlock(
+                        chatId,
+                        sessionId,
+                        adapterName,
+                        sessionUpdateMessageIdFromMeta(_meta),
+                        update.content
+                    )
                 }
             }
             is SessionUpdate.AgentMessageChunk -> {
@@ -88,22 +106,19 @@ internal fun AcpBridge.installServiceCallbacks() {
                 if (!isReplay) ensureChangesStateForLiveDiffs(chatId, update.content)
                 var json = try { Json.encodeToString(update) } catch (_: Exception) { update.toString() }
                 json = convertBrokenOtherPatchToolCallJson(json)
-                val isPermissionRequest = update.toolCallId.value.endsWith("-permission")
                 val todoToolCallKey = todoToolCallKey(chatId, sessionId, update.toolCallId.value)
-                val todoPlanEntries = if (!isPermissionRequest) extractTodoPlanEntriesFromToolRawJson(json) else null
-                val isTodoWrite = !isPermissionRequest && (todoPlanEntries != null || isTodoWriteToolCallJson(json))
+                val todoPlanEntries = extractTodoPlanEntriesFromToolRawJson(json)
+                val isTodoWrite = todoPlanEntries != null || isTodoWriteToolCallJson(json)
                 if (isTodoWrite) {
                     todoToolCallKeys.add(todoToolCallKey)
                 }
                 val shouldEmitTodoPlan = todoPlanEntries != null && emittedTodoPlanKeys.add(todoToolCallKey)
-                if (!isPermissionRequest) {
-                    if (shouldEmitTodoPlan) {
-                        recordStoredEvent(chatId, sessionId, adapterName, buildStoredPlanChunk(todoPlanEntries), isReplay)
-                    } else if (!isTodoWrite) {
-                        recordStoredEvent(chatId, sessionId, adapterName, buildStoredToolCallChunk(json), isReplay)
-                    }
+                if (shouldEmitTodoPlan) {
+                    recordStoredEvent(chatId, sessionId, adapterName, buildStoredPlanChunk(todoPlanEntries), isReplay)
+                } else if (!isTodoWrite) {
+                    recordStoredEvent(chatId, sessionId, adapterName, buildStoredToolCallChunk(json), isReplay)
                 }
-                if (!isPermissionRequest && !isReplay) {
+                if (!isReplay) {
                     if (!isTodoWrite || shouldEmitTodoPlan) {
                         markLivePromptVisibleAssistantOutput(chatId)
                     }
@@ -118,22 +133,19 @@ internal fun AcpBridge.installServiceCallbacks() {
                 if (!isReplay) ensureChangesStateForLiveDiffs(chatId, update.content)
                 var json = try { Json.encodeToString(update) } catch (_: Exception) { update.toString() }
                 json = convertBrokenOtherPatchToolCallJson(json)
-                val isPermissionRequest = update.toolCallId.value.endsWith("-permission")
                 val todoToolCallKey = todoToolCallKey(chatId, sessionId, update.toolCallId.value)
-                val todoPlanEntries = if (!isPermissionRequest) extractTodoPlanEntriesFromToolRawJson(json) else null
-                val isTodoWrite = !isPermissionRequest && (todoPlanEntries != null || todoToolCallKeys.contains(todoToolCallKey) || isTodoWriteToolCallJson(json))
+                val todoPlanEntries = extractTodoPlanEntriesFromToolRawJson(json)
+                val isTodoWrite = todoPlanEntries != null || todoToolCallKeys.contains(todoToolCallKey) || isTodoWriteToolCallJson(json)
                 if (isTodoWrite) {
                     todoToolCallKeys.add(todoToolCallKey)
                 }
                 val shouldEmitTodoPlan = todoPlanEntries != null && emittedTodoPlanKeys.add(todoToolCallKey)
-                if (!isPermissionRequest) {
-                    if (shouldEmitTodoPlan) {
-                        recordStoredEvent(chatId, sessionId, adapterName, buildStoredPlanChunk(todoPlanEntries), isReplay)
-                    } else if (!isTodoWrite) {
-                        recordStoredEvent(chatId, sessionId, adapterName, buildStoredToolCallUpdateChunk(update.toolCallId.value, json), isReplay)
-                    }
+                if (shouldEmitTodoPlan) {
+                    recordStoredEvent(chatId, sessionId, adapterName, buildStoredPlanChunk(todoPlanEntries), isReplay)
+                } else if (!isTodoWrite) {
+                    recordStoredEvent(chatId, sessionId, adapterName, buildStoredToolCallUpdateChunk(update.toolCallId.value, json), isReplay)
                 }
-                if (!isPermissionRequest && !isReplay) {
+                if (!isReplay) {
                     if (!isTodoWrite || shouldEmitTodoPlan) {
                         markLivePromptVisibleAssistantOutput(chatId)
                     }
@@ -537,11 +549,22 @@ internal fun AcpBridge.installAdapterQueries() {
     }
 
     host.register("fetchUsage") { payload ->
-        val adapterId = parseIdOnlyPayload(payload) ?: payload.trim()
+        val raw = payload.trim()
+        var force = false
+        val adapterId = if (raw.startsWith("{")) {
+            runCatching {
+                val obj = Json.parseToJsonElement(raw).jsonObject
+                force = obj["force"]?.jsonPrimitive?.booleanOrNull ?: false
+                obj["adapterId"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+            }.getOrNull() ?: parseIdOnlyPayload(raw) ?: raw
+        } else {
+            parseIdOnlyPayload(raw) ?: raw
+        }
         scope.launch(Dispatchers.IO) {
             val result = when (adapterId) {
                 "claude-code" -> AcpUsageDataFetcher.fetchClaudeUsageData()
                 "codex" -> AcpUsageDataFetcher.fetchCodexUsageData()
+                "antigravity" -> AcpUsageDataFetcher.fetchAntigravityUsageData(forceRefresh = force)
                 "github-copilot-cli" -> AcpUsageDataFetcher.fetchCopilotUsageData(adapterId)
                 else -> ""
             }

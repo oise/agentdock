@@ -53,8 +53,12 @@ export function normalizeOutgoingBlocks(blocks: any[]): any[] {
     });
 }
 
-export function prependHandoffContext(blocks: any[], handoffText: string): any[] {
-  const prefix = buildConversationHandoffPromptPrefix(handoffText);
+export function prependHandoffContext(
+  blocks: any[],
+  handoffText: string,
+  sourceConversationTitle?: string,
+): any[] {
+  const prefix = buildConversationHandoffPromptPrefix(handoffText, sourceConversationTitle);
   if (!prefix) return blocks;
   return [{ type: 'text', text: `${prefix}\n\n` }, ...blocks];
 }

@@ -16,12 +16,10 @@ function App() {
       'secondary': 'var(--ide-Button-startBackground)',
       'accent': 'var(--ide-List-selectionBackground)',
       'input': 'var(--ide-TextField-background)',
-      'editor-bg': 'var(--ide-editor-bg)'
+      'editor-bg': 'var(--ide-editor-bg)',
     };
 
-    const applyGlobalSettings = (
-      payload: { settings?: { uiFontSizeOffsetPx?: number; userMessageBackgroundStyle?: string } } | undefined
-    ) => {
+    const applyGlobalSettings = (payload: { settings?: { uiFontSizeOffsetPx?: number; userMessageBackgroundStyle?: string } } | undefined) => {
       const offset = payload?.settings?.uiFontSizeOffsetPx ?? 0;
       document.documentElement.style.setProperty('--ui-font-size-offset', `${offset}px`);
 
@@ -81,11 +79,11 @@ function App() {
     handleChatSessionStateChange,
     handleContinueInNewTab,
     handleContinueInCurrentConversation,
-    handleCancelAgentSwitch
+    handleCancelAgentSwitch,
   } = useAppController();
 
   return (
-    <div className='h-screen bg-background text-foreground overflow-hidden flex flex-col'>
+    <div className="h-screen bg-background text-foreground overflow-hidden flex flex-col">
       <TabBar
         tabs={tabs}
         activeTabId={activeTabId}
@@ -108,7 +106,7 @@ function App() {
         onOpenSettings={() => openSingletonTab('settings', 'Settings')}
       />
 
-      <div className='flex-1 relative min-h-0'>
+      <div className="flex-1 relative min-h-0">
         {/* All tabs -- keep mounted for state preservation, toggle visibility */}
         {tabs.map((tab) => {
           const isTabActive = tab.id === activeTabId;
@@ -128,9 +126,7 @@ function App() {
               onAssistantActivity={() => handleAssistantActivity(tab.id)}
               onAtBottomChange={(isAtBottom) => handleAtBottomChange(tab.id, isAtBottom)}
               onCanMarkReadChange={(canMarkRead) => handleCanMarkReadChange(tab.id, canMarkRead)}
-              onPermissionRequestChange={(hasPendingPermission) =>
-                handlePermissionRequestChange(tab.id, hasPendingPermission)
-              }
+              onPermissionRequestChange={(hasPendingPermission) => handlePermissionRequestChange(tab.id, hasPendingPermission)}
               onProcessingChange={(isProcessing) => handleProcessingChange(tab.id, isProcessing)}
               onAgentChangeRequest={(payload) => requestAgentSwitch(tab.id, payload)}
               onForkRequest={(payload) => handleForkRequest(tab.id, payload)}
@@ -157,13 +153,9 @@ function App() {
       <ConfirmationModal
         isOpen={pendingAgentSwitch !== null}
         title={`Switch to ${pendingAgentName}`}
-        message={
-          `Click "Continue" to pass the current chat context to ${pendingAgentName}.` +
-          '\n' +
-          `Click "Start New" to begin a new separate chat.`
-        }
-        confirmLabel='Continue'
-        secondaryActionLabel='Start New'
+        message={`Click "Continue" to pass the current chat context to ${pendingAgentName}.` + "\n" + `Click "Start New" to begin a new separate chat.`}
+        confirmLabel="Continue"
+        secondaryActionLabel="Start New"
         onSecondaryAction={handleContinueInNewTab}
         showCancelButton={false}
         onConfirm={handleContinueInCurrentConversation}

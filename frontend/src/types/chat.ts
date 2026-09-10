@@ -125,6 +125,7 @@ export interface ConfigOption {
 
 export interface SessionConfigOptionsPayload {
   chatId: string;
+  applyCurrentValues: boolean;
   configOptions: ConfigOption[];
   configOptionsByModel: Record<string, ConfigOption[]>;
 }
@@ -223,6 +224,7 @@ export interface ChatTab {
   agentId?: string; // If pre-selected
   historySession?: HistorySessionMeta;
   initialMessages?: Message[];
+  inheritedHandoffText?: string;
   metadataTitleOverride?: string;
   /** Title given before the first prompt, written to the history index once the conversation is registered. */
   pendingTitle?: string;
@@ -437,6 +439,7 @@ export interface PendingHandoffContext {
   sourceSessionId: string;
   sourceAgentId: string;
   targetAgentId: string;
+  sourceConversationTitle: string;
   text: string;
 }
 
@@ -458,11 +461,11 @@ export interface BridgeOperationResultPayload {
 
 export interface AudioTranscriptionFeatureState {
   id: string;
-  title?: string;
+  title: string;
   installed: boolean;
   installing: boolean;
   supported: boolean;
-  status: string;
+  installable: boolean;
   detail?: string;
   installPath: string;
 }
@@ -472,15 +475,23 @@ export interface AudioTranscriptionResultPayload {
   success: boolean;
   text?: string;
   error?: string;
+  cancelled?: boolean;
 }
 
 export interface AudioRecordingStatePayload {
   recording: boolean;
   error?: string;
+  ownerId?: string;
+}
+
+export interface AudioTranscriptionProviderSettings {
+  apiKey: string;
 }
 
 export interface AudioTranscriptionSettings {
+  provider: string;
   language: string;
+  providers: Record<string, AudioTranscriptionProviderSettings>;
 }
 
 export interface GitCommitGenerationSettings {
@@ -540,7 +551,7 @@ declare global {
     __loginAgent?: (adapterId: string, methodId: string) => void;
     __logoutAgent?: (adapterId: string) => void;
     __cancelAgentAuth?: (adapterId: string) => void;
-    __fetchAdapterUsage?: (adapterId: string) => void;
+    __fetchAdapterUsage?: (adapterId: string, force?: boolean) => void;
     __openAgentCli?: (adapterId: string) => void;
     __openHistoryConversationCli?: (payload: { projectPath: string; conversationId: string }) => void;
     __undoFile?: (payload: string) => void;
@@ -562,6 +573,7 @@ declare global {
     __onAcpLog?: (payload: AcpLogEntryPayload) => void;
     __onContentChunk?: (chunk: ContentChunk) => void;
     __onStatus?: (chatId: string, status: string) => void;
+    __onAssistantActivity?: (chatId: string) => void;
     __onSessionId?: (chatId: string, id: string) => void;
     __onAdapters?: (adapters: AgentOption[]) => void;
     __onAdapterRefreshState?: (refreshing: boolean) => void;
@@ -597,18 +609,16 @@ declare global {
     __onSystemInstructions?: (instructions: unknown) => void;
     __loadSystemInstructions?: () => void;
     __saveSystemInstructions?: (json: string) => void;
-    __loadAudioTranscriptionFeature?: () => void;
-    __installAudioTranscriptionFeature?: () => void;
-    __uninstallAudioTranscriptionFeature?: () => void;
+    __loadAudioTranscriptionFeature?: (payload?: string) => void;
+    __installAudioTranscriptionFeature?: (payload?: string) => void;
+    __uninstallAudioTranscriptionFeature?: (payload?: string) => void;
     __onAudioTranscriptionFeature?: (state: AudioTranscriptionFeatureState) => void;
-    __transcribeAudioInput?: (payload: string) => void;
     __onAudioTranscriptionResult?: (payload: AudioTranscriptionResultPayload) => void;
-    __startAudioRecording?: () => void;
+    __startAudioRecording?: (ownerId: string) => void;
     __stopAudioRecording?: (payload: string) => void;
+    __cancelAudioTranscription?: (payload: string) => void;
+    __cancelAudioRecording?: (ownerId: string) => void;
     __onAudioRecordingState?: (payload: AudioRecordingStatePayload) => void;
-    __loadAudioTranscriptionSettings?: () => void;
-    __saveAudioTranscriptionSettings?: (payload: string) => void;
-    __onAudioTranscriptionSettings?: (settings: AudioTranscriptionSettings) => void;
     __loadGlobalSettings?: () => void;
     __saveGlobalSettings?: (payload: string) => void;
     __onGlobalSettings?: (payload: GlobalSettingsPayload) => void;

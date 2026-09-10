@@ -25,8 +25,8 @@ dependencies {
 }
 
 kotlin {
-    jvmToolchain(21)
-    compilerOptions.freeCompilerArgs.add("-Xjvm-default=all")
+    jvmToolchain(25)
+    compilerOptions.freeCompilerArgs.add("-jvm-default=no-compatibility")
     sourceSets["main"].kotlin.apply {
         srcDir(rootProject.layout.projectDirectory.dir("src/main/kotlin"))
         // Everything that touches JCEF, AWT, the microphone or the status bar belongs to the
@@ -42,8 +42,7 @@ kotlin {
         exclude("agentdock/acp/IdeTerminalBridge.kt")
         exclude("agentdock/acp/IdeTerminalBridgeImpl.kt")
         exclude("agentdock/bridge/frontend/**")
-        exclude("agentdock/settings/AudioCaptureManager.kt")
-        exclude("agentdock/settings/WhisperFeatureManager.kt")
+        exclude("agentdock/audio/**")
         exclude("agentdock/ui/**")
     }
     sourceSets["test"].kotlin.srcDir(rootProject.layout.projectDirectory.dir("src/test/kotlin"))

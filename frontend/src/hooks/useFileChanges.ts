@@ -254,7 +254,6 @@ export function useFileChanges(
 
   useEffect(() => {
     if (baseFileChanges.length === 0) {
-      setComputedStats(null);
       return;
     }
 
@@ -294,7 +293,24 @@ export function useFileChanges(
   const statsByFilePath = computedStats?.source === baseFileChanges ? computedStats.byFilePath : {};
 
   const fileChanges = useMemo<FileChangeSummary[]>(() => {
-    if (statsPending || !sessionId || loadedSessionKey !== `${sessionId}:${adapterName}`) return [];
+    if (!sessionId || loadedSessionKey !== `${sessionId}:${adapterName}`) return [];
+
+    if (statsPending) {
+      // While stats are recomputing, return stale entries filtered to only paths
+      // still in baseFileChanges. This keeps the panel mounted and avoids flicker.
+      const currentPaths = new Set(baseFileChanges.map((fc) => fc.filePath));
+      return (computedStats?.byFilePath ? baseFileChanges : []).flatMap((fc) => {
+        if (!currentPaths.has(fc.filePath)) return [];
+        const stats = computedStats!.byFilePath[fc.filePath];
+        if (!stats || (stats.status !== 'D' && stats.additions === 0 && stats.deletions === 0)) return [];
+        return [{
+          ...fc,
+          status: stats.status,
+          additions: stats.additions,
+          deletions: stats.deletions,
+        }];
+      });
+    }
 
     return baseFileChanges.flatMap((fc) => {
       const stats = statsByFilePath[fc.filePath];
@@ -306,7 +322,7 @@ export function useFileChanges(
         deletions: stats.deletions,
       }];
     });
-  }, [baseFileChanges, statsByFilePath, statsPending, sessionId, adapterName, loadedSessionKey]);
+  }, [baseFileChanges, statsByFilePath, statsPending, computedStats, sessionId, adapterName, loadedSessionKey]);
   fileChangesRef.current = fileChanges;
 
   const totalAdditions = useMemo(() => fileChanges.reduce((sum, fc) => sum + fc.additions, 0), [fileChanges]);

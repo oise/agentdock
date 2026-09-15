@@ -299,7 +299,7 @@ export function EmptyStateView({
                     const deleteError = deleteErrors[conversationId];
                     const mainAgent = agentsById.get(item.adapterName);
                     const mainLabel = mainAgent?.name || item.adapterName;
-                    const canOpenCli = !!mainAgent?.cliAvailable;
+                    const canOpenCli = !!mainAgent?.cliResumeAvailable;
 
                     return (
                       <div key={conversationId} className='group relative'>

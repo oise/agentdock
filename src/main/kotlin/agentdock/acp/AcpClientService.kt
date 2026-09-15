@@ -36,15 +36,14 @@ data class PermissionRequest(
 class AcpClientService private constructor(val project: Project) {
     internal data class AdapterRuntimeMetadata(
         val configOptions: List<AcpConfigOption>,
-        val configOptionsByModel: Map<String, List<AcpConfigOption>> = emptyMap(),
-        val usesAdapterConfigOptions: Boolean = false
+        val configOptionsByModel: Map<String, List<AcpConfigOption>> = emptyMap()
     ) {
         private fun option(vararg categories: String): AcpConfigOption? =
             configOptions.firstOrNull { option -> categories.any(option::matchesCategory) }
 
         private val modelOption get() = option("model")
         private val modeOption get() = option("mode")
-        private val reasoningOption get() = option("thought_level", "reasoning_effort")
+        private val reasoningOption get() = configOptions.findReasoningEffortOption()
 
         val currentModelId get() = modelOption?.currentValue?.takeIf(String::isNotEmpty)
         val availableModels get() = modelOption?.options.orEmpty().map {

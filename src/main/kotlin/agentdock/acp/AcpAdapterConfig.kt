@@ -4,7 +4,7 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Configuration for ACP adapters.
@@ -48,7 +48,8 @@ object AcpAdapterConfig {
         val entryPath: String? = null,
         val args: List<String> = emptyList(),
         val resumeArgs: List<String> = emptyList(),
-        val minimumVersion: String? = null
+        val minimumVersion: String? = null,
+        val environment: Map<String, String> = emptyMap()
     )
 
     @Serializable
@@ -104,7 +105,7 @@ object AcpAdapterConfig {
         val launchBinary: PlatformBinary? = null,
         val disabledModels: List<String> = emptyList(),
         val disabledModes: List<String> = emptyList(),
-        val configOptions: JsonArray = JsonArray(emptyList()),
+        val clientCapabilitiesMeta: JsonObject = JsonObject(emptyMap()),
         val args: List<String> = emptyList(),
         val platformArgs: Map<String, List<String>> = emptyMap(),
         val patchRoot: PatchRoot = PatchRoot.PACKAGE,

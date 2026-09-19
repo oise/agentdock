@@ -1,14 +1,31 @@
 package agentdock.acp
 
 import com.intellij.util.EnvironmentUtil
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.nio.charset.StandardCharsets
+import java.util.concurrent.TimeUnit
 
 internal object AcpProcessEnvironment {
-    fun baseEnvironment(): Map<String, String> =
-        mergedBaseEnvironment(
-            current = System.getenv(),
-            shell = EnvironmentUtil.getEnvironmentMap()
+    private const val SHELL_ENV_TIMEOUT_SECONDS = 5L
+    private const val SHELL_ENV_BEGIN_MARKER = "__AGENT_DOCK_ENV_BEGIN__"
+    private const val SHELL_ENV_END_MARKER = "__AGENT_DOCK_ENV_END__"
+    private val transientShellVariables = setOf("_", "PWD", "OLDPWD", "SHLVL")
+
+    private val unixShellEnvironment: Map<String, String>? by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        loadUnixShellEnvironment()
+    }
+
+    fun baseEnvironment(): Map<String, String> {
+        val platformEnvironment = EnvironmentUtil.getEnvironmentMap()
+        if (AcpExecutionMode.isWindowsHost()) return enrichedEnvironment(platformEnvironment)
+
+        val shellEnvironment = unixShellEnvironment ?: return enrichedEnvironment(platformEnvironment)
+        return mergedBaseEnvironment(
+            current = platformEnvironment,
+            shell = shellEnvironment
         )
+    }
 
     fun withPrependedPathEntries(extraEntries: List<File>): Map<String, String> =
         withPrependedPathEntries(baseEnvironment(), extraEntries)
@@ -46,12 +63,82 @@ internal object AcpProcessEnvironment {
                 env[key] = value
             }
         }
+        val currentPath = env[pathKey(env)].orEmpty()
         val shellPath = shell[pathKey(shell)].orEmpty()
         return enrichedEnvironment(
-            source = env,
-            suffixPath = shellPath,
+            source = env.apply { this[pathKey(this)] = shellPath },
+            suffixPath = currentPath,
             commonExecutableDirs = commonExecutableDirs
         )
+    }
+
+    private fun loadUnixShellEnvironment(): Map<String, String>? {
+        val shell = sequenceOf(
+            System.getenv("SHELL"),
+            EnvironmentUtil.getValue("SHELL"),
+            "/bin/sh"
+        )
+            .filterNotNull()
+            .map(String::trim)
+            .firstOrNull { it.isNotEmpty() && File(it).canExecute() }
+            ?: return null
+        val envCommand = sequenceOf("/usr/bin/env", "/bin/env")
+            .firstOrNull { File(it).canExecute() }
+            ?: return null
+        val command = "printf '\\0%s\\0' '$SHELL_ENV_BEGIN_MARKER'; " +
+            "$envCommand -0; printf '%s\\0' '$SHELL_ENV_END_MARKER'"
+
+        return runCatching {
+            val process = ProcessBuilder(shell, "-l", "-i", "-c", command)
+                .redirectError(ProcessBuilder.Redirect.DISCARD)
+                .start()
+            val output = ByteArrayOutputStream()
+            val outputThread = Thread {
+                process.inputStream.use { it.copyTo(output) }
+            }.apply {
+                isDaemon = true
+                name = "agentdock-shell-environment"
+                start()
+            }
+
+            if (!process.waitFor(SHELL_ENV_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+                process.inputStream.close()
+                outputThread.join(1_000L)
+                return@runCatching null
+            }
+            outputThread.join(1_000L)
+            if (process.exitValue() != 0 || outputThread.isAlive) return@runCatching null
+
+            parseShellEnvironmentOutput(output.toString(StandardCharsets.UTF_8))
+                .takeIf { it.isNotEmpty() }
+        }.getOrNull()
+    }
+
+    internal fun parseShellEnvironmentOutput(output: String): Map<String, String> {
+        val entries = output.split('\u0000')
+        val start = entries.indexOf(SHELL_ENV_BEGIN_MARKER)
+        if (start < 0) return emptyMap()
+        val end = entries.subList(start + 1, entries.size)
+            .indexOf(SHELL_ENV_END_MARKER)
+            .takeIf { it >= 0 }
+            ?.plus(start + 1)
+            ?: -1
+        if (end < 0) return emptyMap()
+
+        return buildMap {
+            entries.subList(start + 1, end).forEach { entry ->
+                val separator = entry.indexOf('=')
+                if (separator <= 0) return@forEach
+                val name = entry.substring(0, separator)
+                val value = entry.substring(separator + 1)
+                if (name !in transientShellVariables &&
+                    EnvironmentUtil.isValidName(name) && EnvironmentUtil.isValidValue(value)
+                ) {
+                    put(name, value)
+                }
+            }
+        }
     }
 
     private fun enrichedEnvironment(

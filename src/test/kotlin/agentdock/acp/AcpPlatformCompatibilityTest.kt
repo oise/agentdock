@@ -162,7 +162,7 @@ class AcpPlatformCompatibilityTest {
     }
 
     @Test
-    fun `process environment keeps current values and adds missing shell values`() {
+    fun `process environment prefers shell path and adds missing shell values`() {
         val currentPath = createTempDirectory("agentdock-current-path").toFile()
         val shellPath = createTempDirectory("agentdock-shell-path").toFile()
 
@@ -182,9 +182,22 @@ class AcpPlatformCompatibilityTest {
         assertEquals("current-token", env["TOKEN"])
         assertEquals("shell-value", env["SHELL_ONLY"])
         assertEquals(
-            listOf(currentPath.absolutePath, shellPath.absolutePath).joinToString(File.pathSeparator),
+            listOf(shellPath.absolutePath, currentPath.absolutePath).joinToString(File.pathSeparator),
             env["PATH"]
         )
+    }
+
+    @Test
+    fun `shell environment parser ignores startup output and transient values`() {
+        val output = "startup banner\u0000__AGENT_DOCK_ENV_BEGIN__\u0000" +
+            "PATH=/shell/bin:/usr/bin\u0000TOKEN=value=with=equals\u0000PWD=/tmp\u0000" +
+            "__AGENT_DOCK_ENV_END__\u0000logout message"
+
+        val env = AcpProcessEnvironment.parseShellEnvironmentOutput(output)
+
+        assertEquals("/shell/bin:/usr/bin", env["PATH"])
+        assertEquals("value=with=equals", env["TOKEN"])
+        assertFalse(env.containsKey("PWD"))
     }
 
     @Test

@@ -115,7 +115,7 @@ internal class FrontendBridge(
         commands.register("cursor") { cursorType ->
             ApplicationManager.getApplication().invokeLater({
                 if (!browser.isDisposed) {
-                    browser.component.cursor = Cursor.getPredefinedCursor(awtCursor(cursorType))
+                    browser.cefBrowser.uiComponent.cursor = Cursor.getPredefinedCursor(awtCursor(cursorType))
                 }
             }, ModalityState.any())
         }
@@ -133,6 +133,15 @@ internal class FrontendBridge(
         }
 
         commands.register("openUrl", ::openUrl)
+        commands.register("readUiZoom") { pushUiZoom() }
+    }
+
+    private fun pushUiZoom() {
+        ApplicationManager.getApplication().invokeLater({
+            if (browser.isDisposed) return@invokeLater
+            val percent = kotlin.math.round(browser.zoomLevel * 100.0).toInt().coerceIn(25, 500)
+            eval("window.dispatchEvent(new CustomEvent('agent-dock-ui-zoom',{detail:$percent}));")
+        }, ModalityState.any())
     }
 
     private fun openUrl(url: String) {
@@ -156,7 +165,7 @@ internal class FrontendBridge(
     }
 
     private fun awtCursor(cursorType: String): Int = when (cursorType) {
-        "pointer", "grab", "grabbing" -> Cursor.HAND_CURSOR
+        "pointer", "grab", "grabbing", "zoom-in" -> Cursor.HAND_CURSOR
         "text" -> Cursor.TEXT_CURSOR
         "move", "all-scroll" -> Cursor.MOVE_CURSOR
         "wait", "progress" -> Cursor.WAIT_CURSOR

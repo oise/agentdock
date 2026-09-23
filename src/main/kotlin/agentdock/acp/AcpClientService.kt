@@ -207,12 +207,19 @@ class AcpClientService private constructor(val project: Project) {
         @Volatile var protocol: Protocol? = null
         @Volatile var authMethods: List<AuthMethod> = emptyList()
         @Volatile var logoutAvailable: Boolean = false
+        @Volatile var sessionListAvailable: Boolean = false
+        @Volatile var sessionDeleteAvailable: Boolean = false
         @Volatile var protocolScope: CoroutineScope? = null
         @Volatile var isInitialized: Boolean = false
         @Volatile var sessionUpdateWrapped: Boolean = false
         @Volatile var sessionUpdateScope: CoroutineScope? = null
         @Volatile var sessionUpdateQueue: Channel<QueuedSessionUpdate>? = null
         @Volatile var sessionUpdateWorker: Job? = null
+        val configGeneration = AtomicLong(0)
+
+        fun markConfigMutated() {
+            configGeneration.incrementAndGet()
+        }
 
         fun stop() {
             val runningProcess = process
@@ -236,6 +243,8 @@ class AcpClientService private constructor(val project: Project) {
             protocol = null
             authMethods = emptyList()
             logoutAvailable = false
+            sessionListAvailable = false
+            sessionDeleteAvailable = false
             protocolScope?.coroutineContext?.cancel()
             protocolScope = null
             isInitialized = false
@@ -246,6 +255,7 @@ class AcpClientService private constructor(val project: Project) {
             sessionUpdateScope?.coroutineContext?.cancel()
             sessionUpdateScope = null
             sessionUpdateWrapped = false
+            configGeneration.incrementAndGet()
         }
     }
 
@@ -270,6 +280,8 @@ class AcpClientService private constructor(val project: Project) {
     fun status(chatId: String): Status = sessions[chatId]?.statusRef?.get() ?: Status.NotStarted
     fun sessionId(chatId: String): String? = sessions[chatId]?.sessionIdRef?.get()
     fun activeModeId(chatId: String): String? = sessions[chatId]?.activeModeIdRef?.get()
+    internal fun sessionRuntimeMetadata(chatId: String): AdapterRuntimeMetadata? =
+        sessions[chatId]?.runtimeMetadataRef?.get()
     fun adapterInitializationStatus(adapterName: String): AdapterInitializationStatus {
         return adapterInitializationState[adapterName] ?: AdapterInitializationStatus.NotStarted
     }
@@ -371,6 +383,7 @@ class AcpClientService private constructor(val project: Project) {
         val activeReasoningEffortIdRef = AtomicReference<String?>(null)
         val activeConfigValues = ConcurrentHashMap<String, String>()
         val runtimeMetadataRef = AtomicReference<AdapterRuntimeMetadata?>(null)
+        @Volatile var appliedConfigGeneration: Long = -1L
         @Volatile var configOptionsUpdateInProgress: Boolean = false
         val promptGeneration = AtomicLong(0)
         @Volatile var lastHistoryLoadTime: Long = System.currentTimeMillis()
@@ -413,6 +426,7 @@ class AcpClientService private constructor(val project: Project) {
             activeReasoningEffortIdRef.set(null)
             activeConfigValues.clear()
             runtimeMetadataRef.set(null)
+            appliedConfigGeneration = -1L
             configOptionsUpdateInProgress = false
             promptGeneration.incrementAndGet()
             lastHistoryLoadTime = 0
@@ -430,6 +444,7 @@ class AcpClientService private constructor(val project: Project) {
             session = null
             sharedProcess = null
             promptGeneration.incrementAndGet()
+            appliedConfigGeneration = -1L
             configOptionsUpdateInProgress = false
             ignoreUpdatesUntilPrompt = false
             allowReplayDelivery = true

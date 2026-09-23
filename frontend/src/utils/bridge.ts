@@ -15,6 +15,7 @@ import {
 } from '../types/chat';
 import { extractToolCallDiffEntries, ToolCallRawInputCache } from './toolCallUtils';
 import { McpServerConfig } from '../types/mcp';
+import { CustomAcpConfig } from '../types/customAcp';
 import { PromptLibraryItem } from '../types/promptLibrary';
 import { SystemInstruction } from '../types/systemInstructions';
 import {
@@ -38,6 +39,7 @@ import {
   HistoryListEvent,
   McpServersEvent,
   McpStatusEvent,
+  CustomAcpConfigsEvent,
   ModeEvent,
   PermissionRequestEvent,
   PromptLibraryEvent,
@@ -290,6 +292,10 @@ export const ACPBridge = {
       window.dispatchEvent(new CustomEvent(EVENT_NAMES.MCP_SERVERS, { detail: { servers } }));
     };
 
+    window.__onCustomAcpConfigs = (configs) => {
+      window.dispatchEvent(new CustomEvent(EVENT_NAMES.CUSTOM_ACP_CONFIGS, { detail: { configs } }));
+    };
+
     window.__onMcpStatus = (update) => {
       window.dispatchEvent(new CustomEvent(EVENT_NAMES.MCP_STATUS, { detail: { update } }));
     };
@@ -456,11 +462,15 @@ export const ACPBridge = {
 
   onHistoryDeleteResult: (callback: (e: CustomEvent<HistoryDeleteResultEvent>) => void) => onBridgeEvent(EVENT_NAMES.HISTORY_DELETE_RESULT, callback),
 
+  onHistoryDeleteRequest: (callback: (e: CustomEvent<{ conversationIds: string[] }>) => void) => onBridgeEvent(EVENT_NAMES.HISTORY_DELETE_REQUEST, callback),
+
   loadHistoryConversation: (conversationId: string, projectPath: string, historyConversationId: string) => {
     window.__loadHistoryConversation?.(conversationId, projectPath, historyConversationId);
   },
 
   deleteHistoryConversations: (projectPath: string, conversationIds: string[]) => {
+    if (!window.__deleteHistoryConversations) return;
+    window.dispatchEvent(new CustomEvent(EVENT_NAMES.HISTORY_DELETE_REQUEST, { detail: { conversationIds } }));
     window.__deleteHistoryConversations?.({ projectPath, conversationIds });
   },
 
@@ -635,6 +645,17 @@ export const ACPBridge = {
   },
 
   onMcpServers: (callback: (e: CustomEvent<McpServersEvent>) => void) => onBridgeEvent(EVENT_NAMES.MCP_SERVERS, callback),
+
+  loadCustomAcpConfigs: () => {
+    window.__loadCustomAcpConfigs?.();
+  },
+
+  saveCustomAcpConfigs: (configs: CustomAcpConfig[]) => {
+    window.__saveCustomAcpConfigs?.(JSON.stringify(configs));
+  },
+
+  onCustomAcpConfigs: (callback: (e: CustomEvent<CustomAcpConfigsEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.CUSTOM_ACP_CONFIGS, callback),
 
   checkMcpStatus: () => {
     window.__checkMcpStatus?.();

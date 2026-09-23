@@ -41,6 +41,7 @@ export default {
         },
         'user-message': {
           default: 'var(--ide-user-message-default-bg)',
+          'blue-highlight': 'var(--ide-user-message-blue-highlight-bg)',
           blue: 'var(--ide-user-message-blue-bg)',
         },
         success: '#57965c',
@@ -77,6 +78,9 @@ export default {
       },
       borderRadius: {
         'ide': '6px',
+      },
+      maxWidth: {
+        'app-content': '800px',
       },
       spacing: {
         'ide-paragraph': 'var(--ide-paragraph-spacing)',

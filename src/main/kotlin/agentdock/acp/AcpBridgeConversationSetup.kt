@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.*
@@ -178,8 +179,7 @@ internal fun AcpBridge.installConversationQueries() {
             val captureId = beginLivePromptCapture(
                 chatId,
                 parsed.rawBlocks,
-                parsed.forkBase,
-                parsed.configValues
+                parsed.forkBase
             )
             val previousPromptJob = promptJobs[chatId]?.takeIf { it.isActive }
             lateinit var job: Job
@@ -213,6 +213,7 @@ internal fun AcpBridge.installConversationQueries() {
                             "The agent did not become ready within ${AcpBridge.START_AGENT_TIMEOUT_MS / 1000}s."
                         )
                     }
+                    refreshLivePromptAssistantMetadata(chatId, captureId)
                     pushAdapters(includeRuntimeChecks = false)
                     pushStatus(chatId, "prompting")
                     service.prompt(chatId, blocks).collect { event ->
@@ -334,11 +335,7 @@ internal fun AcpBridge.installConversationQueries() {
         val chatId = chatIdPayload.trim()
         if (chatId.isNotEmpty()) {
             scope.launch(Dispatchers.Default) {
-                service.stopAgent(chatId)
-                awaitingBackgroundOutput.remove(chatId)
-                livePromptCaptures.remove(chatId)
-                lateHistoryEventQueues.remove(chatId)?.close()
-                historyReplayCaptures.remove(chatId)
+                stopConversation(chatId)
             }
         }
     }
@@ -352,4 +349,18 @@ internal fun AcpBridge.installConversationQueries() {
     }
 
     installConversationHistoryQueries()
+}
+
+internal suspend fun AcpBridge.stopConversation(chatId: String, awaitPrompt: Boolean = false) {
+    if (awaitPrompt) {
+        historyLoadMutexes[chatId]?.mutex?.withLock { }
+        val promptJob = promptJobs[chatId]
+        withTimeout(CANCEL_REQUEST_TIMEOUT_MS) { service.cancel(chatId) }
+        withTimeout(CANCELLED_PROMPT_RESPONSE_TIMEOUT_MS) { promptJob?.join() }
+    }
+    service.stopAgent(chatId)
+    awaitingBackgroundOutput.remove(chatId)
+    livePromptCaptures.remove(chatId)
+    lateHistoryEventQueues.remove(chatId)?.close()
+    historyReplayCaptures.remove(chatId)
 }

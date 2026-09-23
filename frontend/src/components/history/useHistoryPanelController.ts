@@ -4,19 +4,21 @@ import { ACPBridge } from '../../utils/bridge';
 import type { AgentOption, HistorySessionMeta } from '../../types/chat';
 
 function getItemAgents(item: HistorySessionMeta): string[] {
-  return item.allAdapterNames && item.allAdapterNames.length > 0 ? item.allAdapterNames : [item.adapterName];
+  return item.allAdapterNames && item.allAdapterNames.length > 0
+    ? item.allAdapterNames
+    : [item.adapterName];
 }
 
 function formatDate(ms: number) {
   const d = new Date(ms);
   const now = new Date();
-  const isToday =
-    d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  const isToday = d.getDate() === now.getDate() &&
+    d.getMonth() === now.getMonth() &&
+    d.getFullYear() === now.getFullYear();
 
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
-  const isYesterday =
-    d.getDate() === yesterday.getDate() &&
+  const isYesterday = d.getDate() === yesterday.getDate() &&
     d.getMonth() === yesterday.getMonth() &&
     d.getFullYear() === yesterday.getFullYear();
 
@@ -26,7 +28,7 @@ function formatDate(ms: number) {
 
   if (isToday) return `Today ${timeStr}`;
   if (isYesterday) return `Yesterday ${timeStr}`;
-
+  
   const day = String(d.getDate()).padStart(2, '0');
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const year = d.getFullYear();
@@ -38,9 +40,13 @@ function formatConversationLength(promptCount?: number) {
   return `${promptCount} prompt${promptCount === 1 ? '' : 's'}`;
 }
 
-export function useHistoryPanelController(availableAgents: AgentOption[]) {
-  const [historyList, setHistoryList] = useState<HistorySessionMeta[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+export function useHistoryPanelController(
+  availableAgents: AgentOption[],
+  isActive: boolean,
+  historyList: HistorySessionMeta[],
+  historyLoaded: boolean
+) {
+  const [isLoading, setIsLoading] = useState(!historyLoaded);
   const [selectedConversationIds, setSelectedConversationIds] = useState<string[]>([]);
   const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
   const [deleteProjectPath, setDeleteProjectPath] = useState<string>('');
@@ -55,18 +61,6 @@ export function useHistoryPanelController(availableAgents: AgentOption[]) {
   const filterOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   useEffect(() => {
-    const unsubHistory = ACPBridge.onHistoryList((e) => {
-      const list = Array.isArray(e.detail.list) ? e.detail.list : [];
-      setHistoryList(list);
-      setSelectedConversationIds((prev) => prev.filter((id) => list.some((item) => item.conversationId === id)));
-      setDeleteErrors((prev) =>
-        Object.fromEntries(
-          Object.entries(prev).filter(([conversationId]) => list.some((item) => item.conversationId === conversationId))
-        )
-      );
-      setIsLoading(false);
-    });
-
     const unsubDeleteResult = ACPBridge.onHistoryDeleteResult((e) => {
       const result = e.detail.result;
       const failures = Array.isArray(result.failures) ? result.failures : [];
@@ -85,17 +79,34 @@ export function useHistoryPanelController(availableAgents: AgentOption[]) {
       setIsDeleting(false);
     });
 
+    return () => {
+      unsubDeleteResult();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!historyLoaded) return;
+    setSelectedConversationIds((prev) => prev.filter((id) => (
+      historyList.some((item) => item.conversationId === id && item.deletable !== false)
+    )));
+    setDeleteErrors((prev) => Object.fromEntries(
+      Object.entries(prev).filter(([conversationId]) => (
+        historyList.some((item) => item.conversationId === conversationId)
+      ))
+    ));
+    setIsLoading(false);
+  }, [historyList, historyLoaded]);
+
+  useEffect(() => {
+    if (!isActive) return;
+
     ACPBridge.requestHistoryList();
     const intervalId = window.setInterval(() => {
       ACPBridge.requestHistoryList();
     }, 30_000);
 
-    return () => {
-      window.clearInterval(intervalId);
-      unsubDeleteResult();
-      unsubHistory();
-    };
-  }, []);
+    return () => window.clearInterval(intervalId);
+  }, [isActive]);
 
   const adapterDisplay = useMemo(() => {
     const map = new Map<string, AgentOption>();
@@ -136,9 +147,10 @@ export function useHistoryPanelController(availableAgents: AgentOption[]) {
   }, [isFilterOpen, selectedAgents, uniqueAgentsInHistory]);
 
   const selectedCount = selectedConversationIds.length;
-  const filteredConversationIds = filteredHistoryList.map((item) => item.conversationId);
-  const areAllFilteredSelected =
-    filteredConversationIds.length > 0 &&
+  const filteredConversationIds = filteredHistoryList
+    .filter((item) => item.deletable !== false)
+    .map((item) => item.conversationId);
+  const areAllFilteredSelected = filteredConversationIds.length > 0 &&
     filteredConversationIds.every((conversationId) => selectedConversationIds.includes(conversationId));
 
   const toggleSelection = (conversationId: string) => {
@@ -184,9 +196,10 @@ export function useHistoryPanelController(availableAgents: AgentOption[]) {
   };
 
   const openDeleteConfirmation = (items: HistorySessionMeta[]) => {
-    if (items.length === 0) return;
-    setPendingDeleteIds(items.map((item) => item.conversationId));
-    setDeleteProjectPath(items[0].projectPath);
+    const deletableItems = items.filter((item) => item.deletable !== false);
+    if (deletableItems.length === 0) return;
+    setPendingDeleteIds(deletableItems.map((item) => item.conversationId));
+    setDeleteProjectPath(deletableItems[0].projectPath);
   };
 
   const startEditing = (item: HistorySessionMeta, e: MouseEvent) => {
@@ -200,11 +213,7 @@ export function useHistoryPanelController(availableAgents: AgentOption[]) {
       setEditingId(null);
       return;
     }
-
-    setHistoryList((prev) =>
-      prev.map((item) => (item.conversationId === conversationId ? { ...item, title: editTitle.trim() } : item))
-    );
-
+    
     ACPBridge.renameHistoryConversation(projectPath, conversationId, editTitle.trim());
     setEditingId(null);
   };
@@ -236,7 +245,11 @@ export function useHistoryPanelController(availableAgents: AgentOption[]) {
     setIsFilterOpen(true);
   };
 
-  const handleFilterOptionKeyDown = (event: KeyboardEvent<HTMLButtonElement>, agentId: string, index: number) => {
+  const handleFilterOptionKeyDown = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    agentId: string,
+    index: number
+  ) => {
     if (event.key === 'Escape') {
       event.preventDefault();
       closeFilter(true);
@@ -280,7 +293,6 @@ export function useHistoryPanelController(availableAgents: AgentOption[]) {
   };
 
   return {
-    historyList,
     isLoading,
     selectedConversationIds,
     pendingDeleteIds,
@@ -318,6 +330,6 @@ export function useHistoryPanelController(availableAgents: AgentOption[]) {
     handleFilterButtonKeyDown,
     handleFilterOptionKeyDown,
     toggleSelection,
-    cancelDelete
+    cancelDelete,
   };
 }

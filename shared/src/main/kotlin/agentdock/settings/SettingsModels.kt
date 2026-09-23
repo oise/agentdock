@@ -67,10 +67,16 @@ data class GitCommitGenerationSettings(
 data class GlobalSettings(
     val audioNotificationsEnabled: Boolean = true,
     val uiFontSizeOffsetPx: Int = 0,
+    val uiZoomPercent: Int = 100,
     val userMessageBackgroundStyle: String = "default",
+    val userMessageCustomColor: String = "#193d70",
     val audioTranscription: AudioTranscriptionSettings = AudioTranscriptionSettings(),
     val gitCommitGeneration: GitCommitGenerationSettings = GitCommitGenerationSettings(),
-    val quotaWidgetEnabled: Boolean = false
+    val quotaWidgetEnabled: Boolean = false,
+    val openInEditor: Boolean = true,
+    val sidebarEnabled: Boolean = true,
+    val sidebarPosition: String = "left",
+    val sidebarExpandedSections: List<String> = listOf("recent-chats", "sections")
 )
 
 @Serializable

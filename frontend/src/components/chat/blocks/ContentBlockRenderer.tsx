@@ -7,22 +7,21 @@ import { SimpleActivityBlock } from './SimpleActivityBlock';
 import { EditBlock } from './EditBlock';
 import { OtherToolBlock } from './OtherToolBlock';
 import { PlanBlockComponent } from './PlanBlock';
-import { TodoBlock } from './TodoBlock';
 import { MarkdownMessage } from '../MarkdownMessage';
-import { safeParseJson } from '../../../utils/toolCallUtils';
 
 interface Props {
   block: RichContentBlock;
   isActivePrompt?: boolean;
+  onImageClick?: (src: string) => void;
 }
 
-export const ContentBlockRenderer: React.FC<Props> = ({ block, isActivePrompt = false }) => {
+export const ContentBlockRenderer: React.FC<Props> = ({ block, isActivePrompt = false, onImageClick }) => {
   switch (block.type) {
     case 'text':
       return <MarkdownMessage content={block.text} enableCodeCopy />;
     case 'exploring':
       return <ExploringBlock block={block} isActivePrompt={isActivePrompt} />;
-    case 'tool_call': {
+    case 'tool_call':
       if (block.entry.kind === 'execute') {
         return <ExecuteBlock block={block} isActivePrompt={isActivePrompt} />;
       }
@@ -35,44 +34,37 @@ export const ContentBlockRenderer: React.FC<Props> = ({ block, isActivePrompt = 
       if (block.entry.kind === 'edit') {
         return <EditBlock block={block} />;
       }
-      if (block.entry.kind === 'todowrite') {
-        return <TodoBlock block={block} />;
-      }
-      const rawToolJson = safeParseJson(block.entry.rawJson);
-      if (Array.isArray(rawToolJson?.rawInput?.todos)) {
-        return <TodoBlock block={block} />;
-      }
-      return <OtherToolBlock block={block} />;
-    }
+      return <OtherToolBlock block={block} onImageClick={onImageClick} />;
     case 'plan':
       return <PlanBlockComponent block={block} />;
-    case 'image':
+    case 'image': {
+      const src = block.data.startsWith('data:') ? block.data : `data:${block.mimeType};base64,${block.data}`;
       return (
-        <div className='rounded-lg overflow-hidden border border-[var(--ide-Borders-color)] shadow-sm max-w-sm'>
+        <div className="rounded-lg overflow-hidden border border-[var(--ide-Borders-color)] shadow-sm max-w-sm">
           <img
-            src={block.data.startsWith('data:') ? block.data : `data:${block.mimeType};base64,${block.data}`}
-            alt='AI Attachment'
-            className='w-full h-auto'
+            src={src}
+            alt="AI Attachment"
+            className={`w-full h-auto`}
+            onClick={onImageClick ? () => onImageClick(src) : undefined}
           />
         </div>
       );
+    }
     case 'audio':
       return (
-        <div className='rounded-lg overflow-hidden border border-[var(--ide-Borders-color)] shadow-sm max-w-md'>
-          <audio
-            controls
+        <div className="rounded-lg overflow-hidden border border-[var(--ide-Borders-color)] shadow-sm max-w-md">
+          <audio controls
             src={block.data.startsWith('data:') ? block.data : `data:${block.mimeType};base64,${block.data}`}
-            className='w-full'
+            className="w-full"
           />
         </div>
       );
     case 'video':
       return (
-        <div className='rounded-lg overflow-hidden border border-[var(--ide-Borders-color)] shadow-sm max-w-md'>
-          <video
-            controls
+        <div className="rounded-lg overflow-hidden border border-[var(--ide-Borders-color)] shadow-sm max-w-md">
+          <video controls
             src={block.data.startsWith('data:') ? block.data : `data:${block.mimeType};base64,${block.data}`}
-            className='w-full h-auto'
+            className="w-full h-auto"
           />
         </div>
       );

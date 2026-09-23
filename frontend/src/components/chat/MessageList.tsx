@@ -1,4 +1,5 @@
-import { useLayoutEffect, useRef, memo, useState, useMemo, useEffect } from 'react';
+import { useLayoutEffect, useRef, memo, useState, useMemo, useEffect, useCallback } from 'react';
+import type { ReactNode } from 'react';
 import { Message, RichContentBlock, ExploringBlock, ToolCallBlock, PlanBlock, AgentOption } from '../../types/chat';
 import { UserMessage } from './UserMessage';
 import { AssistantMessage } from './AssistantMessage';
@@ -34,6 +35,7 @@ function expandCutoffByPromptCount(messages: Message[], cutoffIndex: number, pro
 }
 
 interface MessageListProps {
+  footer?: ReactNode;
   messages: Message[];
   onImageClick: (src: string) => void;
   onAtBottomChange?: (isAtBottom: boolean) => void;
@@ -49,6 +51,7 @@ interface MessageListProps {
 }
 
 function MessageList({ 
+  footer,
   messages,
   onImageClick,
   onAtBottomChange,
@@ -63,6 +66,10 @@ function MessageList({
   scrollToBottomOnInitialMessages = false
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const footerRef = useRef<HTMLDivElement>(null);
+  const followBottomRef = useRef(true);
+  const lastScrollTopRef = useRef(0);
   const atBottomChangeRef = useRef(onAtBottomChange);
   const canMarkReadChangeRef = useRef(onCanMarkReadChange);
   const lastAtBottomRef = useRef(true);
@@ -85,7 +92,7 @@ function MessageList({
 
   const getDistanceFromBottom = (el: HTMLDivElement) => el.scrollHeight - el.scrollTop - el.clientHeight;
 
-  const publishViewportState = (el: HTMLDivElement) => {
+  const publishViewportState = useCallback((el: HTMLDivElement) => {
     const distanceFromBottom = getDistanceFromBottom(el);
     const isAtBottom = distanceFromBottom < BOTTOM_PIN_THRESHOLD_PX;
     const canMarkRead = distanceFromBottom < READ_ACK_THRESHOLD_PX;
@@ -99,7 +106,17 @@ function MessageList({
       lastCanMarkReadRef.current = canMarkRead;
       canMarkReadChangeRef.current?.(canMarkRead);
     }
-  };
+  }, []);
+
+  const updateViewport = useCallback(() => {
+    const el = containerRef.current;
+    if (!el || el.clientHeight === 0) return;
+    if (!isHistoryReplaying && followBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+      lastScrollTopRef.current = el.scrollTop;
+    }
+    publishViewportState(el);
+  }, [isHistoryReplaying, publishViewportState]);
 
   useEffect(() => {
     if (isHistoryReplaying) {
@@ -194,26 +211,37 @@ function MessageList({
   const handleScroll = () => {
     const el = containerRef.current;
     if (!el) return;
+    // Only scrolling down to the bottom restores a lock released by user input.
+    // Layout changes and delayed programmatic scroll events cannot release it.
+    if (el.scrollTop > lastScrollTopRef.current && getDistanceFromBottom(el) < BOTTOM_PIN_THRESHOLD_PX) {
+      followBottomRef.current = true;
+    }
+    lastScrollTopRef.current = el.scrollTop;
     publishViewportState(el);
   };
 
   const handleUserIntentScrollUp = () => {
-    // Instantly break the "pinned to bottom" lock before the slow DOM 'scroll' event fires.
-    // This prevents the race condition where new incoming text forces a scroll down
-    // while the user is actively trying to scroll up.
-    if (lastAtBottomRef.current) {
-      lastAtBottomRef.current = false;
-      atBottomChangeRef.current?.(false);
+    followBottomRef.current = false;
+    lastScrollTopRef.current = containerRef.current?.scrollTop ?? 0;
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    const left = el.getBoundingClientRect().left + el.clientLeft;
+    if (e.target === el && (e.clientX < left || e.clientX >= left + el.clientWidth)) {
+      handleUserIntentScrollUp();
     }
   };
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (footerRef.current?.contains(e.target as Node)) return;
     if (e.deltaY < 0) {
       handleUserIntentScrollUp();
     }
   };
 
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (footerRef.current?.contains(e.target as Node)) return;
     touchStartYRef.current = e.touches[0].clientY;
   };
 
@@ -231,12 +259,14 @@ function MessageList({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (footerRef.current?.contains(e.target as Node)) return;
     if (['ArrowUp', 'PageUp', 'Home'].includes(e.key)) {
       handleUserIntentScrollUp();
     }
   };
 
   const handleExpand = () => {
+    handleUserIntentScrollUp();
     const el = containerRef.current;
     if (!el) {
       setRevealedPromptCount((prev) => prev + EARLIER_PROMPTS_BATCH_SIZE);
@@ -262,10 +292,22 @@ function MessageList({
     const isAtBottom = distanceFromBottom < BOTTOM_PIN_THRESHOLD_PX;
     const canMarkRead = distanceFromBottom < READ_ACK_THRESHOLD_PX;
     lastAtBottomRef.current = isAtBottom;
+    followBottomRef.current = isAtBottom;
+    lastScrollTopRef.current = el.scrollTop;
     lastCanMarkReadRef.current = canMarkRead;
     atBottomChangeRef.current?.(isAtBottom);
     canMarkReadChangeRef.current?.(canMarkRead);
   }, []);
+
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    const content = contentRef.current;
+    if (!el || !content) return;
+    const observer = new ResizeObserver(updateViewport);
+    observer.observe(el);
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [updateViewport]);
 
   useLayoutEffect(() => {
     const el = containerRef.current;
@@ -278,34 +320,27 @@ function MessageList({
       !isHistoryReplaying
     ) {
       initialMessagesScrolledRef.current = true;
-      el.style.scrollBehavior = 'auto';
-      el.scrollTop = el.scrollHeight;
-      lastAtBottomRef.current = true;
-      lastCanMarkReadRef.current = true;
-      publishViewportState(el);
+      followBottomRef.current = true;
+      updateViewport();
       return;
     }
 
     const historyJustFinished = prevIsReplaying.current && !isHistoryReplaying;
     const sendingJustStarted = !prevIsSendingForScroll.current && isSending;
-    const shouldKeepBottomPinned = !isHistoryReplaying && Boolean(isSending) && lastAtBottomRef.current;
-
-    if (historyJustFinished || sendingJustStarted || shouldKeepBottomPinned) {
-      el.style.scrollBehavior = 'auto';
-      el.scrollTop = el.scrollHeight;
-      lastAtBottomRef.current = true;
+    if (historyJustFinished || sendingJustStarted) {
+      followBottomRef.current = true;
     }
 
-    publishViewportState(el);
+    updateViewport();
     prevIsReplaying.current = isHistoryReplaying;
     prevIsSendingForScroll.current = isSending;
-  }, [messages, revealedPromptCount, isHistoryReplaying, isSending, scrollToBottomOnInitialMessages]);
+  }, [messages, revealedPromptCount, isHistoryReplaying, isSending, scrollToBottomOnInitialMessages, updateViewport]);
 
   useEffect(() => {
     const wasSending = prevIsSendingForCollapse.current;
     prevIsSendingForCollapse.current = isSending;
 
-    if (!wasSending || isSending || isHistoryReplaying || !lastAtBottomRef.current) {
+    if (!wasSending || isSending || isHistoryReplaying || !followBottomRef.current) {
       return;
     }
 
@@ -329,14 +364,16 @@ function MessageList({
       <div
         ref={containerRef}
         onScroll={handleScroll}
+        onPointerDown={handlePointerDown}
         onWheel={handleWheel}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onKeyDown={handleKeyDown}
-        className="flex-1 min-h-0 overflow-y-auto px-6 py-6 space-y-6 opacity-100 transition-opacity duration-300"
+        className="flex-1 min-h-0 overflow-x-hidden overflow-y-auto scroll-auto [overflow-anchor:none] px-4 opacity-100 transition-opacity duration-300"
       >
-      <div className="mx-auto w-full max-w-[1200px] flex flex-col">
+      <div ref={contentRef} className="mx-auto min-h-full w-full max-w-app-content flex flex-col">
+        <div className="flex flex-1 flex-col pb-6 pt-[calc(1.5rem+var(--content-top-inset,0px))]">
         
         {hiddenCount > 0 && !isHistoryReplaying && (
           <div className="flex justify-center mb-12">
@@ -389,6 +426,17 @@ function MessageList({
         {isSending && !isHistoryReplaying && (
           <div className="flex justify-start mb-8">
             <ChatLoadingIndicator status={status} agentName={agentName} />
+          </div>
+        )}
+        </div>
+        {footer && (
+          <div ref={footerRef} className="sticky bottom-0 z-20 flex shrink-0 flex-col pt-2">
+            <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-1/2 w-screen -translate-x-1/2 bg-background shadow-[0_4px_0_0_var(--ide-Panel-background)]">
+              <div className="absolute inset-x-0 bottom-full h-8 bg-gradient-to-b from-transparent to-background" />
+            </div>
+            <div className="relative flex flex-col">
+              {footer}
+            </div>
           </div>
         )}
       </div>

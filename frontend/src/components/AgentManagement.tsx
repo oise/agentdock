@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { AgentOption } from '../types/chat';
 import { ACPBridge } from '../utils/bridge';
 import ConfirmationModal from './ConfirmationModal';
-import { RefreshCw } from 'lucide-react';
+import { Bot, RefreshCw } from 'lucide-react';
 import { ClaudeUsage } from './usage/ClaudeUsage';
 import { CopilotUsage } from './usage/CopilotUsage';
 import { CodexUsage } from './usage/CodexUsage';
@@ -15,6 +15,7 @@ import { MenuButton } from './ui/MenuButton';
 import { SplitButton } from './ui/SplitButton';
 import { Tooltip } from './chat/shared/Tooltip';
 import { AdapterUsageLifecycleProvider } from '../hooks/useAdapterUsage';
+import { SectionTitle } from './ui/SectionTitle';
 
 function mergeAgentSnapshot(previous: AgentOption | undefined, next: AgentOption): AgentOption {
   if (!previous) return next;
@@ -243,19 +244,22 @@ export function AgentManagementView({
   return (
     <AdapterUsageLifecycleProvider value={{ mode: 'provider', enabled: isActive }}>
       <div className="flex flex-col h-full bg-background text-foreground overflow-hidden">
-      <div className="flex items-center justify-end px-3 border-b border-border shrink-0 min-h-12">
-        <button
-          onClick={handleRefresh}
-          disabled={isRefreshing}
-          className={`p-1 text-foreground-secondary hover:text-foreground disabled:opacity-70 transition-colors ${linkButtonFocusClassName}`}
-          title="Refresh"
-          aria-label="Refresh service providers"
-        >
-          <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-        </button>
-      </div>
-      <div className="flex-1 overflow-y-auto w-full px-2 pb-16">
-        <div className="flex flex-col max-w-[1200px] mx-auto w-full">
+      <div className="h-full w-full overflow-y-auto pb-16">
+        <div className="mx-auto flex min-h-full w-full max-w-app-content flex-col">
+      <SectionTitle actions={(
+        <Tooltip variant="minimal" content="Refresh status">
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className={`p-1 text-foreground-secondary hover:text-foreground disabled:opacity-70 transition-colors ${linkButtonFocusClassName}`}
+            aria-label="Refresh service providers"
+          >
+            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </button>
+        </Tooltip>
+      )}>
+        Service Providers
+      </SectionTitle>
           {agents.map((agent, index) => {
             const isDownloadedKnown = agent.downloadedKnown === true;
             const isDownloaded = agent.downloaded === true;
@@ -271,8 +275,14 @@ export function AgentManagementView({
             const usesAcpLogin = agent.loginMethod === 'acp';
             const usesCliLogin = agent.loginMethod === 'cli';
             const hasLoginMenu = usesAcpLogin || usesCliLogin;
+            const customAuthMethodsAvailable = agent.custom === true && (agent.authMethods?.length ?? 0) > 0;
             const isStarting = !!agent.initializing;
-            const showLogin = !isStarting && agent.loggedIn !== true;
+            const showLogin = !isStarting && (agent.custom === true
+              ? customAuthMethodsAvailable
+              : hasLoginMenu
+                ? agent.loggedIn === false
+                : agent.loggedIn !== true
+            );
             const showLogout = !isStarting && agent.logoutAvailable === true && agent.loggedIn === true;
             const showCliAuthFallback = !isStarting && agent.loggedIn === true && agent.logoutAvailable !== true;
             const showUsage = agent.loginStatusSupported !== true || agent.loggedIn === true;
@@ -311,7 +321,11 @@ export function AgentManagementView({
               <div key={agent.id} className={`flex group ${!isLast ? 'border-b border-border' : ''}`}>
                 <div className="flex items-start gap-3 w-full px-2 py-1">
                   <div className="flex flex-col items-center shrink-0 w-10 min-w-10 py-4">
-                    <img src={agent.iconPath} className="h-8 w-8 object-contain opacity-75" />
+                    {agent.custom ? (
+                      <Bot className="h-8 w-8 text-foreground-secondary opacity-75" strokeWidth={1.5} />
+                    ) : (
+                      <img src={agent.iconPath} className="h-8 w-8 object-contain opacity-75" />
+                    )}
                   </div>
 
                   <div className="min-w-0 flex-1 py-4 text-ide-small text-foreground-secondary">
@@ -350,7 +364,7 @@ export function AgentManagementView({
                         <div className="text-error">{agent.downloadStatus}</div>
                       )}
 
-                      {!isInstalling && isDownloaded && agent.downloadPath && (
+                      {!isInstalling && !agent.custom && isDownloaded && agent.downloadPath && (
                         <div className="flex items-center gap-1.5">
                           <span className="shrink-0">Path:</span>
                           <span className="font-mono truncate" title={agent.downloadPath}>
@@ -410,15 +424,17 @@ export function AgentManagementView({
                         <LoadingSpinner className="w-4 h-4" />
                       </div>
                     ) : !isDownloaded ? (
-                      <Button
-                        onClick={() => handleDownload(agent.id)}
-                        variant="install"
-                      >
-                        Install
-                      </Button>
+                      agent.custom ? null : (
+                        <Button
+                          onClick={() => handleDownload(agent.id)}
+                          variant="install"
+                        >
+                          Install
+                        </Button>
+                      )
                     ) : (
                       <>
-                        {canUpdate ? (
+                        {!agent.custom && (canUpdate ? (
                           <SplitButton
                             label="Update"
                             onAction={() => handleUpdate(agent.id)}
@@ -444,7 +460,7 @@ export function AgentManagementView({
                           >
                             {isDeleting ? 'Uninstalling' : 'Uninstall'}
                           </Button>
-                        )}
+                        ))}
                         {showLogin && hasLoginMenu && (
                           isAuthenticating && !isLoggingOut ? (
                             <Button
@@ -471,20 +487,26 @@ export function AgentManagementView({
                                       label: `${agent.name} login`,
                                       onClick: () => handleLogin(agent, 'cli'),
                                     }]),
-                                {
-                                  label: (
-                                    <Tooltip variant="minimal" content={cliAuthTooltip} className="inline-flex">
-                                      <span>CLI</span>
-                                    </Tooltip>
-                                  ),
-                                  disabled: !agent.cliAvailable,
+                                ...(agent.cliAvailable ? [{
+                                  label: 'CLI',
                                   onClick: () => handleCliAuth(agent),
-                                },
+                                }] : []),
                               ]}
                             />
                           )
                         )}
                         {((showLogin && !hasLoginMenu) || showCliAuthFallback) && (
+                          <Tooltip variant="minimal" content={cliAuthTooltip} className="inline-flex">
+                            <Button
+                              onClick={() => handleCliAuth(agent)}
+                              disabled={!agent.cliAvailable || isProcessing}
+                              variant="outline"
+                            >
+                              CLI auth
+                            </Button>
+                          </Tooltip>
+                        )}
+                        {agent.custom && agent.loginMethod === 'cli' && !customAuthMethodsAvailable && (
                           <Tooltip variant="minimal" content={cliAuthTooltip} className="inline-flex">
                             <Button
                               onClick={() => handleCliAuth(agent)}

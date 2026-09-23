@@ -183,6 +183,7 @@ export interface AgentOption {
   updateAvailable?: boolean;
   cliAvailable?: boolean;
   cliResumeAvailable?: boolean;
+  custom?: boolean;
 }
 
 export function isAgentRunnable(agent: AgentOption): boolean {
@@ -215,11 +216,10 @@ export interface TabUiFlags {
   processing: boolean;
 }
 
-export type TabType = 'chat' | 'management' | 'design' | 'history' | 'mcp' | 'system-instructions' | 'prompt-library' | 'settings';
+export type SectionType = 'management' | 'design' | 'history' | 'mcp' | 'custom-acp' | 'system-instructions' | 'prompt-library' | 'settings';
 
 export interface ChatTab {
   id: string;
-  type: TabType;
   title: string;
   conversationId: string;
   agentId?: string; // If pre-selected
@@ -259,6 +259,7 @@ export interface HistorySessionMeta {
   filePath: string;
   createdAt: number;
   updatedAt: number;
+  deletable?: boolean;
 }
 
 export interface ContentChunk {
@@ -503,13 +504,26 @@ export interface GitCommitGenerationSettings {
   instructions: string;
 }
 
+export type SidebarSectionId = 'new-chat' | 'recent-chats' | 'sections';
+
+export const DEFAULT_SIDEBAR_EXPANDED_SECTIONS: SidebarSectionId[] = [
+  'recent-chats',
+  'sections',
+];
+
 export interface GlobalSettings {
   audioNotificationsEnabled: boolean;
   uiFontSizeOffsetPx: number;
-  userMessageBackgroundStyle: 'default' | 'blue' | 'background-secondary' | 'primary' | 'secondary' | 'accent' | 'input' | 'editor-bg';
+  uiZoomPercent: number;
+  userMessageBackgroundStyle: 'default' | 'blue-highlight' | 'blue' | 'background-secondary' | 'accent' | 'custom';
+  userMessageCustomColor: string;
   audioTranscription: AudioTranscriptionSettings;
   gitCommitGeneration: GitCommitGenerationSettings;
   quotaWidgetEnabled: boolean;
+  openInEditor: boolean;
+  sidebarEnabled: boolean;
+  sidebarPosition: 'left' | 'right';
+  sidebarExpandedSections: SidebarSectionId[];
 }
 
 export interface GlobalSettingsPayload {
@@ -596,14 +610,19 @@ declare global {
 
     __onMcpServers?: (servers: unknown) => void;
     __onMcpStatus?: (update: unknown) => void;
+    __onCustomAcpConfigs?: (configs: unknown) => void;
     __onFilesResult?: (filesJson: unknown) => void;
     __searchFiles?: (query: string) => void;
     __requestFileIcon?: (path: string) => void;
     __onFileIconResult?: (result: { path: string; icon: string }) => void;
+    __readLocalImage?: (path: string) => void;
+    __onLocalImageResult?: (result: { path: string; dataUrl: string }) => void;
     __onThemeChanged?: () => void;
     __loadMcpServers?: () => void;
     __saveMcpServers?: (json: string) => void;
     __checkMcpStatus?: () => void;
+    __loadCustomAcpConfigs?: () => void;
+    __saveCustomAcpConfigs?: (json: string) => void;
     __onPromptLibrary?: (items: unknown) => void;
     __loadPromptLibrary?: () => void;
     __savePromptLibrary?: (json: string) => void;

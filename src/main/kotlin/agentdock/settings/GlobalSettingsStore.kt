@@ -13,6 +13,7 @@ import java.io.RandomAccessFile
 
 object GlobalSettingsStore {
     private val storeLock = Any()
+    private val sidebarSectionIds = setOf("new-chat", "recent-chats", "sections")
 
     @Volatile
     private var gitCommitGenerationEnabled = false
@@ -45,6 +46,9 @@ object GlobalSettingsStore {
             audioNotificationsEnabled = settings.audioNotificationsEnabled,
             uiFontSizeOffsetPx = normalizeUiFontSizeOffsetPx(settings.uiFontSizeOffsetPx),
             userMessageBackgroundStyle = normalizeUserMessageBackgroundStyle(settings.userMessageBackgroundStyle),
+            userMessageCustomColor = settings.userMessageCustomColor.takeIf { Regex("#[0-9a-fA-F]{6}").matches(it) } ?: "#193d70",
+            sidebarPosition = normalizeSidebarPosition(settings.sidebarPosition),
+            sidebarExpandedSections = settings.sidebarExpandedSections.filter { it in sidebarSectionIds }.distinct(),
             audioTranscription = normalizeAudioTranscriptionSettings(settings.audioTranscription),
             gitCommitGeneration = settings.gitCommitGeneration.copy(
                 adapterId = settings.gitCommitGeneration.adapterId.trim(),
@@ -135,8 +139,11 @@ object GlobalSettingsStore {
 
     private fun normalizeUserMessageBackgroundStyle(style: String?): String {
         return when (style?.trim()?.lowercase()) {
-            "default", "blue", "background-secondary", "primary", "secondary", "accent", "input", "editor-bg" -> style.trim().lowercase()
+            "default", "blue-highlight", "blue", "background-secondary", "accent", "custom" -> style.trim().lowercase()
             else -> "default"
         }
     }
+
+    private fun normalizeSidebarPosition(position: String?): String =
+        if (position?.trim()?.lowercase() == "right") "right" else "left"
 }

@@ -135,7 +135,7 @@ export default function TabBar({
           const hasUnread = flags?.unread;
           const hasProcessing = flags?.processing;
           return (
-            <div key={tab.id} className="flex min-w-[70px] flex-1 max-w-max">
+            <div key={tab.id} className="flex min-w-[120px] flex-1 max-w-max">
               <TabItem
                 tab={tab}
                 agents={agents}

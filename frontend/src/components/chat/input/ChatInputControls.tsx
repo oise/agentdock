@@ -116,6 +116,9 @@ export function ChatInputControls({
   const modeOption = additionalConfigOptions.find((option) => option.id === 'mode')
     ?? additionalConfigOptions.find((option) => option.category === 'mode');
   const effortOption = findReasoningEffortOption(additionalConfigOptions);
+  const selectedModelName = agentOptions
+    .find((agent) => agent.id === selectedAgentId)
+    ?.subOptions?.find((model) => model.id === selectedModelId)?.label;
   const narrowOnlyOptions = [
     modeOptions.length > 0 && modeOption,
     reasoningEffortOptions.length > 0 && effortOption,
@@ -162,7 +165,7 @@ export function ChatInputControls({
           subValue={selectedModelId}
           options={isSending ? agentOptions.filter((option) => option.id === selectedAgentId) : agentOptions}
           placeholder="Select Agent"
-          triggerTooltip="Model"
+          triggerTooltip={selectedModelName ? `Model: ${selectedModelName}` : 'Model'}
           disabled={false}
           showSubValueInTrigger={true}
           onChange={onAgentChange}

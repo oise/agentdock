@@ -18,7 +18,9 @@ export default function ChatInput(props: ChatInputProps) {
     composerLoadRevision = 0,
     onInputChange,
     onSend,
-    onQueueDraft,
+    scheduleEnabled = false,
+    onScheduleModeChange,
+    queueError,
     onStop,
     isSending,
     promptQueueEnabled,
@@ -52,11 +54,9 @@ export default function ChatInput(props: ChatInputProps) {
   const {
     editorContainerRef,
     inputRootRef,
-    controlsRowRef,
     slashMenuRef,
     fileMenuRef,
     composerRevision,
-    initialConfig,
     sendMode,
     setSendMode,
     plusMenuOptions,
@@ -74,26 +74,25 @@ export default function ChatInput(props: ChatInputProps) {
     setFileHighlightedIndex,
     applyFile,
     customHeight,
-    showAuxIndicators,
     insertText,
     agentSlashItems,
     promptLibrarySlashItems,
     handleOpenFile,
-    handleImagePaste,
     combinedHandleKeyDownCapture,
     handleInsertSlashItem,
     setLexicalEditor,
   } = useChatInputController(props);
 
-  const handleSubmit = isSending ? (() => onQueueDraft?.()) : onSend;
-
   return (
-    <div ref={inputRootRef} style={{ height: customHeight ? `${customHeight}px` : undefined }} className="relative flex-shrink-0 pb-2 pt-1">
+    <div
+      ref={inputRootRef}
+      style={{ height: customHeight ? `${customHeight}px` : undefined }}
+      className="relative flex-shrink-0 pb-[12px] pt-1 [container-type:inline-size] [container-name:chat-input]">
       <div className="h-full w-full flex flex-col">
         <div className={`relative flex h-full flex-col rounded-ide border border-[var(--ide-Button-startBorderColor)]
-          bg-background-secondary transition-all focus-within:ring-1 focus-within:[--tw-ring-color:color-mix(in_srgb,var(--ide-Button-default-focusColor)_70%,transparent)] ${
-            resizeHovered || isResizing ? 'border-t-[var(--ide-Button-default-focusColor)]' : ''
-          }`}>
+          bg-background-secondary transition-all focus-within:ring-1 
+          focus-within:[--tw-ring-color:color-mix(in_srgb,var(--ide-Button-default-focusColor)_70%,transparent)] 
+          ${resizeHovered || isResizing ? 'border-t-[var(--ide-Button-default-focusColor)]' : ''}`}>
           {onResizeStart && (
             <div
               role="separator"
@@ -106,6 +105,7 @@ export default function ChatInput(props: ChatInputProps) {
             />
           )}
 
+          {queueError && <div role="alert" className="px-3 pt-2 text-ide-small text-error">{queueError}</div>}
           <AttachmentBar
             attachments={attachments}
             onRemove={(id) => onAttachmentsChange(attachments.filter(a => a.id !== id))}
@@ -115,7 +115,6 @@ export default function ChatInput(props: ChatInputProps) {
           <ChatInputEditor
             conversationId={conversationId}
             composerRevision={composerRevision}
-            initialConfig={initialConfig}
             editorContainerRef={editorContainerRef}
             inputValue={inputValue}
             composerLoadRevision={composerLoadRevision}
@@ -129,14 +128,13 @@ export default function ChatInput(props: ChatInputProps) {
             onImageClick={onImageClick}
             onOpenFile={handleOpenFile}
             onHeightChange={onHeightChange}
-            onImagePaste={handleImagePaste}
-            onSend={handleSubmit}
+            onSend={onSend}
             onKeyDownCapture={combinedHandleKeyDownCapture}
             onEditorReady={setLexicalEditor}
           />
 
           <ChatInputControls
-            controlsRowRef={controlsRowRef}
+            containerRef={inputRootRef}
             sendMode={sendMode}
             setSendMode={setSendMode}
             plusMenuOptions={plusMenuOptions}
@@ -157,7 +155,6 @@ export default function ChatInput(props: ChatInputProps) {
             contextTokensUsed={contextTokensUsed}
             contextWindowSize={contextWindowSize}
             inputValue={inputValue}
-            showAuxIndicators={showAuxIndicators}
             voiceInputButton={
               <VoiceInputButton
                 conversationId={conversationId}
@@ -174,7 +171,9 @@ export default function ChatInput(props: ChatInputProps) {
             onConfigOptionChange={onConfigOptionChange}
             onApprovalModeChange={onApprovalModeChange}
             onSend={onSend}
-            onQueueDraft={onQueueDraft}
+            scheduleEnabled={scheduleEnabled}
+            onScheduleModeChange={onScheduleModeChange}
+            hasAttachments={attachments.length > 0}
             onStop={onStop}
             promptQueueEnabled={promptQueueEnabled}
           />

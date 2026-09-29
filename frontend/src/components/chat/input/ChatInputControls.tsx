@@ -1,14 +1,17 @@
 import { ReactNode, RefObject } from 'react';
 import {
+  AlarmClockOff,
   CornerDownLeft,
+  Clock,
+  Ellipsis,
   Keyboard as KeyboardIcon,
   ListPlus,
   Plus,
   SendHorizontal,
   ShieldCheck,
   ShieldQuestion,
-  SlidersHorizontal,
   Square,
+  Zap,
 } from 'lucide-react';
 import { ApprovalMode, ConfigOption, DropdownOption } from '../../../types/chat';
 import { SlashCommandItem } from './slashCommands';
@@ -17,9 +20,10 @@ import { ChatUsageIndicator } from '../../usage/chat/ChatUsageIndicator';
 import { ContextUsageIndicator } from '../shared/ContextUsageIndicator';
 import { Tooltip } from '../shared/Tooltip';
 import { AdapterUsageLifecycleProvider } from '../../../hooks/useAdapterUsage';
+import { findReasoningEffortOption } from '../../../utils/configOptions';
 
 interface ChatInputControlsProps {
-  controlsRowRef: RefObject<HTMLDivElement>;
+  containerRef: RefObject<HTMLDivElement>;
   sendMode: 'enter' | 'ctrl-enter';
   setSendMode: (mode: 'enter' | 'ctrl-enter') => void;
   plusMenuOptions: DropdownOption[];
@@ -40,7 +44,6 @@ interface ChatInputControlsProps {
   contextTokensUsed?: number;
   contextWindowSize?: number;
   inputValue: string;
-  showAuxIndicators: boolean;
   voiceInputButton: ReactNode;
   agentSlashItems: SlashCommandItem[];
   promptLibrarySlashItems: SlashCommandItem[];
@@ -52,13 +55,15 @@ interface ChatInputControlsProps {
   onConfigOptionChange: (configId: string, value: string) => void;
   onApprovalModeChange: (mode: ApprovalMode) => void;
   onSend: () => void;
-  onQueueDraft?: () => void;
   onStop: () => void;
   promptQueueEnabled?: boolean;
+  scheduleEnabled?: boolean;
+  onScheduleModeChange?: (enabled: boolean) => void;
+  hasAttachments?: boolean;
 }
 
 export function ChatInputControls({
-  controlsRowRef,
+  containerRef,
   sendMode,
   setSendMode,
   plusMenuOptions,
@@ -79,7 +84,6 @@ export function ChatInputControls({
   contextTokensUsed,
   contextWindowSize,
   inputValue,
-  showAuxIndicators,
   voiceInputButton,
   agentSlashItems,
   promptLibrarySlashItems,
@@ -91,16 +95,38 @@ export function ChatInputControls({
   onConfigOptionChange,
   onApprovalModeChange,
   onSend,
-  onQueueDraft,
   onStop,
   promptQueueEnabled = false,
+  scheduleEnabled = false,
+  onScheduleModeChange,
+  hasAttachments = false,
 }: ChatInputControlsProps) {
-  const hasInput = !!inputValue.trim();
+  const hasInput = !!inputValue.trim() || hasAttachments;
+  const fastModeOption = additionalConfigOptions.find((option) => {
+    if ((option.id !== 'fast' && option.id !== 'fast-mode') || option.type !== 'select' || option.options.length !== 2) return false;
+    const values = option.options.map((value) => value.value);
+    return (values.includes('on') && values.includes('off'))
+      || (values.includes('true') && values.includes('false'));
+  });
+  const fastModeOnValue = fastModeOption?.options.find((value) => value.value === 'on' || value.value === 'true')?.value;
+  const fastModeOffValue = fastModeOption?.options.find((value) => value.value === 'off' || value.value === 'false')?.value;
+  const fastModeEnabled = fastModeOption?.currentValue === 'on' || fastModeOption?.currentValue === 'true';
+  const fastModeDescription = fastModeOption?.options.find((value) => value.value === fastModeOption?.currentValue)?.description
+    ?? (fastModeEnabled ? fastModeOption?.description : undefined);
+  const modeOption = additionalConfigOptions.find((option) => option.id === 'mode')
+    ?? additionalConfigOptions.find((option) => option.category === 'mode');
+  const effortOption = findReasoningEffortOption(additionalConfigOptions);
+  const narrowOnlyOptions = [
+    modeOptions.length > 0 && modeOption,
+    reasoningEffortOptions.length > 0 && effortOption,
+    fastModeOnValue && fastModeOffValue && fastModeOption,
+  ];
 
   return (
-    <div ref={controlsRowRef} className="flex flex-wrap items-stretch gap-y-1 px-1 py-1 text-foreground">
+    <div className="flex flex-wrap items-stretch gap-y-1 px-1 py-1 text-foreground">
       <div className="flex min-w-0 flex-1 items-stretch">
         <ChatDropdown
+          containerRef={containerRef}
           value=""
           options={plusMenuOptions}
           placeholder=""
@@ -131,10 +157,12 @@ export function ChatInputControls({
         />
 
         <ChatDropdown
+          containerRef={containerRef}
           value={selectedAgentId}
           subValue={selectedModelId}
           options={isSending ? agentOptions.filter((option) => option.id === selectedAgentId) : agentOptions}
           placeholder="Select Agent"
+          triggerTooltip="Model"
           disabled={false}
           showSubValueInTrigger={true}
           onChange={onAgentChange}
@@ -144,34 +172,67 @@ export function ChatInputControls({
 
         {modeOptions.length > 0 && (
           <ChatDropdown
+            containerRef={containerRef}
             value={selectedModeId}
             options={modeOptions}
             placeholder="Mode"
+            triggerTooltip="Mode"
+            menuTitle="Mode"
             disabled={!hasSelectedAgent}
             onChange={onModeChange}
-            className="ml-0.5 flex-1 max-w-max"
+            className="ml-0.5 flex-1 max-w-max chat-max-400:hidden"
           />
         )}
 
         {reasoningEffortOptions.length > 0 && (
           <ChatDropdown
+            containerRef={containerRef}
             value={selectedReasoningEffortId}
             options={reasoningEffortOptions}
             placeholder="Reasoning"
+            triggerTooltip="Effort"
+            menuTitle="Effort"
             disabled={!hasSelectedAgent}
             onChange={onReasoningEffortChange}
-            className="ml-0.5 flex-1 max-w-max"
+            className="ml-0.5 flex-1 max-w-max chat-max-400:hidden"
           />
         )}
 
+        {fastModeOption && fastModeOnValue && fastModeOffValue && (
+          <Tooltip variant="minimal" className="ml-0.5 flex chat-max-400:hidden" content={`Fast mode: ${fastModeEnabled ? 'On' : 'Off'}${fastModeDescription ? `, ${fastModeDescription}` : ''}`}>
+            <button
+              type="button"
+              disabled={!hasSelectedAgent}
+              aria-label="Fast mode"
+              aria-pressed={fastModeEnabled}
+              onClick={() => onConfigOptionChange(fastModeOption.id, fastModeEnabled ? fastModeOffValue : fastModeOnValue)}
+              className={`flex shrink-0 items-center rounded border-0 bg-background-secondary px-1.5 outline-none
+                focus-visible:relative focus-visible:z-10
+                hover:bg-hover focus-visible:bg-hover focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-0 focus-visible:outline-[var(--ide-Button-default-focusColor)]
+                disabled:cursor-not-allowed ${fastModeEnabled ? 'text-primary' : 'text-foreground'}`}
+            >
+              <Zap size={15} fill={fastModeEnabled ? 'currentColor' : 'none'} aria-hidden="true" />
+            </button>
+          </Tooltip>
+        )}
         <ChatDropdown
+          containerRef={containerRef}
           value=""
           subValues={{
+            'schedule-send': scheduleEnabled ? 'on' : 'off',
             'send-mode': sendMode,
             approvals: approvalMode,
             ...Object.fromEntries(additionalConfigOptions.map((option) => [option.id, option.currentValue])),
           }}
           options={[
+            ...(onScheduleModeChange ? [{
+              id: 'schedule-send',
+              label: 'Schedule send',
+              subOptions: [
+                { id: 'on', label: 'On', icon: <Clock className="w-4 h-4" /> },
+                { id: 'off', label: 'Off', icon: <AlarmClockOff className="w-4 h-4" /> },
+              ],
+            }] : []),
             {
               id: 'send-mode',
               label: 'Send mode',
@@ -198,7 +259,7 @@ export function ChatInputControls({
                 },
               ],
             },
-            ...additionalConfigOptions.map((option) => {
+            ...additionalConfigOptions.filter((option) => hasSelectedAgent || !narrowOnlyOptions.includes(option)).map((option) => {
               const values = option.type === 'boolean'
                 ? [
                     { id: 'true', label: 'Enabled' },
@@ -214,23 +275,25 @@ export function ChatInputControls({
                 id: option.id,
                 label: option.name,
                 description: option.description,
+                className: narrowOnlyOptions.includes(option) ? 'hidden chat-max-400:block' : undefined,
                 subOptions: values,
               };
             }),
           ]}
           placeholder="Options"
+          triggerTooltip="Options"
           disabled={false}
           customTrigger={
-            <Tooltip variant="minimal" content="Options">
-              <div className="flex items-center">
-                <SlidersHorizontal size={16} aria-hidden="true" />
-                <span className="sr-only">Options</span>
-              </div>
-            </Tooltip>
+            <div className="flex items-center">
+              <Ellipsis size={16} aria-hidden="true" />
+              <span className="sr-only">Options</span>
+            </div>
           }
           onChange={() => {}}
           onSubChange={(parentId, subId) => {
-            if (parentId === 'send-mode') {
+            if (parentId === 'schedule-send') {
+              onScheduleModeChange?.(subId === 'on');
+            } else if (parentId === 'send-mode') {
               setSendMode(subId as 'enter' | 'ctrl-enter');
               localStorage.setItem('chat-send-mode', subId);
             } else if (parentId === 'approvals') {
@@ -239,18 +302,18 @@ export function ChatInputControls({
               onConfigOptionChange(parentId, subId);
             }
           }}
-          className="ml-0.5 mr-1 shrink-0"
+          className="shrink-0"
         />
 
-        {showAuxIndicators && selectedAgentId && (
-          <AdapterUsageLifecycleProvider
-            value={{ mode: 'chat', enabled: true, isSending, sessionKey: status === 'ready' ? usageSessionKey : undefined }}
-          >
+        <div className="w-[4px]"></div>
+
+        {selectedAgentId && (
+          <AdapterUsageLifecycleProvider value={{ mode: 'chat', enabled: true, isSending, sessionKey: status === 'ready' ? usageSessionKey : undefined }}>
             <ChatUsageIndicator agentId={selectedAgentId} modelId={selectedModelId} />
           </AdapterUsageLifecycleProvider>
         )}
 
-        {showAuxIndicators && <ContextUsageIndicator used={contextTokensUsed} size={contextWindowSize} />}
+        <ContextUsageIndicator used={contextTokensUsed} size={contextWindowSize} />
       </div>
 
       <div className="ml-auto flex shrink-0 items-stretch">
@@ -259,48 +322,48 @@ export function ChatInputControls({
         {isSending ? (
           <>
           {promptQueueEnabled && hasInput && (
-            <button key="queue-button" type="button" onClick={onQueueDraft}
-              className={`flex items-center h-full px-1.5 rounded appearance-none border-0 bg-background-secondary outline-none
-                text-ide-small focus-visible:bg-hover focus-visible:text-foreground
-                focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]
-                hover:bg-hover hover:text-foreground text-foreground-secondary`}
-            >
-              <Tooltip variant="minimal" content="Add to queue">
+            <Tooltip variant="minimal" content="Add to queue" className="h-full">
+              <button key="queue-button" type="button" onClick={onSend} aria-label="Add to queue"
+                className={`flex items-center h-full px-1.5 rounded appearance-none border-0 bg-background-secondary outline-none
+                  text-ide-small focus-visible:bg-hover focus-visible:text-foreground
+                  focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]
+                  hover:bg-hover hover:text-foreground text-foreground-secondary`}
+              >
                 <div className="flex items-center">
                   <ListPlus size={16} className="block" strokeWidth={2} />
                   <span className="invisible w-0" aria-hidden="true">&nbsp;</span>
                 </div>
-              </Tooltip>
-            </button>
+              </button>
+            </Tooltip>
           )}
-          <button key="stop-button" type="button" onClick={onStop}
-            className="flex items-center h-full px-1.5 rounded appearance-none border-0 bg-background-secondary
-                outline-none text-ide-small text-error hover:bg-hover focus-visible:bg-hover
-                focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]"
-          >
-            <Tooltip variant="minimal" content="Cancel">
+          <Tooltip variant="minimal" content="Cancel" className="h-full">
+            <button key="stop-button" type="button" onClick={onStop} aria-label="Cancel"
+              className="flex items-center h-full px-1.5 rounded appearance-none border-0 bg-background-secondary
+                  outline-none text-ide-small text-error hover:bg-hover focus-visible:bg-hover
+                  focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]"
+            >
               <div className="flex items-center">
                 <Square size={16} aria-hidden="true" />
                 <span className="invisible w-0" aria-hidden="true">&nbsp;</span>
               </div>
-            </Tooltip>
-          </button>
+            </button>
+          </Tooltip>
           </>
         ) : (
-          <button key="send-button" type="button" onClick={onSend} disabled={!hasInput}
-            className={`flex items-center h-full px-1.5 rounded appearance-none border-0 bg-background-secondary outline-none
-              text-ide-small focus-visible:bg-hover focus-visible:text-foreground
-              focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]
-              hover:bg-hover disabled:pointer-events-none hover:text-foreground
-              ${hasInput ? 'text-foreground-secondary' : 'text-[var(--ide-Label-disabledForeground)]'}`}
-          >
-            <Tooltip variant="minimal" content={hasInput ? 'Send' : null}>
+          <Tooltip variant="minimal" content={hasInput ? 'Send' : null} className="h-full">
+            <button key="send-button" type="button" onClick={onSend} disabled={!hasInput} aria-label="Send"
+              className={`flex items-center h-full px-1.5 rounded appearance-none border-0 bg-background-secondary outline-none
+                text-ide-small focus-visible:bg-hover focus-visible:text-foreground
+                focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]
+                hover:bg-hover disabled:pointer-events-none hover:text-foreground
+                ${hasInput ? 'text-foreground-secondary' : 'text-[var(--ide-Label-disabledForeground)]'}`}
+            >
               <div className="flex items-center">
-                <SendHorizontal size={16} className="block" strokeWidth={2} />
+                <SendHorizontal width={16} height={18} className="block" strokeWidth={2} />
                 <span className="invisible w-0" aria-hidden="true">&nbsp;</span>
               </div>
-            </Tooltip>
-          </button>
+            </button>
+          </Tooltip>
         )}
       </div>
     </div>

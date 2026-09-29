@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { LexicalEditor } from 'lexical';
+import type { ChatAttachment } from '../types/chat';
 import {
   applySlashCommandToEditor,
   SlashCommandItem,
@@ -8,7 +9,7 @@ import {
   extractSlashQuery,
   findHighlightedSlashCommandIndex,
   hasMatchingSlashCommand,
-  SlashMenuLayout
+  SlashMenuLayout,
 } from '../components/chat/input/slashCommands';
 
 interface UseSlashCommandsOptions {
@@ -19,6 +20,7 @@ interface UseSlashCommandsOptions {
   menuRef: React.RefObject<HTMLDivElement>;
   lexicalEditorRef: React.RefObject<LexicalEditor | null>;
   onInputChange: (value: string) => void;
+  onAttachmentsChange: (attachments: ChatAttachment[]) => void;
 }
 
 export function useSlashCommands({
@@ -28,7 +30,8 @@ export function useSlashCommands({
   inputRootRef,
   menuRef,
   lexicalEditorRef,
-  onInputChange
+  onInputChange,
+  onAttachmentsChange,
 }: UseSlashCommandsOptions) {
   const [layout, setLayout] = useState<SlashMenuLayout | null>(null);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
@@ -37,25 +40,26 @@ export function useSlashCommands({
 
   const slashQuery = useMemo(() => extractSlashQuery(inputValue), [inputValue]);
   const commands = useMemo(() => (slashQuery === null ? [] : availableCommands), [availableCommands, slashQuery]);
-  const isOpen =
-    slashQuery !== null &&
-    dismissedSlashValue !== inputValue &&
-    commands.length > 0 &&
-    hasMatchingSlashCommand(availableCommands, slashQuery);
+  const isOpen = slashQuery !== null
+    && dismissedSlashValue !== inputValue
+    && commands.length > 0
+    && hasMatchingSlashCommand(availableCommands, slashQuery);
 
   const close = useCallback(() => {
     setDismissedSlashValue(inputValue);
     setLayout(null);
   }, [inputValue]);
 
-  const applyCommand = useCallback(
-    (command: SlashCommandItem) => {
-      const nextValue = applySlashCommandToEditor(lexicalEditorRef.current, command, onInputChange);
-      setDismissedSlashValue(nextValue);
-      setLayout(null);
-    },
-    [lexicalEditorRef, onInputChange]
-  );
+  const applyCommand = useCallback((command: SlashCommandItem) => {
+    const nextValue = applySlashCommandToEditor(
+      lexicalEditorRef.current,
+      command,
+      onInputChange,
+      onAttachmentsChange
+    );
+    setDismissedSlashValue(nextValue);
+    setLayout(null);
+  }, [lexicalEditorRef, onInputChange, onAttachmentsChange]);
 
   const updateLayout = useCallback(() => {
     if (!isOpen) {
@@ -131,37 +135,34 @@ export function useSlashCommands({
     };
   }, [close, commands.length, inputRootRef, isOpen, menuRef, updateLayout]);
 
-  const handleKeyDownCapture = useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
-      if (!isOpen || commands.length === 0) return;
+  const handleKeyDownCapture = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!isOpen || commands.length === 0) return;
 
-      if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        setHighlightedIndex((prev) => (prev + 1) % commands.length);
-        return;
-      }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setHighlightedIndex((prev) => (prev + 1) % commands.length);
+      return;
+    }
 
-      if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        setHighlightedIndex((prev) => (prev - 1 + commands.length) % commands.length);
-        return;
-      }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setHighlightedIndex((prev) => (prev - 1 + commands.length) % commands.length);
+      return;
+    }
 
-      if (event.key === 'Enter' || event.key === 'Tab') {
-        event.preventDefault();
-        event.stopPropagation();
-        applyCommand(commands[highlightedIndex] ?? commands[0]);
-        return;
-      }
+    if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault();
+      event.stopPropagation();
+      applyCommand(commands[highlightedIndex] ?? commands[0]);
+      return;
+    }
 
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        event.stopPropagation();
-        close();
-      }
-    },
-    [applyCommand, close, commands, highlightedIndex, isOpen]
-  );
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+    }
+  }, [applyCommand, close, commands, highlightedIndex, isOpen]);
 
   return {
     commands,
@@ -170,6 +171,6 @@ export function useSlashCommands({
     highlightedIndex,
     setHighlightedIndex,
     applyCommand,
-    handleKeyDownCapture
+    handleKeyDownCapture,
   };
 }

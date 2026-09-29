@@ -27,21 +27,11 @@ function buildLabel(entries: ToolCallEntry[], isStreaming: boolean): string {
 
   for (const e of uniqueEntries.values()) {
     switch (e.kind) {
-      case 'thinking':
-        thoughts++;
-        break;
-      case 'read':
-        files++;
-        break;
-      case 'search':
-        searches++;
-        break;
-      case 'fetch':
-        fetches++;
-        break;
-      case 'execute':
-        commands++;
-        break;
+      case 'thinking': thoughts++; break;
+      case 'read': files++; break;
+      case 'search': searches++; break;
+      case 'fetch': fetches++; break;
+      case 'execute': commands++; break;
     }
   }
 
@@ -80,12 +70,10 @@ export const ExploringBlock: React.FC<Props> = ({ block, isActivePrompt = false 
 
   const handleOpenFile = (path: string, line?: number) => {
     if (window.__openFile) {
-      window.__openFile(
-        JSON.stringify({
-          filePath: path,
-          line: line !== undefined ? Math.max(0, line - 1) : undefined
-        })
-      );
+      window.__openFile(JSON.stringify({
+        filePath: path,
+        line: line !== undefined ? Math.max(0, line - 1) : undefined
+      }));
     }
   };
 
@@ -102,12 +90,10 @@ export const ExploringBlock: React.FC<Props> = ({ block, isActivePrompt = false 
   const label = buildLabel(entries, block.isStreaming);
 
   const renderEntries = () => (
-    <div className='flex flex-col gap-1 px-[1px] py-1 w-full min-w-0'>
+    <div className="flex flex-col gap-1 px-[1px] py-1 w-full min-w-0">
       {block.entries.map((entry, i) => {
         if (entry.kind === 'thinking') {
-          return (
-            <ThinkingActivity key={entry.toolCallId || i} entry={entry} isExploring={label.startsWith('Explor')} />
-          );
+          return <ThinkingActivity key={entry.toolCallId || i} entry={entry} isExploring={label.startsWith('Explor')} />;
         }
         if (entry.kind === 'read') {
           return <ReadActivity key={entry.toolCallId || i} entry={entry} onOpenFile={handleOpenFile} isActivePrompt={isActivePrompt} />;
@@ -127,27 +113,31 @@ export const ExploringBlock: React.FC<Props> = ({ block, isActivePrompt = false 
   );
 
   if (isSingleNonThinking) {
-    return <div className='w-full min-w-0 max-w-full'>{renderEntries()}</div>;
+    return (
+      <div className="w-full min-w-0 max-w-full">
+        {renderEntries()}
+      </div>
+    );
   }
 
   return (
-    <div className='w-full min-w-0 max-w-full text-foreground-secondary'>
-      <button
-        onClick={() => setIsExpanded((v) => !v)}
+    <div className="w-full min-w-0 max-w-full text-foreground-secondary">
+      <button onClick={() => setIsExpanded(v => !v)}
         className={`flex items-center gap-1.5 max-w-full mb-2 ${chatFocusClassName}`}
       >
-        <span className='truncate'>{label}</span>
+        <span className="truncate">{label}</span>
         <span className={`transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}>
           <ChevronRight size={14} />
         </span>
       </button>
 
-      <div
-        className={`grid px-[1px] duration-300 ease-in-out w-full min-w-0 
+      <div {...(!isExpanded ? { inert: '' } : {})} className={`grid px-[1px] duration-300 ease-in-out w-full min-w-0 
         ${isExpanded ? 'opacity-100 translate-y-0 overflow-visible' : 'opacity-0 -translate-y-2 overflow-hidden'}`}
         style={{ gridTemplateRows: isExpanded ? '1fr' : '0fr' }}
       >
-        <div className='font-normal w-full min-w-0 min-h-0'>{renderEntries()}</div>
+        <div className="font-normal w-full min-w-0 min-h-0">
+          {renderEntries()}
+        </div>
       </div>
     </div>
   );

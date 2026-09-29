@@ -203,6 +203,7 @@ export interface DropdownOption {
   id: string;
   label: string;
   description?: string;
+  className?: string;
   icon?: string | React.ReactNode;
   iconPath?: string;
   subOptions?: DropdownOption[];
@@ -214,6 +215,7 @@ export interface TabUiFlags {
   canMarkRead: boolean;
   warning: boolean;
   processing: boolean;
+  queued: boolean;
 }
 
 export type SectionType = 'management' | 'design' | 'history' | 'mcp' | 'custom-acp' | 'system-instructions' | 'prompt-library' | 'settings';
@@ -404,6 +406,7 @@ export interface UndoFileResultPayload {
   filePath: string;
   success: boolean;
   message: string;
+  reason?: 'conflict';
 }
 
 export interface UndoResultPayload {
@@ -519,8 +522,10 @@ export interface GlobalSettings {
   userMessageCustomColor: string;
   audioTranscription: AudioTranscriptionSettings;
   gitCommitGeneration: GitCommitGenerationSettings;
+  systemInstructionsEnabled: boolean;
   quotaWidgetEnabled: boolean;
   openInEditor: boolean;
+  promptNavigationHoverOnly: boolean;
   sidebarEnabled: boolean;
   sidebarPosition: 'left' | 'right';
   sidebarExpandedSections: SidebarSectionId[];
@@ -611,6 +616,7 @@ declare global {
     __onMcpServers?: (servers: unknown) => void;
     __onMcpStatus?: (update: unknown) => void;
     __onCustomAcpConfigs?: (configs: unknown) => void;
+    __onCustomAcpStatus?: (update: import('./customAcp').CustomAcpStatusUpdate) => void;
     __onFilesResult?: (filesJson: unknown) => void;
     __searchFiles?: (query: string) => void;
     __requestFileIcon?: (path: string) => void;
@@ -623,6 +629,7 @@ declare global {
     __checkMcpStatus?: () => void;
     __loadCustomAcpConfigs?: () => void;
     __saveCustomAcpConfigs?: (json: string) => void;
+    __testCustomAcpConnection?: (json: string) => void;
     __onPromptLibrary?: (items: unknown) => void;
     __loadPromptLibrary?: () => void;
     __savePromptLibrary?: (json: string) => void;

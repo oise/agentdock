@@ -21,6 +21,7 @@ type MenuAction = {
 
 export interface NavigationActionsProps {
   activeSection: SectionType | null;
+  systemInstructionsEnabled: boolean;
   onCloseActiveSection: () => void;
   onOpenHistory: () => void;
   onOpenManagement: () => void;
@@ -35,6 +36,7 @@ export interface NavigationActionsProps {
 
 export function NavigationActions({
   activeSection,
+  systemInstructionsEnabled,
   onCloseActiveSection,
   onAction,
   onOpenHistory,
@@ -53,7 +55,7 @@ export function NavigationActions({
     { type: 'management', label: 'Service Providers', icon: <ManagementTabIcon />, onClick: onOpenManagement },
     { type: 'settings', label: 'Settings', icon: <SettingsTabIcon />, onClick: onOpenSettings },
     { type: 'prompt-library', label: 'Prompt Library', icon: <PromptLibraryTabIcon />, onClick: onOpenPromptLibrary },
-    { type: 'system-instructions', label: 'System Instructions', icon: <SystemInstructionsTabIcon />, onClick: onOpenSystemInstructions },
+    ...(systemInstructionsEnabled ? [{ type: 'system-instructions' as const, label: 'System Instructions', icon: <SystemInstructionsTabIcon />, onClick: onOpenSystemInstructions }] : []),
     { type: 'mcp', label: 'MCP Servers', icon: <McpTabIcon />, onClick: onOpenMcp },
     { type: 'custom-acp', label: 'Custom ACP', icon: <CustomAcpTabIcon />, onClick: onOpenCustomAcp },
     ...(isDev ? [{ type: 'design' as const, label: 'Design System', icon: <DesignTabIcon />, onClick: onOpenDesignSystem }] : []),
@@ -76,7 +78,7 @@ export function NavigationActions({
                 onAction?.();
               }}
               className="relative z-10 flex min-w-0 flex-1 items-center rounded-[4px] px-3 text-left focus:outline-none
-                focus-visible:shadow-[inset_0_0_0_1px_var(--ide-Button-default-focusColor)]"
+                focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--ide-Button-default-focusColor)] focus-visible:outline-offset-[-1px]"
               role={onAction ? 'menuitem' : undefined}
               aria-current={isActive ? 'page' : undefined}
             >
@@ -97,7 +99,8 @@ export function NavigationActions({
                       onAction?.();
                     }}
                     className="flex min-h-8 w-5 shrink-0 items-center justify-center rounded-r-[4px]
-                      text-foreground-secondary hover:text-foreground focus:outline-none"
+                      text-foreground-secondary hover:text-foreground focus:outline-none
+                      focus-visible:rounded-[4px] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--ide-Button-default-focusColor)] focus-visible:outline-offset-[-1px]"
                     role={onAction ? 'menuitem' : undefined}
                     aria-label={`Close ${action.label}`}
                   >

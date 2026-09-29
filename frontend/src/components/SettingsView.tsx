@@ -78,8 +78,10 @@ function normalizeGlobalSettings(payload: Partial<GlobalSettingsPayload> | undef
         providers: payload?.settings?.audioTranscription?.providers ?? {}
       },
       gitCommitGeneration: normalizeGitCommitGenerationSettings(payload?.settings?.gitCommitGeneration),
+      systemInstructionsEnabled: payload?.settings?.systemInstructionsEnabled ?? false,
       quotaWidgetEnabled: payload?.settings?.quotaWidgetEnabled ?? false,
       openInEditor: payload?.settings?.openInEditor ?? true,
+      promptNavigationHoverOnly: payload?.settings?.promptNavigationHoverOnly ?? true,
       sidebarEnabled: payload?.settings?.sidebarEnabled ?? true,
       sidebarPosition: payload?.settings?.sidebarPosition === 'right' ? 'right' : 'left',
       sidebarExpandedSections: Array.isArray(payload?.settings?.sidebarExpandedSections)
@@ -287,7 +289,8 @@ export function SettingsView() {
               ariaLabel='Use sidebar layout'
             />
 
-            <SettingsField label='Sidebar Position' colon>
+            <div className='grid grid-cols-[max-content_max-content] items-center gap-x-2 gap-y-3'>
+              <span className='text-foreground'>Sidebar Position:</span>
               <DropdownSelect
                 value={globalSettings.settings.sidebarPosition}
                 onChange={(value) => updateGlobalSettings({
@@ -297,9 +300,16 @@ export function SettingsView() {
                 disabled={!globalSettings.settings.sidebarEnabled}
                 className='max-w-full'
               />
-            </SettingsField>
 
-            <SettingsField label='Zoom' colon>
+              <span className='text-foreground'>Base Font Size:</span>
+              <DropdownSelect
+                value={String(globalSettings.settings.uiFontSizeOffsetPx)}
+                onChange={(value) => updateGlobalSettings({ uiFontSizeOffsetPx: Number(value) })}
+                options={uiFontSizeSelectOptions}
+                className='max-w-full'
+              />
+
+              <span className='text-foreground'>Zoom:</span>
               <DropdownSelect
                 value={String(globalSettings.settings.uiZoomPercent)}
                 onChange={(value) => {
@@ -311,16 +321,14 @@ export function SettingsView() {
                 options={zoomSelectOptions(globalSettings.settings.uiZoomPercent)}
                 className='max-w-full'
               />
-            </SettingsField>
+            </div>
 
-            <SettingsField label='Base Font Size' colon>
-              <DropdownSelect
-                value={String(globalSettings.settings.uiFontSizeOffsetPx)}
-                onChange={(value) => updateGlobalSettings({ uiFontSizeOffsetPx: Number(value) })}
-                options={uiFontSizeSelectOptions}
-                className='max-w-full'
-              />
-            </SettingsField>
+            <SettingsCheckbox
+              title='Hide prompt navigation on the left side of the chat until hover'
+              checked={globalSettings.settings.promptNavigationHoverOnly}
+              onToggle={() => updateGlobalSettings({ promptNavigationHoverOnly: !globalSettings.settings.promptNavigationHoverOnly })}
+              ariaLabel='Hide prompt navigation on the left side of the chat until hover'
+            />
 
             <SettingsField
               label='User Message Background'
@@ -372,7 +380,7 @@ export function SettingsView() {
           <SettingsSection title='General'>
             <SettingsCheckbox
               title='Audio Notifications'
-              description='Play sounds for new assistant messages and permission requests'
+              description='Play sounds for new assistant messages and quota limit warnings'
               checked={globalSettings.settings.audioNotificationsEnabled}
               onToggle={() =>
                 updateGlobalSettings({ audioNotificationsEnabled: !globalSettings.settings.audioNotificationsEnabled })
@@ -386,6 +394,14 @@ export function SettingsView() {
               checked={globalSettings.settings.quotaWidgetEnabled}
               onToggle={() => updateGlobalSettings({ quotaWidgetEnabled: !globalSettings.settings.quotaWidgetEnabled })}
               ariaLabel='Enable status bar quota widget'
+            />
+
+            <SettingsCheckbox
+              title='System Instructions'
+              description='Manage custom instructions that are sent to AI agents in every session'
+              checked={globalSettings.settings.systemInstructionsEnabled}
+              onToggle={() => updateGlobalSettings({ systemInstructionsEnabled: !globalSettings.settings.systemInstructionsEnabled })}
+              ariaLabel='Enable system instructions'
             />
 
             <GitCommitGenerationSettings

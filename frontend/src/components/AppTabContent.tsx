@@ -5,6 +5,7 @@ interface AppTabContentProps {
   tab: ChatTab;
   isActive: boolean;
   runnableAgents: AgentOption[];
+  promptNavigationHoverOnly: boolean;
   pendingHandoff?: PendingHandoffContext;
   onUserMessageSent: () => void;
   onAssistantActivity: () => void;
@@ -12,6 +13,7 @@ interface AppTabContentProps {
   onCanMarkReadChange: (canMarkRead: boolean) => void;
   onPermissionRequestChange: (hasPendingPermission: boolean) => void;
   onProcessingChange: (isProcessing: boolean) => void;
+  onQueuedChange: (hasQueuedPrompts: boolean) => void;
   onAgentChangeRequest: Parameters<typeof ChatSessionView>[0]['onAgentChangeRequest'];
   onForkRequest: Parameters<typeof ChatSessionView>[0]['onForkRequest'];
   onHandoffConsumed: (handoffId: string) => void;
@@ -22,6 +24,7 @@ export function AppTabContent({
   tab,
   isActive,
   runnableAgents,
+  promptNavigationHoverOnly,
   pendingHandoff,
   onUserMessageSent,
   onAssistantActivity,
@@ -29,6 +32,7 @@ export function AppTabContent({
   onCanMarkReadChange,
   onPermissionRequestChange,
   onProcessingChange,
+  onQueuedChange,
   onAgentChangeRequest,
   onForkRequest,
   onHandoffConsumed,
@@ -47,6 +51,7 @@ export function AppTabContent({
         inheritedAdapterNames={tab.inheritedAdapterNames}
         forkBase={tab.forkBase}
         availableAgents={runnableAgents}
+        promptNavigationHoverOnly={promptNavigationHoverOnly}
         isActive={isActive}
         onUserMessageSent={onUserMessageSent}
         onAssistantActivity={onAssistantActivity}
@@ -54,6 +59,7 @@ export function AppTabContent({
         onCanMarkReadChange={onCanMarkReadChange}
         onPermissionRequestChange={onPermissionRequestChange}
         onProcessingChange={onProcessingChange}
+        onQueuedChange={onQueuedChange}
         onAgentChangeRequest={onAgentChangeRequest}
         onForkRequest={onForkRequest}
         onHandoffConsumed={onHandoffConsumed}

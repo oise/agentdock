@@ -95,6 +95,7 @@ export function useAppController() {
     handleCanMarkReadChange,
     handlePermissionRequestChange,
     handleProcessingChange,
+    handleQueuedChange,
   } = useAppTabUiState(activeTabId, activeTabIdRef);
 
   const cleanupTabUi = useCallback((id: string) => {
@@ -128,6 +129,9 @@ export function useAppController() {
     const conversationId = conversationKeyOf(tab);
     const projectPath = historyConversationIndex.get(conversationId);
     if (projectPath) {
+      setTabs((prev) => prev.map((item) => (
+        item.id === tabId ? { ...item, title } : item
+      )));
       ACPBridge.renameHistoryConversation(projectPath, conversationId, title);
       return;
     }
@@ -580,6 +584,7 @@ export function useAppController() {
     handleCanMarkReadChange,
     handlePermissionRequestChange,
     handleProcessingChange,
+    handleQueuedChange,
     requestAgentSwitch,
     handleHandoffConsumed,
     handleForkRequest,

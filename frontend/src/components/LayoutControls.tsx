@@ -16,7 +16,7 @@ import { Tooltip } from './chat/shared/Tooltip';
 
 const buttonClassName = `flex h-7 w-7 items-center justify-center rounded-[4px] text-foreground-secondary
   hover:bg-hover hover:text-foreground focus:outline-none
-  focus-visible:shadow-[inset_0_0_0_1px_var(--ide-Button-default-focusColor)]`;
+  focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--ide-Button-default-focusColor)] focus-visible:outline-offset-[-1px]`;
 
 interface SidebarLayoutControlsProps {
   position: GlobalSettings['sidebarPosition'];
@@ -47,7 +47,7 @@ export function SidebarLayoutControls({
 
   return (
     <div className={`flex items-center gap-0.5 ${position === 'right' ? 'flex-row-reverse' : ''} ${floating
-      ? `fixed top-2 z-40 rounded-[5px] border border-border bg-background p-0.5 ${position === 'left' ? 'left-1.5' : 'right-1.5'}`
+      ? `fixed top-px z-40 rounded-[5px] border border-border bg-background p-0.5 ${position === 'left' ? 'left-1.5' : 'right-1.5'}`
       : ''}`}
     >
       <Tooltip variant="minimal" placement="bottom" content={hidden ? 'Show sidebar' : 'Hide sidebar'}>

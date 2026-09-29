@@ -83,6 +83,10 @@ class AcpClientService private constructor(val project: Project) {
                 created
             }
 
+        internal fun stopCustomAdapterInAllProjects(adapterId: String) {
+            instances.values.forEach { it.stopSharedProcess(adapterId) }
+        }
+
         /**
          * Project disposal runs on the EDT, and stopping agent processes must never hold the IDE
          * window open. The work is handed to a plain thread that JVM shutdown waits for, so the
@@ -209,6 +213,7 @@ class AcpClientService private constructor(val project: Project) {
         @Volatile var logoutAvailable: Boolean = false
         @Volatile var sessionListAvailable: Boolean = false
         @Volatile var sessionDeleteAvailable: Boolean = false
+        @Volatile var sessionCloseAvailable: Boolean = false
         @Volatile var protocolScope: CoroutineScope? = null
         @Volatile var isInitialized: Boolean = false
         @Volatile var sessionUpdateWrapped: Boolean = false
@@ -245,6 +250,7 @@ class AcpClientService private constructor(val project: Project) {
             logoutAvailable = false
             sessionListAvailable = false
             sessionDeleteAvailable = false
+            sessionCloseAvailable = false
             protocolScope?.coroutineContext?.cancel()
             protocolScope = null
             isInitialized = false

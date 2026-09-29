@@ -30,6 +30,12 @@ function App() {
   const [openInEditor, setOpenInEditor] = useState(
     () => ACPBridge.getGlobalSettingsSnapshot()?.settings?.openInEditor ?? true
   );
+  const [systemInstructionsEnabled, setSystemInstructionsEnabled] = useState(
+    () => ACPBridge.getGlobalSettingsSnapshot()?.settings?.systemInstructionsEnabled ?? false
+  );
+  const [promptNavigationHoverOnly, setPromptNavigationHoverOnly] = useState(
+    () => ACPBridge.getGlobalSettingsSnapshot()?.settings?.promptNavigationHoverOnly ?? true
+  );
   const [sidebarEnabled, setSidebarEnabled] = useState(
     () => ACPBridge.getGlobalSettingsSnapshot()?.settings?.sidebarEnabled ?? true
   );
@@ -70,6 +76,8 @@ function App() {
 
     const applyGlobalSettings = (payload: { settings?: Partial<GlobalSettings> } | undefined) => {
       setOpenInEditor(payload?.settings?.openInEditor ?? true);
+      setSystemInstructionsEnabled(payload?.settings?.systemInstructionsEnabled ?? false);
+      setPromptNavigationHoverOnly(payload?.settings?.promptNavigationHoverOnly ?? true);
       const nextSidebarEnabled = payload?.settings?.sidebarEnabled ?? true;
       setSidebarEnabled(nextSidebarEnabled);
       if (!nextSidebarEnabled) setSidebarHidden(false);
@@ -136,6 +144,7 @@ function App() {
     handleCanMarkReadChange,
     handlePermissionRequestChange,
     handleProcessingChange,
+    handleQueuedChange,
     requestAgentSwitch,
     handleHandoffConsumed,
     handleForkRequest,
@@ -145,11 +154,16 @@ function App() {
     handleCancelAgentSwitch,
   } = useAppController();
 
+  useEffect(() => {
+    if (!systemInstructionsEnabled && activeSection === 'system-instructions') closeActiveSection();
+  }, [systemInstructionsEnabled, activeSection, closeActiveSection]);
+
   const navigationProps: TabBarProps = {
     isIslandsTheme,
     tabs,
     activeTabId,
     activeSection,
+    systemInstructionsEnabled,
     tabUi,
     onSelectTab: handleSelectTab,
     onReorderTabs: handleReorderTabs,
@@ -212,7 +226,7 @@ function App() {
   return (
     <div
       style={{ '--content-top-inset': sidebarEnabled && isWide ? '1rem' : '0px' } as CSSProperties}
-      className={`h-full bg-background text-foreground overflow-hidden flex ${sidebarEnabled ? 'flex-row' : 'flex-col'}`}
+      className={`relative h-full min-w-[300px] bg-background text-foreground overflow-hidden flex ${sidebarEnabled ? 'flex-row' : 'flex-col'}`}
     >
       {sidebarEnabled ? (
         <Sidebar
@@ -236,6 +250,14 @@ function App() {
         />
       ) : <TabBar {...navigationProps} />}
 
+      {sidebarEnabled && !sidebarHidden && !isWide ? (
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 z-30"
+          onClick={() => setSidebarVisibility(true)}
+        />
+      ) : null}
+
       {sidebarEnabled && sidebarHidden ? (
         <SidebarLayoutControls
           position={sidebarPosition}
@@ -249,7 +271,7 @@ function App() {
         />
       ) : null}
 
-      <div className="flex-1 relative min-h-0 min-w-0">
+      <div id="app-content" className="flex-1 relative min-h-0 min-w-0">
         {/* Chat tabs stay mounted so their sessions and UI state are preserved. */}
         {tabs.map((tab) => {
           const isTabActive = tab.id === activeTabId;
@@ -260,6 +282,7 @@ function App() {
               tab={tab}
               isActive={isTabActive}
               runnableAgents={runnableAgents}
+              promptNavigationHoverOnly={promptNavigationHoverOnly}
               pendingHandoff={pendingHandoffsByTab[tab.id]}
               onUserMessageSent={() => handleUserMessageSent(tab.id)}
               onAssistantActivity={() => handleAssistantActivity(tab.id)}
@@ -267,6 +290,7 @@ function App() {
               onCanMarkReadChange={(canMarkRead) => handleCanMarkReadChange(tab.id, canMarkRead)}
               onPermissionRequestChange={(hasPendingPermission) => handlePermissionRequestChange(tab.id, hasPendingPermission)}
               onProcessingChange={(isProcessing) => handleProcessingChange(tab.id, isProcessing)}
+              onQueuedChange={(hasQueuedPrompts) => handleQueuedChange(tab.id, hasQueuedPrompts)}
               onAgentChangeRequest={(payload) => requestAgentSwitch(tab.id, payload)}
               onForkRequest={(payload) => handleForkRequest(tab.id, payload)}
               onHandoffConsumed={(handoffId) => handleHandoffConsumed(tab.id, handoffId)}

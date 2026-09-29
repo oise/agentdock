@@ -3,7 +3,6 @@ import type { RefObject } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import {
   $createLineBreakNode,
-  $createParagraphNode,
   $createTextNode,
   $getRoot,
   $getSelection,
@@ -17,18 +16,18 @@ import {
   FORMAT_TEXT_COMMAND,
   KEY_ENTER_COMMAND,
   PASTE_COMMAND,
-  LexicalEditor
+  LexicalEditor,
+  LexicalNode
 } from 'lexical';
 import { $createImageNode, ImageNode } from './ImageNode';
 import { CodeReferenceNode, $createCodeReferenceNode, $isCodeReferenceNode } from './CodeReferenceNode';
-import { ChatAttachment } from '../../../types/chat';
+import { ChatAttachment, RichContentBlock } from '../../../types/chat';
+import { pastedPrompt, PROMPT_MIME } from '../../../utils/promptClipboard';
+import { restoreComposerContent } from './composerContent';
 
-export function AttachmentsSyncPlugin({
-  attachments,
-  onAttachmentsChange
-}: {
-  attachments: ChatAttachment[];
-  onAttachmentsChange: (items: ChatAttachment[]) => void;
+export function AttachmentsSyncPlugin({ attachments, onAttachmentsChange }: {
+  attachments: ChatAttachment[],
+  onAttachmentsChange: (items: ChatAttachment[]) => void
 }) {
   const [editor] = useLexicalComposerContext();
 
@@ -37,7 +36,7 @@ export function AttachmentsSyncPlugin({
       editor.read(() => {
         const existingIds = new Set([
           ...$nodesOfType(ImageNode).map((node) => node.__id),
-          ...$nodesOfType(CodeReferenceNode).map((node) => node.__id)
+          ...$nodesOfType(CodeReferenceNode).map((node) => node.__id),
         ]);
         const filtered = attachments.filter((attachment) => !attachment.isInline || existingIds.has(attachment.id));
         if (filtered.length !== attachments.length) {
@@ -73,25 +72,81 @@ export function AttachmentsSyncPlugin({
   return null;
 }
 
-export function PasteLogPlugin({ onImagePaste }: { onImagePaste: (file: File, editor: LexicalEditor) => void }) {
+function insertPrompt(editor: LexicalEditor, blocks: RichContentBlock[], attachments: ChatAttachment[], onAttachmentsChange: (items: ChatAttachment[]) => void) {
+  const nodes: Array<() => LexicalNode> = [];
+  const added: ChatAttachment[] = [];
+
+  for (const block of blocks) {
+    if (block.type === 'text') {
+      block.text.split('\n').forEach((part, index) => {
+        if (index > 0) nodes.push(() => $createLineBreakNode());
+        if (part) nodes.push(() => $createTextNode(part));
+      });
+    } else if (block.type === 'code_ref') {
+      const id = crypto.randomUUID();
+      added.push({ id, name: block.name, path: block.path, mimeType: 'application/x-code-reference', attachmentType: 'code_ref', isInline: true, startLine: block.startLine, endLine: block.endLine });
+      nodes.push(() => $createCodeReferenceNode(id, block.path, block.name, block.startLine, block.endLine));
+    } else if (block.type === 'image' || block.type === 'audio' || block.type === 'video' || block.type === 'file') {
+      const id = crypto.randomUUID();
+      const isInline = block.type === 'image' && block.isInline !== false;
+      added.push({
+        id,
+        name: block.type === 'file' ? block.name : block.type === 'video' ? block.name || 'video' : block.type === 'image' ? 'Image' : 'audio',
+        mimeType: block.mimeType,
+        data: block.data,
+        path: block.type === 'file' || block.type === 'video' ? block.path : undefined,
+        isInline,
+      });
+      if (isInline) nodes.push(() => $createImageNode(id));
+    }
+  }
+
+  if (added.length > 0) onAttachmentsChange([...attachments, ...added]);
+  if (nodes.length > 0) {
+    editor.update(() => {
+      let selection = $getSelection();
+      if (!$isRangeSelection(selection)) {
+        $getRoot().selectEnd();
+        selection = $getSelection();
+      }
+      if ($isRangeSelection(selection)) selection.insertNodes(nodes.map((create) => create()));
+    });
+  }
+}
+
+export function PasteLogPlugin({ attachments, onAttachmentsChange }: {
+  attachments: ChatAttachment[];
+  onAttachmentsChange: (items: ChatAttachment[]) => void;
+}) {
   const [editor] = useLexicalComposerContext();
+  const attachmentsRef = useRef(attachments);
+  attachmentsRef.current = attachments;
 
-  const handlePaste = useCallback(
-    (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
+  const handlePaste = useCallback((e: ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
 
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].type.indexOf('image') !== -1) {
-          const file = items[i].getAsFile();
-          if (file) {
-            onImagePaste(file, editor);
-          }
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        const file = items[i].getAsFile();
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = () => {
+            if (!editor.getRootElement() || typeof reader.result !== 'string') return;
+            const id = crypto.randomUUID();
+            const attachment = { id, name: file.name || 'pasted-image.png', data: reader.result.split(',')[1], mimeType: file.type, isInline: true };
+            attachmentsRef.current = [...attachmentsRef.current, attachment];
+            onAttachmentsChange(attachmentsRef.current);
+            editor.update(() => {
+              if (!$isRangeSelection($getSelection())) $getRoot().selectEnd();
+              $getSelection()?.insertNodes([$createImageNode(id)]);
+            });
+          };
+          reader.readAsDataURL(file);
         }
       }
-    },
-    [onImagePaste, editor]
-  );
+    }
+  }, [onAttachmentsChange, editor]);
 
   useEffect(() => {
     const rootElement = editor.getRootElement();
@@ -105,6 +160,15 @@ export function PasteLogPlugin({ onImagePaste }: { onImagePaste: (file: File, ed
     return editor.registerCommand(
       PASTE_COMMAND,
       (event: ClipboardEvent) => {
+        const plainText = event.clipboardData?.getData('text/plain');
+        const prompt = pastedPrompt(event.clipboardData?.getData(PROMPT_MIME) || '')
+          || pastedPrompt(plainText || '');
+        if (prompt) {
+          event.preventDefault();
+          insertPrompt(editor, prompt, attachments, onAttachmentsChange);
+          return true;
+        }
+
         const items = event.clipboardData?.items;
         if (items) {
           for (let i = 0; i < items.length; i++) {
@@ -114,7 +178,6 @@ export function PasteLogPlugin({ onImagePaste }: { onImagePaste: (file: File, ed
           }
         }
 
-        const plainText = event.clipboardData?.getData('text/plain');
         if (!plainText) return false;
 
         const normalizedText = plainText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -136,7 +199,7 @@ export function PasteLogPlugin({ onImagePaste }: { onImagePaste: (file: File, ed
       },
       COMMAND_PRIORITY_HIGH
     );
-  }, [editor]);
+  }, [editor, attachments, onAttachmentsChange]);
 
   return null;
 }
@@ -144,11 +207,11 @@ export function PasteLogPlugin({ onImagePaste }: { onImagePaste: (file: File, ed
 export function KeyboardPlugin({
   onSend,
   sendMode,
-  disabled = false
+  disabled = false,
 }: {
-  onSend: () => void;
-  sendMode: 'enter' | 'ctrl-enter';
-  disabled?: boolean;
+  onSend?: () => void,
+  sendMode: 'enter' | 'ctrl-enter',
+  disabled?: boolean,
 }) {
   const [editor] = useLexicalComposerContext();
 
@@ -157,7 +220,14 @@ export function KeyboardPlugin({
       KEY_ENTER_COMMAND,
       (event: KeyboardEvent) => {
         if (disabled) return false;
-        if (sendMode === 'enter') {
+        if (!onSend) {
+          if (event.isComposing) return false;
+          const selection = $getSelection();
+          if (!$isRangeSelection(selection)) return false;
+          event.preventDefault();
+          selection.insertNodes([$createLineBreakNode()]);
+          return true;
+        } else if (sendMode === 'enter') {
           if (!event.shiftKey && !event.ctrlKey && !event.metaKey) {
             event.preventDefault();
             onSend();
@@ -183,17 +253,21 @@ export function PlainTextFormattingGuardPlugin() {
   const [editor] = useLexicalComposerContext();
 
   useEffect(() => {
-    return editor.registerCommand(FORMAT_TEXT_COMMAND, () => true, COMMAND_PRIORITY_CRITICAL);
+    return editor.registerCommand(
+      FORMAT_TEXT_COMMAND,
+      () => true,
+      COMMAND_PRIORITY_CRITICAL
+    );
   }, [editor]);
 
   return null;
 }
 
-export function RegisterEditorPlugin({ onReady }: { onReady: (editor: LexicalEditor) => void }) {
+export function RegisterEditorPlugin({ onReady }: { onReady?: (editor: LexicalEditor) => void }) {
   const [editor] = useLexicalComposerContext();
 
   useEffect(() => {
-    onReady(editor);
+    onReady?.(editor);
   }, [editor, onReady]);
 
   return null;
@@ -214,7 +288,9 @@ export function InlineAttachmentBackspacePlugin() {
 
           const anchorNode = selection.anchor.getNode();
           let previousNode =
-            $isTextNode(anchorNode) && selection.anchor.offset === 0 ? anchorNode.getPreviousSibling() : null;
+            $isTextNode(anchorNode) && selection.anchor.offset === 0
+              ? anchorNode.getPreviousSibling()
+              : null;
 
           if (!previousNode && $isElementNode(anchorNode) && selection.anchor.offset > 0) {
             previousNode = anchorNode.getChildAtIndex(selection.anchor.offset - 1);
@@ -238,7 +314,7 @@ export function InlineAttachmentBackspacePlugin() {
 export function ExternalCodeReferencePlugin({
   isActive,
   attachments,
-  onAttachmentsChange
+  onAttachmentsChange,
 }: {
   isActive: boolean;
   attachments: ChatAttachment[];
@@ -255,8 +331,7 @@ export function ExternalCodeReferencePlugin({
     if (!isActive) return;
 
     const handleExternalReference = (event: Event) => {
-      const detail = (event as CustomEvent<{ path: string; fileName: string; startLine?: number; endLine?: number }>)
-        .detail;
+      const detail = (event as CustomEvent<{ path: string; fileName: string; startLine?: number; endLine?: number }>).detail;
       if (!detail?.path || !detail?.fileName) return;
 
       const id = crypto.randomUUID();
@@ -268,14 +343,20 @@ export function ExternalCodeReferencePlugin({
         isInline: true,
         attachmentType: 'code_ref',
         startLine: detail.startLine,
-        endLine: detail.endLine
+        endLine: detail.endLine,
       };
 
       onAttachmentsChangeRef.current([...attachmentsRef.current, attachment]);
 
       editor.update(() => {
         const selection = $getSelection();
-        const node = $createCodeReferenceNode(id, detail.path, detail.fileName, detail.startLine, detail.endLine);
+        const node = $createCodeReferenceNode(
+          id,
+          detail.path,
+          detail.fileName,
+          detail.startLine,
+          detail.endLine
+        );
         if ($isRangeSelection(selection)) {
           selection.insertNodes([node, $createTextNode(' ')]);
         } else {
@@ -302,7 +383,7 @@ function readScrollSnapshot(container: HTMLDivElement): ScrollSnapshot | null {
   if (container.scrollHeight <= container.clientHeight + 1) return null;
 
   return {
-    scrollTop: container.scrollTop
+    scrollTop: container.scrollTop,
   };
 }
 
@@ -320,7 +401,7 @@ function isDeleteInput(event: Event): boolean {
 
 export function AutoHeightPlugin({
   onHeightChange,
-  scrollContainerRef
+  scrollContainerRef,
 }: {
   onHeightChange: (height: number) => void;
   scrollContainerRef?: RefObject<HTMLDivElement>;
@@ -329,14 +410,11 @@ export function AutoHeightPlugin({
   const pendingRestoreRef = useRef<ScrollSnapshot | null>(null);
   const restoreFrameRef = useRef<number | null>(null);
 
-  const captureDeleteScroll = useCallback(
-    (event: Event) => {
-      const container = scrollContainerRef?.current;
-      if (!container || !isDeleteInput(event)) return;
-      pendingRestoreRef.current = readScrollSnapshot(container);
-    },
-    [scrollContainerRef]
-  );
+  const captureDeleteScroll = useCallback((event: Event) => {
+    const container = scrollContainerRef?.current;
+    if (!container || !isDeleteInput(event)) return;
+    pendingRestoreRef.current = readScrollSnapshot(container);
+  }, [scrollContainerRef]);
 
   const restoreDeleteScroll = useCallback(() => {
     const container = scrollContainerRef?.current;
@@ -377,7 +455,7 @@ export function AutoHeightPlugin({
         scheduleDeleteScrollRestore();
       }
     };
-
+    
     updateHeight();
     return editor.registerUpdateListener(updateHeight);
   }, [editor, onHeightChange, scheduleDeleteScrollRestore]);
@@ -464,50 +542,8 @@ export function LoadComposerDraftPlugin({
 
   useEffect(() => {
     if (revision === 0) return;
-
     const draft = draftRef.current;
-    const attachmentsById = new Map(draft.attachments.map((attachment) => [attachment.id, attachment]));
-
-    editor.update(() => {
-      const root = $getRoot();
-      const paragraph = $createParagraphNode();
-      const placeholderRegex = /\[(image|code-ref)-([a-z0-9-]+)]/g;
-      let lastIndex = 0;
-      let match: RegExpExecArray | null;
-
-      const appendText = (value: string) => {
-        value.split('\n').forEach((part, index) => {
-          if (index > 0) paragraph.append($createLineBreakNode());
-          if (part) paragraph.append($createTextNode(part));
-        });
-      };
-
-      while ((match = placeholderRegex.exec(draft.inputValue)) !== null) {
-        appendText(draft.inputValue.slice(lastIndex, match.index));
-        const attachment = attachmentsById.get(match[2]);
-
-        if (match[1] === 'image' && attachment?.mimeType.startsWith('image/')) {
-          paragraph.append($createImageNode(attachment.id));
-        } else if (match[1] === 'code-ref' && attachment?.path) {
-          paragraph.append($createCodeReferenceNode(
-            attachment.id,
-            attachment.path,
-            attachment.name,
-            attachment.startLine,
-            attachment.endLine
-          ));
-        } else {
-          appendText(match[0]);
-        }
-
-        lastIndex = placeholderRegex.lastIndex;
-      }
-
-      appendText(draft.inputValue.slice(lastIndex));
-      root.clear();
-      root.append(paragraph);
-      paragraph.selectEnd();
-    });
+    restoreComposerContent(editor, draft.inputValue, draft.attachments);
   }, [editor, revision]);
 
   return null;

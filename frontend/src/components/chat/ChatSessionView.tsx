@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useChatSession, UseChatSessionOptions } from '../../hooks/useChatSession';
 import { useFileChanges } from '../../hooks/useFileChanges';
-import { FileChangeSummary, Message } from '../../types/chat';
+import { FileChangeSummary, Message, UndoFileResultPayload } from '../../types/chat';
 import { acquireJcefLivePromptRepaint } from '../../utils/jcefHostRepaint';
 import {
   buildConversationHandoffFromTranscriptFile,
@@ -12,6 +12,7 @@ import {
 import { ACPBridge } from '../../utils/bridge';
 import MessageList from './MessageList';
 import ChatInput from './ChatInput';
+import { ScheduleBar } from './input/ScheduleBar';
 import { PromptQueueList } from './input/PromptQueueList';
 import PermissionBar from './PermissionBar';
 import FileChangesPanel from './FileChangesPanel';
@@ -23,15 +24,75 @@ import { useChatSessionNotifications } from './session/useChatSessionNotificatio
 
 interface ChatSessionProps extends UseChatSessionOptions {
   isActive?: boolean;
+  promptNavigationHoverOnly: boolean;
   onAssistantActivity?: () => void;
   onAtBottomChange?: (isAtBottom: boolean) => void;
   onCanMarkReadChange?: (canMarkRead: boolean) => void;
   onPermissionRequestChange?: (hasPendingPermission: boolean) => void;
   onProcessingChange?: (isProcessing: boolean) => void;
+  onQueuedChange?: (hasQueuedPrompts: boolean) => void;
   inheritedHandoffText?: string;
   onAgentChangeRequest?: (payload: { agentId: string; handoffText: string }) => void;
   onForkRequest?: (payload: { agentId: string; messages: Message[]; handoffText: string }) => void;
   onSessionStateChange?: (state: { acpSessionId: string; adapterName: string }) => void;
+}
+
+function UndoFailureDetails({
+  failures,
+  hadSuccess,
+  onOpenFile,
+}: {
+  failures: UndoFileResultPayload[];
+  hadSuccess: boolean;
+  onOpenFile: (filePath: string) => void;
+}) {
+  const fileName = (path: string) => path.replace(/\\/g, '/').split('/').pop() || path;
+  const nameCounts = new Map<string, number>();
+  for (const failure of failures) {
+    const name = fileName(failure.filePath);
+    nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
+  }
+  const label = (path: string) => {
+    const name = fileName(path);
+    return nameCounts.get(name) === 1 ? name : path.replace(/\\/g, '/');
+  };
+  const groups = [
+    {
+      heading: 'Could not undo the following files due to edit conflicts:',
+      files: failures.filter((failure) => failure.reason === 'conflict'),
+      showReason: false,
+    },
+    {
+      heading: 'Could not undo the following files:',
+      files: failures.filter((failure) => failure.reason !== 'conflict'),
+      showReason: true,
+    },
+  ];
+
+  return (
+    <div className="space-y-3">
+      {groups.filter((group) => group.files.length > 0).map((group) => (
+        <div key={group.heading}>
+          <div>{group.heading}</div>
+          <ul className="mt-2 list-disc space-y-1 pl-4">
+            {group.files.map((failure) => (
+              <li key={failure.filePath}>
+                <button
+                  type="button"
+                  className="rounded-[4px] text-link text-left underline focus-visible:outline focus-visible:outline-[var(--ide-Button-default-focusColor)]"
+                  onClick={() => onOpenFile(failure.filePath)}
+                >
+                  {label(failure.filePath)}
+                </button>
+                {group.showReason && `: ${failure.message}`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+      {hadSuccess && <div>The other files were undone successfully.</div>}
+    </div>
+  );
 }
 
 export default function ChatSessionView({ 
@@ -46,12 +107,14 @@ export default function ChatSessionView({
   inheritedAdapterNames,
   forkBase,
   isActive = false,
+  promptNavigationHoverOnly,
   onUserMessageSent,
   onAssistantActivity,
   onAtBottomChange,
   onCanMarkReadChange,
   onPermissionRequestChange,
   onProcessingChange,
+  onQueuedChange,
   onAgentChangeRequest,
   onForkRequest,
   onHandoffConsumed,
@@ -62,6 +125,12 @@ export default function ChatSessionView({
     inputValue,
     setInputValue,
     composerLoadRevision,
+    scheduleEnabled,
+    setScheduleMode,
+    scheduledAt,
+    setScheduledAt,
+    scheduleDraftRevision,
+    queueError,
     status,
     isSending,
     isHistoryReplaying,
@@ -86,7 +155,6 @@ export default function ChatSessionView({
     setApprovalMode,
     permissionRequest,
     handleSend,
-    handleQueueDraft,
     handleStop,
     handlePermissionDecision,
     hasSelectedAgent,
@@ -110,12 +178,16 @@ export default function ChatSessionView({
     onUserMessageSent
   });
 
+  useEffect(() => {
+    onQueuedChange?.(queuedPrompts.length > 0);
+  }, [onQueuedChange, queuedPrompts.length]);
+
   const {
     hasPluginEdits,
     fileChanges,
     totalAdditions,
     totalDeletions,
-    undoErrorMessage,
+    undoError,
     clearUndoError,
     handleUndoFile,
     handleUndoAllFiles,
@@ -243,6 +315,7 @@ export default function ChatSessionView({
     <div className="flex flex-col h-full relative overflow-hidden bg-background">
           <MessageList 
             messages={messages} 
+            promptNavigationHoverOnly={promptNavigationHoverOnly}
             onImageClick={setPreviewImage} 
             onAtBottomChange={handleAtBottomChange}
             onCanMarkReadChange={handleCanMarkReadChange}
@@ -286,6 +359,15 @@ export default function ChatSessionView({
           />
         )}
 
+        {scheduleEnabled && (
+          <ScheduleBar
+            key={`${composerLoadRevision}-${scheduleDraftRevision}`}
+            scheduledAt={scheduledAt}
+            onScheduledAtChange={setScheduledAt}
+            onClose={() => setScheduleMode(false)}
+          />
+        )}
+
         <div style={{ height: `${inputHeight}px` }} className="flex flex-col">
           <ChatInput
             onResizeStart={startResizing}
@@ -297,20 +379,22 @@ export default function ChatSessionView({
             composerLoadRevision={composerLoadRevision}
             onInputChange={setInputValue}
             onSend={handleSend}
-            onQueueDraft={handleQueueDraft}
+            scheduleEnabled={scheduleEnabled}
+            onScheduleModeChange={setScheduleMode}
+            queueError={queueError}
             onStop={handleStop}
             isSending={isSending}
             promptQueueEnabled
             usageSessionKey={acpSessionId || undefined}
             status={status}
-            
+
             agentOptions={agentOptions}
             selectedAgentId={selectedAgentId}
             onAgentChange={handleAgentChange}
-            
+
             selectedModelId={selectedModelId}
             onModelChange={handleModelChange}
-            
+
             modeOptions={modeOptions}
             selectedModeId={selectedModeId}
             onModeChange={handleModeChange}
@@ -323,7 +407,7 @@ export default function ChatSessionView({
 
             approvalMode={approvalMode}
             onApprovalModeChange={setApprovalMode}
-            
+
             hasSelectedAgent={hasSelectedAgent}
             availableCommands={availableCommands}
             attachments={attachments}
@@ -335,7 +419,6 @@ export default function ChatSessionView({
             isActive={isActive}
           />
         </div>
-        <div aria-hidden="true" className="h-2 shrink-0" />
             </>}
           />
 
@@ -343,9 +426,18 @@ export default function ChatSessionView({
       <ImageOverlayModal src={previewImage} onClose={() => setPreviewImage(null)} />
 
       <ConfirmationModal
-        isOpen={undoErrorMessage !== null}
-        title="Undo Failed"
-        message={undoErrorMessage || ''}
+        isOpen={undoError !== null}
+        title="Undo failed"
+        message={undoError && 'failures' in undoError
+          ? <UndoFailureDetails
+              failures={undoError.failures}
+              hadSuccess={undoError.hadSuccess}
+              onOpenFile={(filePath) => {
+                clearUndoError();
+                handleOpenFile(filePath);
+              }}
+            />
+          : undoError && 'message' in undoError ? undoError.message : ''}
         confirmLabel="OK"
         showCancelButton={false}
         onConfirm={clearUndoError}

@@ -10,7 +10,7 @@ import {openFile} from '../../../utils/openFile';
 import {useSlashCommands} from '../../../hooks/useSlashCommands';
 import {applySlashCommandToEditor, buildAgentSlashItems, buildPromptLibrarySlashItems,} from './slashCommands';
 import {useFileMentions} from '../../../hooks/useFileMentions';
-import {$createImageNode, ImageNode} from './ImageNode';
+import {ImageNode} from './ImageNode';
 import {CodeReferenceNode} from './CodeReferenceNode';
 import {ChatInputProps} from './chatInputState';
 
@@ -19,27 +19,19 @@ export function useChatInputController({
   inputValue,
   composerLoadRevision = 0,
   onInputChange,
-  isSending,
   selectedAgentId,
-  selectedModelId,
-  status,
-  modeOptions,
-  selectedModeId,
   availableCommands,
-  attachments,
   onAttachmentsChange,
   customHeight = 180,
   autoFocus = false,
 }: ChatInputProps) {
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const inputRootRef = useRef<HTMLDivElement>(null);
-  const controlsRowRef = useRef<HTMLDivElement>(null);
   const slashMenuRef = useRef<HTMLDivElement>(null);
   const fileMenuRef = useRef<HTMLDivElement>(null);
   const lexicalEditorRef = useRef<LexicalEditor | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [promptLibraryItems, setPromptLibraryItems] = useState<PromptLibraryItem[]>([]);
-  const [containerWidth, setContainerWidth] = useState(0);
   const [composerRevision, setComposerRevision] = useState(0);
   const registeredNodeClassesRef = useRef({
     imageNode: ImageNode,
@@ -73,20 +65,6 @@ export function useChatInputController({
     return () => window.removeEventListener('drag-highlight', handleDragHighlight as EventListener);
   }, []);
 
-  useEffect(() => {
-    const updateWidths = () => {
-      setContainerWidth(inputRootRef.current?.clientWidth ?? 0);
-    };
-
-    updateWidths();
-    const raf = requestAnimationFrame(updateWidths);
-    window.addEventListener('resize', updateWidths);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener('resize', updateWidths);
-    };
-  }, [selectedAgentId, selectedModelId, selectedModeId, modeOptions.length, status, isSending]);
-
   const handleOpenFile = useCallback((filePath: string, line?: number) => {
     openFile(filePath, line);
   }, []);
@@ -94,16 +72,6 @@ export function useChatInputController({
   const [sendMode, setSendMode] = useState<'enter' | 'ctrl-enter'>(() => {
     return (localStorage.getItem('chat-send-mode') as 'enter' | 'ctrl-enter') || 'enter';
   });
-
-  const initialConfig = useMemo(() => ({
-    namespace: `ChatInput-${conversationId}`,
-    nodes: [ImageNode, CodeReferenceNode],
-    theme: {
-      paragraph: 'm-0',
-      text: { base: 'text-foreground' },
-    },
-    onError: (error: Error) => console.error(error),
-  }), [conversationId, composerRevision]);
 
   const agentSlashItems = useMemo(
     () => buildAgentSlashItems(availableCommands),
@@ -154,25 +122,6 @@ export function useChatInputController({
     return options;
   }, [agentSlashItems, promptLibrarySlashItems]);
 
-  const handleImagePaste = useCallback((file: File, editor: LexicalEditor) => {
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = (event.target?.result as string).split(',')[1];
-      const id = Math.random().toString(36).substring(2, 9);
-      const newAtt = { id, name: file.name || 'pasted-image.png', data: base64, mimeType: file.type, isInline: true };
-      onAttachmentsChange([...attachments, newAtt]);
-
-      editor.update(() => {
-        const selection = $getSelection();
-        if ($isRangeSelection(selection)) {
-          const imageNode = $createImageNode(id);
-          selection.insertNodes([imageNode]);
-        }
-      });
-    };
-    reader.readAsDataURL(file);
-  }, [attachments, onAttachmentsChange]);
-
   useEffect(() => {
     if (!autoFocus) return;
     const focusEditor = () => {
@@ -201,6 +150,7 @@ export function useChatInputController({
     menuRef: slashMenuRef,
     lexicalEditorRef,
     onInputChange,
+    onAttachmentsChange,
   });
 
   const {
@@ -261,20 +211,17 @@ export function useChatInputController({
     applySlashCommandToEditor(
       lexicalEditorRef.current,
       item,
-      onInputChange
+      onInputChange,
+      onAttachmentsChange
     );
-  }, [lexicalEditorRef, onInputChange]);
-
-  const showAuxIndicators = containerWidth === 0 || containerWidth >= 320;
+  }, [lexicalEditorRef, onInputChange, onAttachmentsChange]);
 
   return {
     editorContainerRef,
     inputRootRef,
-    controlsRowRef,
     slashMenuRef,
     fileMenuRef,
     composerRevision,
-    initialConfig,
     sendMode,
     setSendMode,
     plusMenuOptions,
@@ -292,12 +239,10 @@ export function useChatInputController({
     setFileHighlightedIndex,
     applyFile,
     customHeight,
-    showAuxIndicators,
     insertText,
     agentSlashItems,
     promptLibrarySlashItems,
     handleOpenFile,
-    handleImagePaste,
     combinedHandleKeyDownCapture,
     handleInsertSlashItem,
     setLexicalEditor: (editor: LexicalEditor) => {

@@ -40,7 +40,10 @@ internal object BridgeScripts {
                 window[name] = window[name] || function() {};
             });
 
-            window.__notifyReady = function() { invoke('ready', ''); };
+            window.__notifyReady = function() {
+                var isDark = getComputedStyle(document.documentElement).getPropertyValue('--ide-theme-is-dark').trim();
+                invoke('ready', isDark === '0' ? 'light' : 'dark');
+            };
 
             window.__requestAdapters = function(forceRefresh) {
                 invoke('listAdapters', forceRefresh === true ? 'refresh' : '');
@@ -109,6 +112,7 @@ internal object BridgeScripts {
 
             window.__loadCustomAcpConfigs = function() { invoke('loadCustomAcpConfigs', ''); };
             window.__saveCustomAcpConfigs = function(json) { invoke('saveCustomAcpConfigs', json); };
+            window.__testCustomAcpConnection = function(json) { invoke('testCustomAcpConnection', json); };
 
             window.__loadPromptLibrary = function() { invoke('loadPromptLibrary', ''); };
             window.__savePromptLibrary = function(json) { invoke('savePromptLibrary', json); };
@@ -143,16 +147,30 @@ internal object BridgeScripts {
     fun cursorTracking(): String = """
         window.__lastSentCursor = 'default';
         window.__cursorThrottleTimer = null;
+        function reportCursor(target) {
+          if (!target) return;
+          const cursor = window.getComputedStyle(target).cursor;
+          if (window.__lastSentCursor !== cursor) {
+            window.__lastSentCursor = cursor;
+            window.__agentDockInvoke('cursor', cursor);
+          }
+        }
         document.addEventListener('mousemove', function(e) {
           if (window.__cursorThrottleTimer !== null) return;
           window.__cursorThrottleTimer = setTimeout(function() {
             window.__cursorThrottleTimer = null;
-            const cursor = window.getComputedStyle(e.target).cursor;
-            if (window.__lastSentCursor !== cursor) {
-              window.__lastSentCursor = cursor;
-              window.__agentDockInvoke('cursor', cursor);
-            }
+            reportCursor(e.target);
           }, 50);
         });
+        // Image click handlers can stop propagation, so observe clicks in the capture phase.
+        document.addEventListener('click', function(e) {
+          if (window.__cursorThrottleTimer !== null) {
+            clearTimeout(window.__cursorThrottleTimer);
+            window.__cursorThrottleTimer = null;
+          }
+          requestAnimationFrame(function() {
+            reportCursor(document.elementFromPoint(e.clientX, e.clientY));
+          });
+        }, true);
     """.trimIndent()
 }

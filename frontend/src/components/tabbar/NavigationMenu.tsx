@@ -126,7 +126,7 @@ export function TabNavigationContent({
   };
   const handleOpenChatPointerDown = (id: string, event: ReactPointerEvent<HTMLDivElement>) => {
     if (!pinActionsToBottom || event.button !== 0
-      || (event.target as HTMLElement).closest('[data-open-chat-action], input')) {
+      || (event.target as HTMLElement).closest('[data-open-chat-action], [data-open-chat-status], input')) {
       return;
     }
     startReordering(id, event);
@@ -152,7 +152,105 @@ export function TabNavigationContent({
   return (
     <div className={pinActionsToBottom ? 'flex min-h-full flex-col' : undefined}>
       <div className="flex flex-col">
-        <div className="order-2">
+        <div className={pinActionsToBottom ? 'shrink-0' : undefined}>
+          <div className={`flex min-h-7 items-center justify-between text-ide-small text-[var(--ide-Label-disabledForeground)] ${
+            pinActionsToBottom ? 'pl-3 pr-3' : 'px-5'
+          }`}>
+            {pinActionsToBottom ? (
+              <button
+                type="button"
+                onClick={() => setSectionExpanded('new-chat', !newChatExpanded)}
+                className="flex min-w-0 flex-1 items-center self-stretch rounded-[4px] text-left focus:outline-none
+                  focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--ide-Button-default-focusColor)] focus-visible:outline-offset-[-1px]"
+                aria-expanded={newChatExpanded}
+              >
+                {newChatExpanded ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />}
+                <span className="ml-1 truncate">New Chat</span>
+              </button>
+            ) : <span>New Chat</span>}
+            {pinActionsToBottom && onNewTab ? (
+              <Tooltip variant="minimal" placement="top" content="New chat">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenChatsExpanded(true);
+                    onNewTab();
+                  }}
+                  className="flex h-5 w-6 items-center justify-center rounded text-foreground-secondary
+                    hover:bg-hover hover:text-foreground focus:outline-none
+                    focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--ide-Button-default-focusColor)] focus-visible:outline-offset-[-1px]"
+                  aria-label="New chat"
+                >
+                  <Plus size={14} strokeWidth={2.5} aria-hidden="true" />
+                </button>
+              </Tooltip>
+            ) : null}
+          </div>
+          <div
+            aria-hidden={!newChatExpanded}
+            {...(!newChatExpanded ? { inert: '' } : {})}
+            className={`grid overflow-hidden transition-[grid-template-rows] duration-200 ease-in-out ${
+            newChatExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+          }`}
+          >
+            <div className="min-h-0 overflow-hidden">
+              <div className={pinActionsToBottom ? 'py-1' : undefined}>
+              {runnableAgents.length > 0 ? (
+                runnableAgents.map((agent) => (
+                  <div key={agent.id}
+                    className="group relative mx-2 mb-0.5 flex items-stretch rounded-[4px] text-foreground
+                      before:pointer-events-none before:absolute before:inset-0 before:rounded-[4px] before:bg-background
+                      before:opacity-0 before:[filter:var(--ide-surface-active-filter)] hover:before:opacity-100 focus-within:before:opacity-100"
+                  >
+                    <button
+                      onClick={() => {
+                        setOpenChatsExpanded(true);
+                        onNewTabWithAgent(agent.id);
+                        onAction?.();
+                      }}
+                      className="relative z-10 flex min-w-0 flex-1 items-center rounded-l-[4px] px-3 min-h-8 text-left focus:outline-none
+                        focus-visible:rounded-[4px] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--ide-Button-default-focusColor)] focus-visible:outline-offset-[-1px]"
+                      role={itemRole}
+                    >
+                      <span className="mr-2 flex items-center justify-center">
+                        {getAgentIcon(agent.id, agents)}
+                      </span>
+                      <span className="flex-1 min-w-0 truncate">{agent.name}</span>
+                    </button>
+                    {agent.cliAvailable ? (
+                      <div className="relative z-10 w-0 overflow-hidden opacity-0 pointer-events-none
+                        group-hover:w-8 group-hover:opacity-100 group-hover:pointer-events-auto
+                        group-focus-within:w-8 group-focus-within:opacity-100 group-focus-within:pointer-events-auto"
+                      >
+                        <Tooltip variant="minimal" placement="top" content={`Open ${agent.name} in terminal`} className="flex h-full w-8">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              ACPBridge.openAgentCli(agent.id);
+                              onAction?.();
+                            }}
+                            className="flex w-8 items-center justify-center self-stretch text-foreground-secondary
+                              hover:text-accent-foreground focus:outline-none focus:text-accent-foreground
+                              focus-visible:rounded-[4px] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--ide-Button-default-focusColor)] focus-visible:outline-offset-[-1px]"
+                            role={itemRole}
+                            aria-label={`Open ${agent.name} in terminal`}
+                          >
+                            <Terminal className="h-4 w-4" aria-hidden="true" />
+                          </button>
+                        </Tooltip>
+                      </div>
+                    ) : null}
+                  </div>
+                ))
+              ) : (
+                <div className="px-5 min-h-8 text-[var(--ide-Label-disabledForeground)] italic">No available agents</div>
+              )}
+              </div>
+            </div>
+          </div>
+          {pinActionsToBottom ? <div className="mx-2 my-1 h-px bg-border" /> : null}
+        </div>
+        <div>
           {recentChats}
           {showOpenChats && showRecentChats ? <div className="mx-2 my-1 h-px bg-border" /> : null}
           {showOpenChats ? (
@@ -164,11 +262,12 @@ export function TabNavigationContent({
                   <button
                     type="button"
                     onClick={() => setOpenChatsExpanded((expanded) => !expanded)}
-                    className="flex min-w-0 flex-1 items-center self-stretch text-left focus:outline-none"
+                    className="flex min-w-0 flex-1 items-center self-stretch rounded-[4px] text-left focus:outline-none
+                      focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--ide-Button-default-focusColor)] focus-visible:outline-offset-[-1px]"
                     aria-expanded={openChatsExpanded}
                   >
                     {openChatsExpanded ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />}
-                    <span className="ml-1">Open Chats</span>
+                    <span className="ml-1 truncate">Open Chats</span>
                   </button>
                 ) : <span className="min-w-0 flex-1">Open Chats</span>}
                 {tabs.length > 0 ? (
@@ -181,7 +280,7 @@ export function TabNavigationContent({
                       }}
                       className="flex h-5 w-6 items-center justify-center rounded text-foreground-secondary
                         hover:text-foreground focus:outline-none
-                        focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]"
+                        focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--ide-Button-default-focusColor)] focus-visible:outline-offset-[-1px]"
                       aria-label="Close all open chats"
                       role={itemRole}
                     >
@@ -204,8 +303,9 @@ export function TabNavigationContent({
                     const flags = tabUi[tab.id];
                     const hasWarning = flags?.warning;
                     const hasProcessing = flags?.processing;
+                    const hasQueued = flags?.queued && !hasProcessing;
                     const hasUnread = flags?.unread;
-                    const hasStatus = hasWarning || hasProcessing || hasUnread;
+                    const hasStatus = hasWarning || hasProcessing || hasQueued || hasUnread;
                     const conversationId = tab.historySession?.conversationId || tab.conversationId;
                     const deleteProjectPath = tab.historySession?.projectPath
                       || historyByConversationId.get(conversationId)?.projectPath;
@@ -218,6 +318,12 @@ export function TabNavigationContent({
                       <span className="relative z-10 ml-1 mr-2 flex shrink-0 self-center text-foreground-secondary">
                         <ChatSpinnerIcon size={14} />
                       </span>
+                    ) : hasQueued ? (
+                      <Tooltip variant="minimal" placement={tooltipPlacement} content="Queued prompts"
+                        className="relative z-10 ml-1 mr-3 shrink-0 self-center cursor-default">
+                        <span data-open-chat-status role="img" aria-label="Queued prompts"
+                          className="block h-2 w-2 rounded-full border border-current text-foreground-secondary" />
+                      </Tooltip>
                     ) : hasUnread ? (
                       <span className="relative z-10 ml-1 mr-3 h-2 w-2 shrink-0 self-center rounded-full bg-sky-500" />
                     ) : null;
@@ -257,7 +363,7 @@ export function TabNavigationContent({
                               onAction?.();
                             }}
                             className="relative z-10 flex min-h-8 min-w-0 flex-1 items-center rounded-l-[4px] pl-3 pr-2 text-left focus:outline-none
-                              focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]"
+                              focus-visible:rounded-[4px] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--ide-Button-default-focusColor)] focus-visible:outline-offset-[-1px]"
                             role={itemRole}
                             aria-current={tab.id === activeTabId ? 'page' : undefined}
                           >
@@ -285,7 +391,7 @@ export function TabNavigationContent({
                                 onClick={() => setRenamingTabId(tab.id)}
                                 className="flex min-h-8 w-6 shrink-0 items-center justify-center text-foreground-secondary
                                   hover:text-foreground focus:outline-none
-                                  focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]"
+                                  focus-visible:rounded-[4px] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--ide-Button-default-focusColor)] focus-visible:outline-offset-[-1px]"
                                 role={itemRole}
                                 aria-label={`Rename ${tab.title}`}
                               >
@@ -310,7 +416,7 @@ export function TabNavigationContent({
                                 }}
                                 className="flex min-h-8 w-6 shrink-0 items-center justify-center text-foreground-secondary
                                   hover:text-error focus:outline-none
-                                  focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]"
+                                  focus-visible:rounded-[4px] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--ide-Button-default-focusColor)] focus-visible:outline-offset-[-1px]"
                                 aria-label={`Delete ${tab.title}`}
                               >
                                 <Trash2 size={13} className="-translate-y-px" aria-hidden="true" />
@@ -336,7 +442,7 @@ export function TabNavigationContent({
                                 }}
                                 className="flex min-h-8 w-6 shrink-0 items-center justify-center rounded-r-[4px]
                                   text-foreground-secondary hover:text-foreground focus:outline-none
-                                  focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]"
+                                  focus-visible:rounded-[4px] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--ide-Button-default-focusColor)] focus-visible:outline-offset-[-1px]"
                                 role={itemRole}
                                 aria-label={`Close ${tab.title}`}
                               >
@@ -355,102 +461,6 @@ export function TabNavigationContent({
             </div>
           ) : null}
         </div>
-
-        <div className={`order-1 ${pinActionsToBottom ? 'shrink-0' : ''}`}>
-          <div className={`flex min-h-7 items-center justify-between text-ide-small text-[var(--ide-Label-disabledForeground)] ${
-            pinActionsToBottom ? 'pl-3 pr-3' : 'px-5'
-          }`}>
-            {pinActionsToBottom ? (
-              <button
-                type="button"
-                onClick={() => setSectionExpanded('new-chat', !newChatExpanded)}
-                className="flex min-w-0 flex-1 items-center self-stretch text-left focus:outline-none"
-                aria-expanded={newChatExpanded}
-              >
-                {newChatExpanded ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />}
-                <span className="ml-1">New Chat</span>
-              </button>
-            ) : <span>New Chat</span>}
-            {pinActionsToBottom && onNewTab ? (
-              <Tooltip variant="minimal" placement="top" content="New chat">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpenChatsExpanded(true);
-                    onNewTab();
-                  }}
-                  className="flex h-5 w-6 items-center justify-center rounded text-foreground-secondary
-                    hover:bg-hover hover:text-foreground focus:outline-none
-                    focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]"
-                  aria-label="New chat"
-                >
-                  <Plus size={14} strokeWidth={2.5} aria-hidden="true" />
-                </button>
-              </Tooltip>
-            ) : null}
-          </div>
-          <div
-            aria-hidden={!newChatExpanded}
-            {...(!newChatExpanded ? { inert: '' } : {})}
-            className={`grid overflow-hidden transition-[grid-template-rows] duration-200 ease-in-out ${
-            newChatExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
-          }`}
-          >
-            <div className="min-h-0 overflow-hidden">
-              <div className={pinActionsToBottom ? 'py-1' : undefined}>
-              {runnableAgents.length > 0 ? (
-                runnableAgents.map((agent) => (
-                  <div key={agent.id}
-                    className="group relative mx-2 mb-0.5 flex items-stretch rounded-[4px] text-foreground
-                      before:pointer-events-none before:absolute before:inset-0 before:rounded-[4px] before:bg-background
-                      before:opacity-0 before:[filter:var(--ide-surface-active-filter)] hover:before:opacity-100 focus-within:before:opacity-100
-                      focus-within:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]"
-                  >
-                    <button
-                      onClick={() => {
-                        setOpenChatsExpanded(true);
-                        onNewTabWithAgent(agent.id);
-                        onAction?.();
-                      }}
-                      className="relative z-10 flex min-w-0 flex-1 items-center rounded-l-[4px] px-3 min-h-8 text-left focus:outline-none"
-                      role={itemRole}
-                    >
-                      <span className="mr-2 flex items-center justify-center">
-                        {getAgentIcon(agent.id, agents)}
-                      </span>
-                      <span className="flex-1 min-w-0 truncate">{agent.name}</span>
-                    </button>
-                    {agent.cliAvailable ? (
-                      <div className="relative z-10 w-0 overflow-hidden opacity-0 pointer-events-none
-                        group-hover:w-8 group-hover:opacity-100 group-hover:pointer-events-auto
-                        group-focus-within:w-8 group-focus-within:opacity-100 group-focus-within:pointer-events-auto"
-                      >
-                        <Tooltip variant="minimal" placement="top" content={`Open ${agent.name} in terminal`} className="flex h-full w-8">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              ACPBridge.openAgentCli(agent.id);
-                              onAction?.();
-                            }}
-                            className="flex w-8 items-center justify-center self-stretch text-foreground-secondary
-                              hover:text-accent-foreground focus:outline-none focus:text-accent-foreground"
-                            role={itemRole}
-                          >
-                            <Terminal className="h-4 w-4" aria-hidden="true" />
-                          </button>
-                        </Tooltip>
-                      </div>
-                    ) : null}
-                  </div>
-                ))
-              ) : (
-                <div className="px-5 min-h-8 text-[var(--ide-Label-disabledForeground)] italic">No available agents</div>
-              )}
-              </div>
-            </div>
-          </div>
-          {pinActionsToBottom ? <div className="mx-2 my-1 h-px bg-border" /> : null}
-        </div>
       </div>
       <div className={pinActionsToBottom ? 'mt-auto shrink-0' : undefined}>
         <div className="h-px bg-border my-1 mx-2" />
@@ -460,11 +470,11 @@ export function TabNavigationContent({
             onClick={() => setSectionExpanded('sections', !sectionsExpanded)}
             className="flex min-h-7 w-full items-center px-3 text-left text-ide-small
               text-[var(--ide-Label-disabledForeground)] focus:outline-none
-              focus-visible:shadow-[inset_0_0_0_1px_var(--ide-Button-default-focusColor)]"
+              focus-visible:rounded-[4px] focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--ide-Button-default-focusColor)] focus-visible:outline-offset-[-1px]"
             aria-expanded={sectionsExpanded}
           >
             {sectionsExpanded ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />}
-            <span className="ml-1">Sections</span>
+            <span className="ml-1 truncate">Sections</span>
           </button>
         ) : null}
         <div

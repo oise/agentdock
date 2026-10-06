@@ -52,7 +52,7 @@ export default function PopupMenu({
               }`}
             >
               {item.filePath && <FileIcon filePath={item.filePath} className="h-[14px] w-[14px] flex-shrink-0" />}
-              <span className="w-40 shrink-0 truncate font-mono leading-5">
+              <span className="shrink-0 font-mono leading-5">
                 {item.primary}
               </span>
               {item.secondary && (

@@ -1,10 +1,9 @@
 import React from 'react';
 import { ToolCallEntry } from '../../../types/chat';
-import { Tooltip } from '../shared/Tooltip';
 import { safeParseJson } from '../../../utils/toolCallUtils';
 import { chatFocusClassName } from '../shared/focusStyles';
-import { FileIcon } from '../shared/FileIcon';
 import { ToolActivityStatus } from './ToolActivityStatus';
+import { FileIcon } from '../shared/FileIcon';
 
 interface Props {
   entry: ToolCallEntry;
@@ -62,19 +61,16 @@ export const ReadActivity: React.FC<Props> = ({ entry, onOpenFile, isActivePromp
     : null;
 
   return (
-    <Tooltip variant="minimal" content={`Read ${filePath}${lineRange}`}>
-      <div className="flex items-center gap-1.5 min-w-0 group/activity cursor-help pr-2">
-        <div className="flex-shrink-0 transition-opacity">
-          <FileIcon filePath={filePath} className="h-[13px] w-[13px] flex-shrink-0" />
-        </div>
-        <button
-          onClick={() => onOpenFile(filePath, startLine || undefined)}
-          className={`text-foreground-secondary hover:underline text-left truncate min-w-0 flex-1 ${chatFocusClassName}`}
-        >
-          Read {fileName}{lineRange}{pattern ? ` | Pattern: ${pattern}` : ''}
-        </button>
-        <ToolActivityStatus status={entry.status} isActivePrompt={isActivePrompt} />
+    <div className="flex items-center gap-1.5 w-fit max-w-full min-w-0 pr-2">
+      <div className="flex-shrink-0 transition-opacity">
+        <FileIcon filePath={filePath} className="h-[13px] w-[13px] flex-shrink-0" />
       </div>
-    </Tooltip>
+      <span className="text-foreground-secondary truncate min-w-0 flex-1">
+        Read <button onClick={() => onOpenFile(filePath, startLine || undefined)}
+          className={`hover:underline ${chatFocusClassName}`}
+        >{fileName}{lineRange}</button>{pattern ? ` | Pattern: ${pattern}` : ''}
+      </span>
+      <ToolActivityStatus status={entry.status} isActivePrompt={isActivePrompt} />
+    </div>
   );
 };

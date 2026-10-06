@@ -264,22 +264,20 @@ export default function ChatDropdown({
           whitespace-nowrap outline-none focus-visible:bg-hover 
           focus-visible:text-foreground focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)] 
           ${open ? 'bg-hover' : 'hover:text-foreground hover:bg-hover'}`}
-      >
-        {customTrigger ? (customTrigger) : (
-          <>
-            {renderIcon(selectedOption, "w-4 h-4 shrink-0 mr-0.5 opacity-80")}
-            <span className="relative top-px min-w-0 truncate">
-              {selectedText}
-            </span>
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-              className="flex-shrink-0 opacity-50 group-hover:opacity-100 transition-opacity"
-            >
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          </>
-        )}
-      </button>
+    >
+      {customTrigger ? (customTrigger) : (
+        <>
+          {renderIcon(selectedOption, "w-4 h-4 shrink-0 mr-0.5 opacity-80")}
+          <span className="min-w-0 truncate">{selectedText}</span>
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+            className="flex-shrink-0 opacity-50 group-hover:opacity-100 transition-opacity"
+          >
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </>
+      )}
+    </button>
   );
 
   return (
@@ -292,7 +290,7 @@ export default function ChatDropdown({
 
       {open && !disabled && (
         <div ref={popupRef} className={`absolute mb-[4px] z-[100] w-max rounded-md border border-border bg-background-secondary px-1 py-0.5 
-          animate-in fade-in duration-75 ${direction === 'up' ? 'bottom-full mb-2 left-0' : 'top-full mt-2 left-0'}`}
+          ${direction === 'up' ? 'bottom-full mb-2 left-0' : 'top-full mt-2 left-0'}`}
         >
           <div className="flex flex-col overflow-y-auto" style={{ maxHeight: dynamicMaxHeight }} onScroll={() => {
               if (hoveredOptionId && popupRef.current) {
@@ -354,7 +352,7 @@ export default function ChatDropdown({
                         setOpen(false);
                         setHoveredOptionId(null);
                       }}
-                      className={`flex items-center w-full my-0.5 px-2 min-h-8 text-left transition-colors 
+                      className={`flex items-center w-full my-0.5 pl-2 pr-3 min-h-8 text-left transition-colors 
                         rounded min-w-[70px] outline-none 
                         focus-visible:shadow-[inset_0_0_0_1px_var(--ide-Button-default-focusColor)] 
                         ${option.id === value && !subValue ? 'bg-accent text-accent-foreground' : 'text-foreground hover:bg-accent hover:text-accent-foreground'
@@ -386,7 +384,7 @@ export default function ChatDropdown({
 
           {hoveredOption?.subOptions && (
             <div className={`absolute mb-[4px] left-full z-[101] ml-1 w-max rounded-md border border-border
-              bg-background-secondary px-1 py-0.5 animate-in fade-in slide-in-from-left-1 duration-75
+              bg-background-secondary px-1 py-0.5
               chat-max-600:left-0 chat-max-600:ml-0 chat-max-600:mb-0 ${hoveredOption.className ?? ''}`}
               style={{[subMenuPosition.prop]: subMenuPosition.offset, minWidth: subMenuPosition.minWidth, maxWidth: subMenuPosition.maxWidth}}
             >
@@ -404,7 +402,7 @@ export default function ChatDropdown({
                         setOpen(false);
                         setHoveredOptionId(null);
                       }}
-                      className={`flex items-center w-full my-0.5 px-2 min-h-8 text-left transition-colors rounded outline-none focus-visible:shadow-[inset_0_0_0_1px_var(--ide-Button-default-focusColor)] ${
+                      className={`flex items-center w-full my-0.5 pl-2 pr-3 min-h-8 text-left transition-colors rounded outline-none focus-visible:shadow-[inset_0_0_0_1px_var(--ide-Button-default-focusColor)] ${
                         sub.id === (subValues?.[hoveredOption.id] ?? (hoveredOption.id === value ? subValue : undefined)) ? 'bg-accent text-accent-foreground' : 'text-foreground hover:bg-accent hover:text-accent-foreground'
                       }`}
                     >

@@ -2,6 +2,7 @@ import { Bot } from 'lucide-react';
 import type { AgentOption, HistorySessionMeta } from '../types/chat';
 import { formatDate } from '../utils/formatDate';
 import { sanitizeSvg } from '../utils/sanitizeHtml';
+import { Button } from './ui/Button';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { Tooltip } from './chat/shared/Tooltip';
 import { getAgentIcon } from './tabbar/TabIcons';
@@ -63,7 +64,7 @@ export function EmptyStateView({
           <div className="relative my-auto flex w-full flex-col items-center text-center">
             {runnableAgents.length > 0 ? (
               <>
-                <div className="text-ide-medium mb-8 mx-4">Select an AI agent to start a new chat</div>
+                <div className="text-ide-medium mb-8 mx-4">Start a new chat</div>
 
                 <div className="flex flex-wrap items-center justify-center gap-3">
                   {runnableAgents.map((agent) => (
@@ -86,18 +87,24 @@ export function EmptyStateView({
                 {recentChats.length > 0 ? (
                   <div className="mt-12 w-[380px] max-w-full text-left text-ide-small">
                     <div className="mb-2 flex items-center gap-2 px-2">
-                      Continue a chat
+                      <div className="h-px flex-1 bg-border" />
+                      or continue a chat
                       <div className="h-px flex-1 bg-border" />
                     </div>
-                    {recentChats.map((item) => (
-                      <div key={item.conversationId} className={`${sidebarRowClassName(false)} mb-0.5`}>
-                        <button type="button" onClick={() => onOpenChat(item)} className={rowButtonClassName}>
-                          {getAgentIcon(item.adapterName, agents)}
-                          <span className="flex-1 truncate">{item.title}</span>
-                          <span className="shrink-0 text-foreground-secondary">{formatDate(item.updatedAt)}</span>
-                        </button>
-                      </div>
-                    ))}
+                    {/* Columns shared by the rows, so the titles end before the widest date. `grid` overrides the rows' `flex`. */}
+                    <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-x-2">
+                      {recentChats.map((item) => (
+                        <div key={item.conversationId}
+                          className={`${sidebarRowClassName(false)} col-span-full mb-0.5 grid grid-cols-subgrid`}>
+                          <button type="button" onClick={() => onOpenChat(item)}
+                            className={`${rowButtonClassName} col-span-full grid grid-cols-subgrid`}>
+                            {getAgentIcon(item.adapterName, agents)}
+                            <span className="truncate">{item.title}</span>
+                            <span className="text-right text-foreground-secondary">{formatDate(item.updatedAt)}</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                     {recentChats.length < historyCount ? (
                       <button
                         type="button"
@@ -113,19 +120,11 @@ export function EmptyStateView({
                 ) : null}
               </>
             ) : (
-              <p className="mx-4 max-w-[340px]">
-                Install at least one AI agent from{' '}
-                <button
-                  type="button"
-                  data-section-opener
-                  onClick={onOpenManagement}
-                  className="rounded-[3px] text-link hover:underline focus:outline-none
-                    focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]"
-                >
-                  Service Providers
-                </button>{' '}
-                to start a new chat.
-              </p>
+              <>
+                <div className="text-ide-medium mb-2 mx-4">No AI agents installed</div>
+                <p className="mb-6 mx-4 text-foreground-secondary">Install at least one agent through the plugin to start a chat.</p>
+                <Button variant="primary" data-section-opener onClick={onOpenManagement}>Install Agents</Button>
+              </>
             )}
           </div>
         </div>

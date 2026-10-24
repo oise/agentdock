@@ -4,6 +4,7 @@ import {
   AudioTranscriptionResultPayload,
   BridgeOperationResultPayload,
   ChatAttachment,
+  ConfigLinks,
   ContinueConversationPayload,
   ConversationTranscriptSavedPayload,
   FileChangeOperation,
@@ -33,9 +34,11 @@ import {
   ConversationTranscriptSavedEvent,
   EVENT_NAMES,
   FileChangeStatsEvent,
+  FilesResultEvent,
   GlobalSettingsEvent,
   HistoryDeleteResultEvent,
   HistoryListEvent,
+  HistorySearchResultEvent,
   McpServersEvent,
   McpStatusEvent,
   CustomAcpConfigsEvent,
@@ -45,6 +48,7 @@ import {
   PromptLibraryEvent,
   SessionIdEvent,
   SessionConfigOptionsEvent,
+  SpeechResultEvent,
   StatusEvent,
   SystemInstructionsEvent,
   ToolCallBridgeEvent,
@@ -52,9 +56,7 @@ import {
   onBridgeEvent,
 } from './bridgeEvents';
 
-let saveTranscriptCounter = 0;
-let fileChangeStatsCounter = 0;
-let bridgeOperationCounter = 0;
+let bridgeRequestCounter = 0;
 let latestGlobalSettings: GlobalSettingsPayload | undefined;
 const availableCommandsByAdapter = new Map<string, AvailableCommand[]>();
 const pendingRpcMethodsById = new Map<string | number, string>();
@@ -63,53 +65,65 @@ const BRIDGE_REQUEST_TIMEOUT_MS = 120_000;
 const BRIDGE_OPERATION_TIMEOUT_MS = 10_000;
 const CANCEL_PROMPT_OPERATION_TIMEOUT_MS = 15_000;
 
-function nextSaveTranscriptRequestId(): string {
-  saveTranscriptCounter += 1;
-  return `transcript-${saveTranscriptCounter}-${Date.now()}`;
+function nextBridgeRequestId(prefix: string): string {
+  bridgeRequestCounter += 1;
+  return `${prefix}-${bridgeRequestCounter}-${Date.now()}`;
 }
 
-function nextFileChangeStatsRequestId(): string {
-  fileChangeStatsCounter += 1;
-  return `file-change-stats-${fileChangeStatsCounter}-${Date.now()}`;
-}
-
-function nextBridgeOperationRequestId(operation: string): string {
-  bridgeOperationCounter += 1;
-  return `${operation}-${bridgeOperationCounter}-${Date.now()}`;
-}
-
-function awaitBridgeOperation(
-  operation: BridgeOperationResultPayload['operation'],
-  invoke: (requestId: string) => void,
-  timeoutMs = BRIDGE_OPERATION_TIMEOUT_MS,
-): Promise<void> {
+/** Invokes a bridge function and resolves with the backend response carrying the same request ID. */
+function awaitBridgeResponse<P extends { requestId: string }>(
+  subscribe: (callback: (e: CustomEvent<{ payload: P }>) => void) => () => void,
+  requestId: string,
+  invoke: () => void,
+  options: {
+    timeoutMs: number;
+    timeoutMessage: string;
+    /** Returns the rejection message for a failed response. */
+    failure?: (payload: P) => string | undefined;
+    onTimeout?: () => void;
+  },
+): Promise<P> {
   return new Promise((resolve, reject) => {
-    const requestId = nextBridgeOperationRequestId(operation);
     let cleanup = () => {};
     const timeout = window.setTimeout(() => {
+      options.onTimeout?.();
       cleanup();
-      reject(new Error(`Bridge request '${operation}' was not acknowledged. Connection to the agent may be broken.`));
-    }, timeoutMs);
+      reject(new Error(options.timeoutMessage));
+    }, options.timeoutMs);
 
-    cleanup = ACPBridge.onBridgeOperationResult((e) => {
+    cleanup = subscribe((e) => {
       const payload = e.detail.payload;
       if (payload.requestId !== requestId) return;
       window.clearTimeout(timeout);
       cleanup();
-      if (payload.ok) {
-        resolve();
+      const error = options.failure?.(payload);
+      if (error === undefined) {
+        resolve(payload);
         return;
       }
-      reject(new Error(payload.error || `Bridge request '${operation}' failed.`));
+      reject(new Error(error));
     });
 
     try {
-      invoke(requestId);
+      invoke();
     } catch (error) {
       window.clearTimeout(timeout);
       cleanup();
       reject(error instanceof Error ? error : new Error(String(error)));
     }
+  });
+}
+
+async function awaitBridgeOperation(
+  operation: BridgeOperationResultPayload['operation'],
+  invoke: (requestId: string) => void,
+  timeoutMs = BRIDGE_OPERATION_TIMEOUT_MS,
+): Promise<void> {
+  const requestId = nextBridgeRequestId(operation);
+  await awaitBridgeResponse(ACPBridge.onBridgeOperationResult, requestId, () => invoke(requestId), {
+    timeoutMs,
+    timeoutMessage: `Bridge request '${operation}' was not acknowledged. Connection to the agent may be broken.`,
+    failure: (payload) => (payload.ok ? undefined : payload.error || `Bridge request '${operation}' failed.`),
   });
 }
 
@@ -248,8 +262,6 @@ export const ACPBridge = {
       } else if (payload.category === 'INTERNAL') {
         if (isDev) console.log('[ACP INTERNAL]', payload.json);
       }
-
-      window.dispatchEvent(new CustomEvent(EVENT_NAMES.LOG, { detail: payload }));
     };
 
     window.__onHistoryList = (list) => {
@@ -258,6 +270,10 @@ export const ACPBridge = {
 
     window.__onHistoryDeleteResult = (result) => {
       window.dispatchEvent(new CustomEvent(EVENT_NAMES.HISTORY_DELETE_RESULT, { detail: { result } }));
+    };
+
+    window.__onHistorySearchResult = (result) => {
+      window.dispatchEvent(new CustomEvent(EVENT_NAMES.HISTORY_SEARCH_RESULT, { detail: { result } }));
     };
 
     window.__onUndoResult = (chatId, result) => {
@@ -320,6 +336,10 @@ export const ACPBridge = {
       window.dispatchEvent(new CustomEvent(EVENT_NAMES.AUDIO_RECORDING_STATE, { detail: { payload } }));
     };
 
+    window.__onSpeechResult = (payload) => {
+      window.dispatchEvent(new CustomEvent(EVENT_NAMES.SPEECH_RESULT, { detail: { payload } }));
+    };
+
     window.__onGlobalSettings = (payload) => {
       latestGlobalSettings = payload;
       window.dispatchEvent(new CustomEvent(EVENT_NAMES.GLOBAL_SETTINGS, { detail: { payload } }));
@@ -339,14 +359,8 @@ export const ACPBridge = {
       window.dispatchEvent(new CustomEvent('acp-theme-changed'));
     };
 
-    window.__onFilesResult = (filesJson) => {
-      let files = [];
-      try {
-        files = typeof filesJson === "string" ? JSON.parse(filesJson) : filesJson;
-      } catch (e) {
-        console.warn('[bridge] Failed to parse files result', e);
-      }
-      window.dispatchEvent(new CustomEvent("acp-files-result", { detail: { files } }));
+    window.__onFilesResult = (payload) => {
+      window.dispatchEvent(new CustomEvent(EVENT_NAMES.FILES_RESULT, { detail: { payload } }));
     };
 
     if (window.__notifyReady) window.__notifyReady();
@@ -382,8 +396,8 @@ export const ACPBridge = {
     window.__requestAdapters?.(adapterIdToRefresh);
   },
 
-  rememberAgentConfigOption: (adapterId: string, configId: string, value: string) => {
-    window.__rememberAgentConfigOption?.(adapterId, configId, value);
+  rememberAgentConfigOptions: (adapterId: string, configValues: Record<string, string>, links?: ConfigLinks) => {
+    window.__rememberAgentConfigOptions?.(adapterId, configValues, links);
   },
 
   startAgent: (conversationId: string, adapterId?: string, configValues?: Record<string, string>) => {
@@ -427,17 +441,9 @@ export const ACPBridge = {
     toolCallRawInputCache.clearChat(conversationId);
   },
 
-  recoverRuntime: (reason?: string) => {
-    if (typeof window.__recoverRuntime !== 'function') {
-      return Promise.reject(new Error('Runtime recovery bridge is not available.'));
-    }
-    return awaitBridgeOperation('recover_runtime', (requestId) => {
-      window.__recoverRuntime?.(reason, requestId);
-    });
-  },
-
-  fetchAdapterUsage: (adapterId: string, force?: boolean) => {
-    window.__fetchAdapterUsage?.(adapterId, force);
+  /** `view`: the user opened a view showing the data, so a recently cached value is enough. */
+  fetchAdapterUsage: (adapterId: string, view?: boolean) => {
+    window.__fetchAdapterUsage?.(adapterId, view);
   },
 
   cancelAgentInstall: (adapterId: string) => {
@@ -445,8 +451,6 @@ export const ACPBridge = {
   },
 
   onUsageData: (callback: (e: CustomEvent<{ adapterId: string; json: string }>) => void) => onBridgeEvent(EVENT_NAMES.USAGE_DATA, callback),
-
-  onLog: (callback: (e: CustomEvent) => void) => onBridgeEvent(EVENT_NAMES.LOG, callback),
 
   requestHistoryList: (projectPath?: string) => {
     window.__requestHistoryList?.(projectPath);
@@ -472,14 +476,27 @@ export const ACPBridge = {
     window.__deleteHistoryConversations?.({ projectPath, conversationIds });
   },
 
-  /** Sets the user's title and/or the pinned flag of a conversation in the history index. */
-  updateHistoryConversation: (
+  /** Sets the user's title, the pinned flag and/or the group (empty: ungrouped) of conversations in the history index. */
+  updateHistoryConversations: (
     projectPath: string,
-    conversationId: string,
-    changes: { newTitle?: string; pinned?: boolean }
+    conversationIds: string[],
+    changes: { newTitle?: string; pinned?: boolean; archived?: boolean; group?: string }
   ) => {
-    window.__updateHistoryConversation?.({ projectPath, conversationId, ...changes });
+    window.__updateHistoryConversations?.({ projectPath, conversationIds, ...changes });
   },
+
+  /** Moves the group's conversations to `newGroup`; an empty one ungroups them. */
+  renameHistoryGroup: (projectPath: string, group: string, newGroup: string) => {
+    window.__renameHistoryGroup?.({ projectPath, group, newGroup });
+  },
+
+  /** Answered by `onHistorySearchResult` with the conversations having a word that starts with the query. */
+  searchHistoryConversations: (projectPath: string, conversationIds: string[], query: string) => {
+    window.__searchHistoryConversations?.({ projectPath, conversationIds, query });
+  },
+
+  onHistorySearchResult: (callback: (e: CustomEvent<HistorySearchResultEvent>) => void) =>
+    onBridgeEvent(EVENT_NAMES.HISTORY_SEARCH_RESULT, callback),
 
   updateSessionMetadata: (payload: SessionMetadataUpdatePayload) => {
     window.__updateSessionMetadata?.(payload);
@@ -490,38 +507,20 @@ export const ACPBridge = {
   },
 
   saveConversationTranscript: (conversationId: string, text: string): Promise<ConversationTranscriptSavedPayload> => {
-    return new Promise((resolve, reject) => {
-      if (typeof window.__saveConversationTranscript !== 'function') {
-        reject(new Error('Transcript persistence bridge is not available.'));
-        return;
-      }
-
-      const requestId = nextSaveTranscriptRequestId();
-      let cleanup = () => {};
-      const timeout = window.setTimeout(() => {
-        cleanup();
-        reject(new Error('Transcript persistence timed out.'));
-      }, BRIDGE_REQUEST_TIMEOUT_MS);
-      cleanup = ACPBridge.onConversationTranscriptSaved((e) => {
-        const payload = e.detail.payload;
-        if (payload.requestId !== requestId) return;
-        window.clearTimeout(timeout);
-        cleanup();
-        if (payload.success && payload.filePath) {
-          resolve(payload);
-          return;
-        }
-        reject(new Error(payload.error || 'Failed to persist transcript.'));
-      });
-
-      try {
-        window.__saveConversationTranscript(JSON.stringify({ requestId, conversationId, text }));
-      } catch (error) {
-        window.clearTimeout(timeout);
-        cleanup();
-        reject(error instanceof Error ? error : new Error(String(error)));
-      }
-    });
+    if (typeof window.__saveConversationTranscript !== 'function') {
+      return Promise.reject(new Error('Transcript persistence bridge is not available.'));
+    }
+    const requestId = nextBridgeRequestId('transcript');
+    return awaitBridgeResponse(
+      ACPBridge.onConversationTranscriptSaved,
+      requestId,
+      () => window.__saveConversationTranscript?.(JSON.stringify({ requestId, conversationId, text })),
+      {
+        timeoutMs: BRIDGE_REQUEST_TIMEOUT_MS,
+        timeoutMessage: 'Transcript persistence timed out.',
+        failure: (payload) => (payload.success && payload.filePath ? undefined : payload.error || 'Failed to persist transcript.'),
+      },
+    );
   },
 
   openAgentCli: (adapterId: string) => {
@@ -542,34 +541,16 @@ export const ACPBridge = {
     operations: FileChangeOperation[];
     allowDeleted: boolean;
   }[]): Promise<FileChangeStatsResultPayload> => {
-    return new Promise((resolve, reject) => {
-      if (typeof window.__computeFileChangeStats !== 'function') {
-        reject(new Error('File change stats bridge is not available.'));
-        return;
-      }
-
-      const requestId = nextFileChangeStatsRequestId();
-      let cleanup = () => {};
-      const timeout = window.setTimeout(() => {
-        cleanup();
-        reject(new Error('File change stats request timed out.'));
-      }, BRIDGE_REQUEST_TIMEOUT_MS);
-      cleanup = ACPBridge.onFileChangeStats((e) => {
-        const payload = e.detail.payload;
-        if (payload.requestId !== requestId) return;
-        window.clearTimeout(timeout);
-        cleanup();
-        resolve(payload);
-      });
-
-      try {
-        window.__computeFileChangeStats(JSON.stringify({ requestId, files }));
-      } catch (error) {
-        window.clearTimeout(timeout);
-        cleanup();
-        reject(error instanceof Error ? error : new Error(String(error)));
-      }
-    });
+    if (typeof window.__computeFileChangeStats !== 'function') {
+      return Promise.reject(new Error('File change stats bridge is not available.'));
+    }
+    const requestId = nextBridgeRequestId('file-change-stats');
+    return awaitBridgeResponse(
+      ACPBridge.onFileChangeStats,
+      requestId,
+      () => window.__computeFileChangeStats?.(JSON.stringify({ requestId, files })),
+      { timeoutMs: BRIDGE_REQUEST_TIMEOUT_MS, timeoutMessage: 'File change stats request timed out.' },
+    );
   },
 
   onToolCall: (callback: (e: CustomEvent<ToolCallBridgeEvent>) => void) => onBridgeEvent(EVENT_NAMES.TOOL_CALL, callback),
@@ -584,15 +565,14 @@ export const ACPBridge = {
 
   onConversationReplayLoaded: (callback: (e: CustomEvent<ConversationReplayLoadedEvent>) => void) => onBridgeEvent(EVENT_NAMES.CONVERSATION_REPLAY_LOADED, callback),
 
-  searchFiles: (query: string) => {
-    window.__searchFiles?.(query);
+  /** Starts a file search and returns its request ID, which the result carries. */
+  searchFiles: (query: string): string => {
+    const requestId = nextBridgeRequestId('file-search');
+    window.__searchFiles?.(JSON.stringify({ requestId, query }));
+    return requestId;
   },
 
-  onFilesResult: (callback: (e: CustomEvent<{ files: { path: string, name: string }[] }>) => void) => {
-    const fn = (e: Event) => callback(e as CustomEvent);
-    window.addEventListener('acp-files-result', fn);
-    return () => window.removeEventListener('acp-files-result', fn);
-  },
+  onFilesResult: (callback: (e: CustomEvent<FilesResultEvent>) => void) => onBridgeEvent(EVENT_NAMES.FILES_RESULT, callback),
 
   requestFileIcon: (path: string): Promise<string | null> => {
     const cached = fileIconCache.get(path);
@@ -709,6 +689,10 @@ export const ACPBridge = {
     window.__installAudioTranscriptionFeature?.(JSON.stringify(settings));
   },
 
+  cancelAudioTranscriptionFeatureInstall: (settings: AudioTranscriptionSettings) => {
+    window.__cancelAudioTranscriptionFeatureInstall?.(JSON.stringify(settings));
+  },
+
   uninstallAudioTranscriptionFeature: (settings: AudioTranscriptionSettings) => {
     window.__uninstallAudioTranscriptionFeature?.(JSON.stringify(settings));
   },
@@ -722,42 +706,23 @@ export const ACPBridge = {
   },
 
   stopAudioRecording: (requestId: string, ownerId: string): Promise<AudioTranscriptionResultPayload> => {
-    return new Promise((resolve, reject) => {
-      if (typeof window.__stopAudioRecording !== 'function') {
-        reject(new Error('Audio recording bridge is not available.'));
-        return;
-      }
-
-      const timeout = setTimeout(() => {
-        ACPBridge.cancelAudioTranscription(requestId);
-        ACPBridge.cancelAudioRecording(ownerId);
-        cleanup();
-        reject(new Error('Audio transcription timed out.'));
-      }, 30_000);
-      const cleanup = ACPBridge.onAudioTranscriptionResult((e) => {
-        const payload = e.detail.payload;
-        if (payload.requestId !== requestId) return;
-        clearTimeout(timeout);
-        cleanup();
-        if (payload.cancelled) {
-          resolve(payload);
-          return;
-        }
-        if (payload.success) {
-          resolve(payload);
-        } else {
-          reject(new Error(payload.error || 'Audio transcription failed'));
-        }
-      });
-
-      try {
-        window.__stopAudioRecording(JSON.stringify({ requestId, ownerId }));
-      } catch (error) {
-        clearTimeout(timeout);
-        cleanup();
-        reject(error instanceof Error ? error : new Error(String(error)));
-      }
-    });
+    if (typeof window.__stopAudioRecording !== 'function') {
+      return Promise.reject(new Error('Audio recording bridge is not available.'));
+    }
+    return awaitBridgeResponse(
+      ACPBridge.onAudioTranscriptionResult,
+      requestId,
+      () => window.__stopAudioRecording?.(JSON.stringify({ requestId, ownerId })),
+      {
+        timeoutMs: 30_000,
+        timeoutMessage: 'Audio transcription timed out.',
+        failure: (payload) => (payload.cancelled || payload.success ? undefined : payload.error || 'Audio transcription failed'),
+        onTimeout: () => {
+          ACPBridge.cancelAudioTranscription(requestId);
+          ACPBridge.cancelAudioRecording(ownerId);
+        },
+      },
+    );
   },
 
   cancelAudioTranscription: (requestId: string) => {
@@ -769,6 +734,16 @@ export const ACPBridge = {
   },
 
   onAudioRecordingState: (callback: (e: CustomEvent<AudioRecordingStateEvent>) => void) => onBridgeEvent(EVENT_NAMES.AUDIO_RECORDING_STATE, callback),
+
+  startSpeech: (requestId: string, chunks: string[]) => {
+    window.__startSpeech?.(JSON.stringify({ requestId, chunks }));
+  },
+
+  stopSpeech: (requestId: string) => {
+    window.__stopSpeech?.(requestId);
+  },
+
+  onSpeechResult: (callback: (e: CustomEvent<SpeechResultEvent>) => void) => onBridgeEvent(EVENT_NAMES.SPEECH_RESULT, callback),
 
   loadGlobalSettings: () => {
     window.__loadGlobalSettings?.();

@@ -1,9 +1,9 @@
 import React from 'react';
 import { ToolCallEntry } from '../../../types/chat';
 import { safeParseJson } from '../../../utils/toolCallUtils';
-import { chatFocusClassName } from '../shared/focusStyles';
-import { ToolActivityStatus } from './ToolActivityStatus';
 import { FileIcon } from '../shared/FileIcon';
+import { ExpandableActivity } from './ExpandableActivity';
+import { InlineButton } from './InlineButton';
 
 interface Props {
   entry: ToolCallEntry;
@@ -24,15 +24,10 @@ export const ReadActivity: React.FC<Props> = ({ entry, onOpenFile, isActivePromp
   const filePath = location?.path ?? rawInput?.filePath ?? rawInput?.path;
   const fileName = getFileName(filePath);
 
-  const cleanTitle = entry.title?.replace(/^"(.*)"$/, '$1') || entry.title;
+  const icon = <span className="flex-shrink-0"><FileIcon filePath={filePath} className="h-[13px] w-[13px] flex-shrink-0" /></span>;
   if (!filePath || !fileName) {
-    return (
-      <div className="flex items-center gap-1.5 py-0.5 min-w-0 w-full">
-        <span className=" flex-shrink-0"><FileIcon className="h-[13px] w-[13px] flex-shrink-0" /></span>
-        <span className="text-foreground truncate min-w-0 flex-1 block">{cleanTitle || entry.kind}</span>
-        <ToolActivityStatus status={entry.status} isActivePrompt={isActivePrompt} />
-      </div>
-    );
+    const cleanTitle = entry.title?.replace(/^"(.*)"$/, '$1') || entry.title;
+    return <ExpandableActivity icon={icon} label={cleanTitle || entry.kind} status={entry.status} isActivePrompt={isActivePrompt} />;
   }
 
   const limit = rawInput?.limit;
@@ -61,16 +56,9 @@ export const ReadActivity: React.FC<Props> = ({ entry, onOpenFile, isActivePromp
     : null;
 
   return (
-    <div className="flex items-center gap-1.5 w-fit max-w-full min-w-0 pr-2">
-      <div className="flex-shrink-0 transition-opacity">
-        <FileIcon filePath={filePath} className="h-[13px] w-[13px] flex-shrink-0" />
-      </div>
-      <span className="text-foreground-secondary truncate min-w-0 flex-1">
-        Read <button onClick={() => onOpenFile(filePath, startLine || undefined)}
-          className={`hover:underline ${chatFocusClassName}`}
-        >{fileName}{lineRange}</button>{pattern ? ` | Pattern: ${pattern}` : ''}
-      </span>
-      <ToolActivityStatus status={entry.status} isActivePrompt={isActivePrompt} />
-    </div>
+    <ExpandableActivity icon={icon} status={entry.status} isActivePrompt={isActivePrompt}
+      label={<>Read <InlineButton onClick={() => onOpenFile(filePath, startLine || undefined)} className="hover:underline">
+        {fileName}{lineRange}</InlineButton>{pattern ? ` | Pattern: ${pattern}` : ''}</>}
+    />
   );
 };

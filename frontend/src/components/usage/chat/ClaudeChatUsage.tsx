@@ -40,7 +40,7 @@ export function ClaudeChatUsage() {
   if (!hasData) return null;
 
   return (
-    <UsageIcon adapterId="claude-code" percent={displayPct}>
+    <UsageIcon percent={displayPct}>
       <ClaudeUsage stacked />
     </UsageIcon>
   );

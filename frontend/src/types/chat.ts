@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 export interface ToolCallDiffEntry {
   type: 'diff';
   path: string;
@@ -155,6 +157,8 @@ export interface AgentOption {
   availableReasoningEfforts?: ReasoningEffortOption[];
   configOptions?: ConfigOption[];
   configOptionsByModel?: Record<string, ConfigOption[]>;
+  modelByMode?: Record<string, string>;
+  effortByModel?: Record<string, string>;
   downloaded?: boolean;
   downloadedKnown?: boolean;
   downloadPath?: string;
@@ -188,6 +192,8 @@ export interface AgentOption {
   custom?: boolean;
 }
 
+export type ConfigLinks = Pick<AgentOption, 'modelByMode' | 'effortByModel'>;
+
 export function isAgentRunnable(agent: AgentOption): boolean {
   return agent.downloaded === true;
 }
@@ -206,21 +212,23 @@ export interface DropdownOption {
   label: string;
   description?: string;
   className?: string;
-  icon?: string | React.ReactNode;
+  icon?: string | ReactNode;
   iconPath?: string;
   subOptions?: DropdownOption[];
 }
 
+export type AttentionLevel = 'warning' | 'processing' | 'unread' | '';
+
 export interface TabUiFlags {
   unread: boolean;
-  atBottom: boolean;
   canMarkRead: boolean;
   warning: boolean;
   processing: boolean;
   queued: boolean;
 }
 
-export type SectionType = 'management' | 'design' | 'history' | 'mcp' | 'custom-acp' | 'system-instructions' | 'prompt-library' | 'settings';
+export type SectionType = 'management' | 'design' | 'history' | 'archive' | 'mcp' | 'custom-acp' | 'system-instructions' | 'prompt-library' | SettingsSectionType;
+export type SettingsSectionType = 'general' | 'appearance' | 'shortcuts';
 
 export interface ChatTab {
   id: string;
@@ -253,6 +261,12 @@ export interface HistoryDeleteResultPayload {
   failures: HistoryDeleteFailure[];
 }
 
+export interface HistorySearchResultPayload {
+  query: string;
+  /** Keyed by the conversation id; only the conversations with a match. */
+  snippets: Record<string, string>;
+}
+
 export interface HistorySessionMeta {
   sessionId: string;
   adapterName: string;
@@ -270,6 +284,8 @@ export interface HistorySessionMeta {
   updatedAt: number;
   deletable?: boolean;
   pinned?: boolean;
+  archived?: boolean;
+  group?: string;
 }
 
 export interface ContentChunk {
@@ -397,6 +413,11 @@ export interface FileChangeStatsResultPayload {
   files: FileChangeStatsPayload[];
 }
 
+export interface FileSearchResultPayload {
+  requestId: string;
+  files: { path: string; name: string }[];
+}
+
 export interface ProcessedFileState {
   filePath: string;
   toolCallIds: string[];
@@ -467,7 +488,7 @@ export interface ConversationTranscriptSavedPayload {
 export interface BridgeOperationResultPayload {
   requestId: string;
   chatId: string;
-  operation: 'start_agent' | 'send_prompt' | 'cancel_prompt' | 'recover_runtime';
+  operation: 'start_agent' | 'send_prompt' | 'cancel_prompt';
   ok: boolean;
   error?: string;
 }
@@ -507,12 +528,38 @@ export interface AudioTranscriptionSettings {
   providers: Record<string, AudioTranscriptionProviderSettings>;
 }
 
+export interface AudioOutputProviderSettings {
+  apiKey: string;
+  voice: string;
+}
+
+export interface AudioOutputSettings {
+  provider: string;
+  providers: Record<string, AudioOutputProviderSettings>;
+}
+
+export interface SpeechResultPayload {
+  requestId: string;
+  error?: string | null;
+}
+
 export interface GitCommitGenerationSettings {
   enabled: boolean;
   adapterId: string;
   modelId: string;
   reasoningEffortId: string;
   instructions: string;
+}
+
+export interface ShortcutSettings {
+  search: string;
+  newChat: string;
+  closeChat: string;
+  history: string;
+  manage: string;
+  focusInput: string;
+  cancelPrompt: string;
+  tabNumbers: boolean;
 }
 
 export interface GlobalSettings {
@@ -522,12 +569,18 @@ export interface GlobalSettings {
   userMessageBackgroundStyle: 'default' | 'blue-highlight' | 'blue' | 'background-secondary' | 'accent' | 'custom';
   userMessageCustomColor: string;
   audioTranscription: AudioTranscriptionSettings;
+  audioOutput: AudioOutputSettings;
   gitCommitGeneration: GitCommitGenerationSettings;
+  systemInstructionsEnabled: boolean;
   quotaWidgetEnabled: boolean;
   openInEditor: boolean;
   promptNavigationHoverOnly: boolean;
+  userMessageDetailsHoverOnly: boolean;
   sidebarEnabled: boolean;
   sidebarPosition: 'left' | 'right';
+  historyGroupsExpanded: boolean;
+  rememberModelAndEffort: boolean;
+  shortcuts: ShortcutSettings;
 }
 
 export interface GlobalSettingsPayload {
@@ -552,7 +605,11 @@ declare global {
       configValues?: Record<string, string>
     ) => void;
     __requestAdapters?: (adapterIdToRefresh?: string) => void;
-    __rememberAgentConfigOption?: (adapterId: string, configId: string, value: string) => void;
+    __rememberAgentConfigOptions?: (
+      adapterId: string,
+      configValues: Record<string, string>,
+      links?: ConfigLinks
+    ) => void;
     __notifyReady?: () => void;
     __respondPermission?: (requestId: string, decision: string) => void;
     __cancelPrompt?: (conversationId: string, requestId?: string) => void;
@@ -564,18 +621,21 @@ declare global {
     __requestHistoryList?: (projectPath?: string) => void;
     __syncHistoryList?: (projectPath?: string) => void;
     __deleteHistoryConversations?: (payload: { projectPath: string; conversationIds: string[] }) => void;
-    __updateHistoryConversation?: (payload: {
+    __updateHistoryConversations?: (payload: {
       projectPath: string;
-      conversationId: string;
+      conversationIds: string[];
       newTitle?: string;
       pinned?: boolean;
+      archived?: boolean;
+      group?: string;
     }) => void;
+    __renameHistoryGroup?: (payload: { projectPath: string; group: string; newGroup: string }) => void;
+    __searchHistoryConversations?: (payload: { projectPath: string; conversationIds: string[]; query: string }) => void;
     __loadHistoryConversation?: (conversationId: string, projectPath: string, historyConversationId: string) => void;
-    __recoverRuntime?: (reason?: string, requestId?: string) => void;
     __loginAgent?: (adapterId: string, methodId: string) => void;
     __logoutAgent?: (adapterId: string) => void;
     __cancelAgentAuth?: (adapterId: string) => void;
-    __fetchAdapterUsage?: (adapterId: string, force?: boolean) => void;
+    __fetchAdapterUsage?: (adapterId: string, view?: boolean) => void;
     __openAgentCli?: (adapterId: string) => void;
     __openHistoryConversationCli?: (payload: { projectPath: string; conversationId: string }) => void;
     __undoFile?: (payload: string) => void;
@@ -592,6 +652,12 @@ declare global {
     __continueConversationWithSession?: (payload: ContinueConversationPayload) => void;
     __saveConversationTranscript?: (payload: string) => void;
     __requestHostRepaint?: (reason?: string) => void;
+    /** Answered with an `agent-dock-ui-visibility` event telling whether the UI is on screen. */
+    __readUiVisibility?: () => void;
+    /** Answered with an `agent-dock-ui-zoom` event carrying the current UI zoom. */
+    __readUiZoom?: () => void;
+    /** Mirrors the open chats' dot on the plugin icon: `warning`, `unread`, or empty for none. */
+    __setAttentionBadge?: (level: AttentionLevel) => void;
 
     // Callbacks (Backend -> Frontend)
     __onAcpLog?: (payload: AcpLogEntryPayload) => void;
@@ -606,6 +672,7 @@ declare global {
     __onPermissionRequest?: (request: PermissionRequest) => void;
     __onHistoryList?: (list: HistorySessionMeta[]) => void;
     __onHistoryDeleteResult?: (result: HistoryDeleteResultPayload) => void;
+    __onHistorySearchResult?: (result: HistorySearchResultPayload) => void;
     __onConversationReplayLoaded?: (payload: ConversationReplayLoadedPayload) => void;
     __onAttachmentsAdded?: (chatId: string, files: ChatAttachment[]) => void;
     __onConversationTranscriptSaved?: (payload: ConversationTranscriptSavedPayload) => void;
@@ -620,8 +687,8 @@ declare global {
     __onMcpStatus?: (update: unknown) => void;
     __onCustomAcpConfigs?: (configs: unknown) => void;
     __onCustomAcpStatus?: (update: import('./customAcp').CustomAcpStatusUpdate) => void;
-    __onFilesResult?: (filesJson: unknown) => void;
-    __searchFiles?: (query: string) => void;
+    __onFilesResult?: (payload: FileSearchResultPayload) => void;
+    __searchFiles?: (payload: string) => void;
     __requestFileIcon?: (path: string) => void;
     __onFileIconResult?: (result: { path: string; icon: string }) => void;
     __readLocalImage?: (path: string) => void;
@@ -643,6 +710,7 @@ declare global {
     __saveSystemInstructions?: (json: string) => void;
     __loadAudioTranscriptionFeature?: (payload?: string) => void;
     __installAudioTranscriptionFeature?: (payload?: string) => void;
+    __cancelAudioTranscriptionFeatureInstall?: (payload?: string) => void;
     __uninstallAudioTranscriptionFeature?: (payload?: string) => void;
     __onAudioTranscriptionFeature?: (state: AudioTranscriptionFeatureState) => void;
     __onAudioTranscriptionResult?: (payload: AudioTranscriptionResultPayload) => void;
@@ -651,10 +719,15 @@ declare global {
     __cancelAudioTranscription?: (payload: string) => void;
     __cancelAudioRecording?: (ownerId: string) => void;
     __onAudioRecordingState?: (payload: AudioRecordingStatePayload) => void;
+    __startSpeech?: (payload: string) => void;
+    __stopSpeech?: (requestId: string) => void;
+    __onSpeechResult?: (payload: SpeechResultPayload) => void;
     __loadGlobalSettings?: () => void;
     __saveGlobalSettings?: (payload: string) => void;
     __onGlobalSettings?: (payload: GlobalSettingsPayload) => void;
     __onAdapterDeleted?: (adapterId: string) => void;
     __settingsBridgeReady?: boolean;
+    // Injected into the HTML by AssetLoader.kt.
+    __pluginVersion?: string;
   }
 }

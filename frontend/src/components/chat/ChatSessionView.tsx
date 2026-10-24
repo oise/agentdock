@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useChatSession, UseChatSessionOptions } from '../../hooks/useChatSession';
 import { useFileChanges } from '../../hooks/useFileChanges';
+import { isShortcut, useKeyDown } from '../../hooks/useShortcuts';
 import { FileChangeSummary, Message, UndoFileResultPayload } from '../../types/chat';
 import { acquireJcefLivePromptRepaint } from '../../utils/jcefHostRepaint';
 import {
@@ -26,7 +27,6 @@ interface ChatSessionProps extends UseChatSessionOptions {
   isActive?: boolean;
   promptNavigationHoverOnly: boolean;
   onAssistantActivity?: () => void;
-  onAtBottomChange?: (isAtBottom: boolean) => void;
   onCanMarkReadChange?: (canMarkRead: boolean) => void;
   onPermissionRequestChange?: (hasPendingPermission: boolean) => void;
   onProcessingChange?: (isProcessing: boolean) => void;
@@ -110,7 +110,6 @@ export default function ChatSessionView({
   promptNavigationHoverOnly,
   onUserMessageSent,
   onAssistantActivity,
-  onAtBottomChange,
   onCanMarkReadChange,
   onPermissionRequestChange,
   onProcessingChange,
@@ -237,7 +236,6 @@ export default function ChatSessionView({
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const {
-    handleAtBottomChange,
     handleCanMarkReadChange,
   } = useChatSessionNotifications({
     messages,
@@ -248,7 +246,6 @@ export default function ChatSessionView({
     acpSessionId,
     adapterName: selectedAgentId,
     onAssistantActivity,
-    onAtBottomChange,
     onCanMarkReadChange,
     onPermissionRequestChange,
     onProcessingChange,
@@ -259,6 +256,12 @@ export default function ChatSessionView({
     if (!isActive || isHistoryReplaying || status !== 'prompting') return;
     return acquireJcefLivePromptRepaint();
   }, [isActive, isHistoryReplaying, status]);
+
+  useKeyDown((event) => {
+    if (!isSending || !isShortcut(event, 'cancelPrompt')) return false;
+    handleStop();
+    return true;
+  }, isActive);
 
   const handleAgentChange = useAgentHandoffRequest({
     conversationId,
@@ -317,7 +320,6 @@ export default function ChatSessionView({
             messages={messages} 
             promptNavigationHoverOnly={promptNavigationHoverOnly}
             onImageClick={setPreviewImage} 
-            onAtBottomChange={handleAtBottomChange}
             onCanMarkReadChange={handleCanMarkReadChange}
             isSending={isSending}
             status={status}
@@ -327,6 +329,7 @@ export default function ChatSessionView({
             isHistoryReplaying={isHistoryReplaying}
             onForkFromMessage={handleForkFromMessage}
             scrollToBottomOnInitialMessages={Boolean(initialMessages?.length) && !historySession}
+            isActive={isActive}
             footer={<>
         <FileChangesPanel
           hasPluginEdits={hasPluginEdits}
@@ -384,9 +387,6 @@ export default function ChatSessionView({
             queueError={queueError}
             onStop={handleStop}
             isSending={isSending}
-            promptQueueEnabled
-            usageSessionKey={acpSessionId || undefined}
-            status={status}
 
             agentOptions={agentOptions}
             selectedAgentId={selectedAgentId}

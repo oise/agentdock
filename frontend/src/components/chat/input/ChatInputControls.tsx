@@ -1,10 +1,12 @@
-import { ReactNode, RefObject } from 'react';
+import { ReactNode, RefObject, useEffect, useState } from 'react';
 import {
   AlarmClockOff,
   CornerDownLeft,
   Clock,
   Ellipsis,
   Keyboard as KeyboardIcon,
+  Link2,
+  Link2Off,
   ListPlus,
   Plus,
   SendHorizontal,
@@ -21,6 +23,7 @@ import { ContextUsageIndicator } from '../shared/ContextUsageIndicator';
 import { Tooltip } from '../shared/Tooltip';
 import { AdapterUsageLifecycleProvider } from '../../../hooks/useAdapterUsage';
 import { findReasoningEffortOption } from '../../../utils/configOptions';
+import { ACPBridge } from '../../../utils/bridge';
 
 interface ChatInputControlsProps {
   containerRef: RefObject<HTMLDivElement>;
@@ -39,8 +42,7 @@ interface ChatInputControlsProps {
   approvalMode: ApprovalMode;
   isSending: boolean;
   hasSelectedAgent: boolean;
-  status: string;
-  usageSessionKey?: string;
+  isActive: boolean;
   contextTokensUsed?: number;
   contextWindowSize?: number;
   inputValue: string;
@@ -56,7 +58,6 @@ interface ChatInputControlsProps {
   onApprovalModeChange: (mode: ApprovalMode) => void;
   onSend: () => void;
   onStop: () => void;
-  promptQueueEnabled?: boolean;
   scheduleEnabled?: boolean;
   onScheduleModeChange?: (enabled: boolean) => void;
   hasAttachments?: boolean;
@@ -79,8 +80,7 @@ export function ChatInputControls({
   approvalMode,
   isSending,
   hasSelectedAgent,
-  status,
-  usageSessionKey,
+  isActive,
   contextTokensUsed,
   contextWindowSize,
   inputValue,
@@ -96,12 +96,17 @@ export function ChatInputControls({
   onApprovalModeChange,
   onSend,
   onStop,
-  promptQueueEnabled = false,
   scheduleEnabled = false,
   onScheduleModeChange,
   hasAttachments = false,
 }: ChatInputControlsProps) {
   const hasInput = !!inputValue.trim() || hasAttachments;
+  const [rememberModelAndEffort, setRememberModelAndEffort] = useState(
+    () => ACPBridge.getGlobalSettingsSnapshot()?.settings?.rememberModelAndEffort ?? false
+  );
+  useEffect(() => ACPBridge.onGlobalSettings((e) => {
+    setRememberModelAndEffort(e.detail?.payload?.settings?.rememberModelAndEffort ?? false);
+  }), []);
   const fastModeOption = additionalConfigOptions.find((option) => {
     if ((option.id !== 'fast' && option.id !== 'fast-mode') || option.type !== 'select' || option.options.length !== 2) return false;
     const values = option.options.map((value) => value.value);
@@ -225,6 +230,7 @@ export function ChatInputControls({
             'schedule-send': scheduleEnabled ? 'on' : 'off',
             'send-mode': sendMode,
             approvals: approvalMode,
+            'remember-model-and-effort': rememberModelAndEffort ? 'on' : 'off',
             ...Object.fromEntries(additionalConfigOptions.map((option) => [option.id, option.currentValue])),
           }}
           options={[
@@ -260,6 +266,19 @@ export function ChatInputControls({
                   description: 'Automatically approve tool requests when a normal approve option is available',
                   icon: <ShieldCheck className="w-4 h-4" />,
                 },
+              ],
+            },
+            {
+              id: 'remember-model-and-effort',
+              label: 'Remember',
+              subOptions: [
+                {
+                  id: 'on',
+                  label: 'Model & effort',
+                  description: "Auto-selects the mode's last model and the model's last effort",
+                  icon: <Link2 className="w-4 h-4" />,
+                },
+                { id: 'off', label: 'Off', icon: <Link2Off className="w-4 h-4" /> },
               ],
             },
             ...additionalConfigOptions.filter((option) => hasSelectedAgent || !narrowOnlyOptions.includes(option)).map((option) => {
@@ -301,6 +320,10 @@ export function ChatInputControls({
               localStorage.setItem('chat-send-mode', subId);
             } else if (parentId === 'approvals') {
               onApprovalModeChange(subId as ApprovalMode);
+            } else if (parentId === 'remember-model-and-effort') {
+              const settings = ACPBridge.getGlobalSettingsSnapshot()?.settings;
+              setRememberModelAndEffort(subId === 'on');
+              if (settings) ACPBridge.saveGlobalSettings({ ...settings, rememberModelAndEffort: subId === 'on' });
             } else {
               onConfigOptionChange(parentId, subId);
             }
@@ -311,7 +334,7 @@ export function ChatInputControls({
 
       <div className="ml-auto flex shrink-0 items-stretch">
         {selectedAgentId && (
-          <AdapterUsageLifecycleProvider value={{ mode: 'chat', enabled: true, isSending, sessionKey: status === 'ready' ? usageSessionKey : undefined }}>
+          <AdapterUsageLifecycleProvider value={{ mode: 'chat', enabled: isActive, isSending }}>
             <ChatUsageIndicator agentId={selectedAgentId} modelId={selectedModelId} />
           </AdapterUsageLifecycleProvider>
         )}
@@ -322,7 +345,7 @@ export function ChatInputControls({
 
         {isSending ? (
           <>
-          {promptQueueEnabled && hasInput && (
+          {hasInput && (
             <Tooltip variant="minimal" content="Add to queue" className="h-full">
               <button key="queue-button" type="button" onClick={onSend} aria-label="Add to queue"
                 className={`flex items-center h-full px-1.5 rounded appearance-none border-0 bg-background-secondary outline-none
@@ -344,7 +367,7 @@ export function ChatInputControls({
                   focus-visible:shadow-[0_0_0_1px_var(--ide-Button-default-focusColor)]"
             >
               <div className="flex items-center">
-                <Square size={16} aria-hidden="true" />
+                <Square size={15} className="relative -top-px" aria-hidden="true" />
                 <span className="invisible w-0" aria-hidden="true">&nbsp;</span>
               </div>
             </button>
@@ -360,7 +383,7 @@ export function ChatInputControls({
                 ${hasInput ? 'text-foreground-secondary' : 'text-[var(--ide-Label-disabledForeground)]'}`}
             >
               <div className="flex items-center">
-                <SendHorizontal width={16} height={18} className="block" strokeWidth={2} />
+                <SendHorizontal size={15} className="block" strokeWidth={2} />
                 <span className="invisible w-0" aria-hidden="true">&nbsp;</span>
               </div>
             </button>

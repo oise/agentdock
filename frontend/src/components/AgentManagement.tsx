@@ -315,7 +315,7 @@ export function AgentManagementView({
                         {isStatusUnknown ? (<LoadingSpinner className="w-3 h-3" />) : (
                           <span className={`${statusClass} font-semibold`}>{statusLabel}</span>
                         )}
-                        <Tooltip variant="minimal" content="Refresh status" className="flex relative top-[-1px]">
+                        <Tooltip variant="minimal" content="Refresh status" className="flex">
                           <button
                             onClick={() => ACPBridge.requestAdapters(agent.id)}
                             disabled={agent.refreshing || isProcessing}
@@ -323,7 +323,7 @@ export function AgentManagementView({
                               ${linkButtonFocusClassName}`}
                             aria-label={`Refresh ${agent.name} status`}
                           >
-                            <RefreshCw className={`h-3 w-3 ${agent.refreshing ? 'animate-spin' : ''}`} />
+                            <RefreshCw className={`h-3.5 w-3.5 ${agent.refreshing ? 'animate-spin' : ''}`} />
                           </button>
                         </Tooltip>
                         {isStarting && initializationDetail && (
@@ -539,17 +539,17 @@ export function AgentManagementView({
 
       <ConfirmationModal
         isOpen={confirmDeleteId !== null}
-        title="Uninstall Service Provider"
-        message={`Do you want to uninstall ${agents.find(a => a.id === confirmDeleteId)?.name || 'this service provider'}?`}
+        title="Uninstall Agent"
+        message={`Do you want to uninstall ${agents.find(a => a.id === confirmDeleteId)?.name || 'this agent'}?`}
         onConfirm={performDelete}
         onCancel={() => setConfirmDeleteId(null)}
       />
       <ConfirmationModal
         isOpen={confirmUpdateId !== null}
-        title="Update Service Provider"
-        message={`Do you want to update ${agents.find(a => a.id === confirmUpdateId)?.name || 'this service provider'} to the latest version?${
+        title="Update Agent"
+        message={`Do you want to update ${agents.find(a => a.id === confirmUpdateId)?.name || 'this agent'} to the latest version?${
           confirmUpdateId && hasOpenConversationsForAdapter(confirmUpdateId)
-            ? '\n\nOpen conversations using this service provider will be closed, and active prompts will be cancelled.' : ''
+            ? '\n\nOpen conversations using this agent will be closed, and active prompts will be cancelled.' : ''
         }`}
         onConfirm={performUpdate}
         onCancel={() => setConfirmUpdateId(null)}

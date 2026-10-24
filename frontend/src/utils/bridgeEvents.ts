@@ -10,11 +10,14 @@ import {
   ConversationReplayLoadedPayload,
   ConversationTranscriptSavedPayload,
   FileChangeStatsResultPayload,
+  FileSearchResultPayload,
   GlobalSettingsPayload,
   HistoryDeleteResultPayload,
+  HistorySearchResultPayload,
   HistorySessionMeta,
   PermissionRequest,
   SessionConfigOptionsPayload,
+  SpeechResultPayload,
   ToolCallEvent,
   UndoResultPayload,
 } from '../types/chat';
@@ -33,6 +36,7 @@ export interface PermissionRequestEvent { request: PermissionRequest; }
 export interface AvailableCommandsEvent { adapterId: string; commands: AvailableCommand[]; }
 export interface HistoryListEvent { list: HistorySessionMeta[]; }
 export interface HistoryDeleteResultEvent { result: HistoryDeleteResultPayload; }
+export interface HistorySearchResultEvent { result: HistorySearchResultPayload; }
 export interface UndoResultEvent { chatId: string; result: UndoResultPayload; }
 export interface ChangesStateEvent { chatId: string; state: ChangesState; }
 export interface ToolCallBridgeEvent { chatId: string; payload: ToolCallEvent; }
@@ -40,6 +44,7 @@ export interface ConversationTranscriptSavedEvent { payload: ConversationTranscr
 export interface BridgeOperationResultEvent { payload: BridgeOperationResultPayload; }
 export interface ConversationReplayLoadedEvent { payload: ConversationReplayLoadedPayload; }
 export interface FileChangeStatsEvent { payload: FileChangeStatsResultPayload; }
+export interface FilesResultEvent { payload: FileSearchResultPayload; }
 export interface McpServersEvent { servers: McpServerConfig[]; }
 export interface McpStatusEvent { update: McpStatusUpdate; }
 export interface CustomAcpConfigsEvent { configs: CustomAcpConfig[]; }
@@ -49,6 +54,7 @@ export interface SystemInstructionsEvent { instructions: SystemInstruction[]; }
 export interface AudioTranscriptionFeatureEvent { state: AudioTranscriptionFeatureState; }
 export interface AudioTranscriptionResultEvent { payload: AudioTranscriptionResultPayload; }
 export interface AudioRecordingStateEvent { payload: AudioRecordingStatePayload; }
+export interface SpeechResultEvent { payload: SpeechResultPayload; }
 export interface GlobalSettingsEvent { payload: GlobalSettingsPayload; }
 export interface AdapterDeletedEvent { adapterId: string; }
 
@@ -70,14 +76,15 @@ export const EVENT_NAMES = {
   AVAILABLE_COMMANDS: 'acp-available-commands',
   USAGE_DATA: 'acp-usage-data',
   PERMISSION: 'acp-permission',
-  LOG: 'acp-log',
   HISTORY_LIST: 'history-list',
   HISTORY_DELETE_RESULT: 'history-delete-result',
   HISTORY_DELETE_REQUEST: 'history-delete-request',
+  HISTORY_SEARCH_RESULT: 'history-search-result',
   UNDO_RESULT: 'acp-undo-result',
   CHANGES_STATE: 'acp-changes-state',
   BRIDGE_OPERATION_RESULT: 'acp-bridge-operation-result',
   FILE_CHANGE_STATS: 'acp-file-change-stats',
+  FILES_RESULT: 'acp-files-result',
   ATTACHMENTS_ADDED: 'acp-attachments-added',
   TOOL_CALL: 'acp-tool-call',
   TOOL_CALL_UPDATE: 'acp-tool-call-update',
@@ -86,6 +93,7 @@ export const EVENT_NAMES = {
   AUDIO_TRANSCRIPTION_FEATURE: 'audio-transcription-feature',
   AUDIO_TRANSCRIPTION_RESULT: 'audio-transcription-result',
   AUDIO_RECORDING_STATE: 'audio-recording-state',
+  SPEECH_RESULT: 'speech-result',
   GLOBAL_SETTINGS: 'global-settings',
 } as const;
 

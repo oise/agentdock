@@ -1,7 +1,5 @@
 package agentdock
 
-import com.intellij.ide.plugins.PluginManagerCore
-import com.intellij.openapi.extensions.PluginId
 import java.nio.charset.StandardCharsets
 
 /**
@@ -24,9 +22,16 @@ object AssetLoader {
             // Generate dynamic CSS from current theme
             val themeCss = IdeTheme.generateCssBlock()
 
-            val pluginVersion = PluginManagerCore.getPlugin(PluginId.getId("agentdock"))?.version.orEmpty()
+            val pluginVersion = BuildConfig.PLUGIN_VERSION
+
+            // The web browser tab's icon, in the colour the IDE shows the tool window icon in.
+            val icon = readBinaryResourceAsBase64(
+                resourceClass,
+                if (IdeTheme.isDarkTheme()) "/icons/agent_dock_toolwindow_dark.svg" else "/icons/agent_dock_toolwindow.svg",
+            )
 
             val injection = """
+                <link rel="icon" href="data:image/svg+xml;base64,$icon">
                 <style>
                 $cssContent
                 </style>
@@ -40,7 +45,7 @@ object AssetLoader {
             """.trimIndent()
 
             html.replace("</head>", "$injection</head>")
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             "<html><body style='background:#1e1e1e;color:white;padding:20px;'>" +
                 "<h2>Error loading UI</h2><p>Failed to load plugin UI.</p></body></html>"
         }
@@ -50,5 +55,11 @@ object AssetLoader {
         val stream = resourceClass.getResourceAsStream(path) 
             ?: throw Exception("Resource not found: $path.")
         return stream.use { it.readBytes().toString(StandardCharsets.UTF_8) }
+    }
+
+    private fun readBinaryResourceAsBase64(resourceClass: Class<*>, path: String): String {
+        val stream = resourceClass.getResourceAsStream(path)
+            ?: throw Exception("Binary resource not found: $path.")
+        return java.util.Base64.getEncoder().encodeToString(stream.use { it.readBytes() })
     }
 }

@@ -81,8 +81,19 @@ object AcpNpmInstaller {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            statusCallback?.invoke("Error: ${e.message ?: "npm install failed"}")
+            statusCallback?.invoke("Error: ${installErrorMessage(e)}")
             false
+        }
+    }
+
+    private fun installErrorMessage(e: Exception): String {
+        val message = e.message ?: return "npm install failed"
+        val isLaunchFailure = e is java.io.IOException && message.contains("Cannot run program", ignoreCase = true)
+        return if (isLaunchFailure) {
+            "$message\nThis usually means Node.js/npm was not found where the installer looks for it. " +
+                "Installing Node.js manually, or retrying so a managed Node.js can be installed, should fix it."
+        } else {
+            message
         }
     }
 

@@ -27,6 +27,13 @@ internal object AcpProcessEnvironment {
         )
     }
 
+    internal fun pathDirectories(): List<File> {
+        val env = baseEnvironment()
+        return env[pathKey(env)].orEmpty()
+            .split(File.pathSeparator)
+            .mapNotNull { entry -> entry.trim().takeIf { it.isNotEmpty() }?.let(::File) }
+    }
+
     fun withPrependedPathEntries(extraEntries: List<File>): Map<String, String> =
         withPrependedPathEntries(baseEnvironment(), extraEntries)
 

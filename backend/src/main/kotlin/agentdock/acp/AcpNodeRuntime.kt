@@ -70,13 +70,18 @@ internal object AcpNodeRuntimeResolver {
     private fun managedVersionRoot(): File? {
         val root = managedRoot()
         if (!root.isDirectory) return null
-        return root.listFiles()
-            ?.filter { it.isDirectory && it.name.startsWith("v") }
-            ?.maxWithOrNull(compareBy<File> { semanticVersionPart(it.name, 0) }
-                .thenBy { semanticVersionPart(it.name, 1) }
-                .thenBy { semanticVersionPart(it.name, 2) })
+        return latestVersionDir(root)
     }
 
+    private fun latestVersionDir(root: File): File? =
+        root.listFiles()
+            ?.filter { it.isDirectory && it.name.startsWith("v") }
+            ?.maxWithOrNull(versionDirComparator())
+
+    private fun versionDirComparator(): Comparator<File> =
+        compareBy<File> { semanticVersionPart(it.name, 0) }
+            .thenBy { semanticVersionPart(it.name, 1) }
+            .thenBy { semanticVersionPart(it.name, 2) }
     private fun semanticVersionPart(version: String, index: Int): Int =
         version.trimStart('v')
             .split('.')
@@ -87,24 +92,37 @@ internal object AcpNodeRuntimeResolver {
 
     private fun resolveSystem(): AcpNodeRuntime? {
 
-        val candidates = buildList {
-            add(emptyList())
-            nvmdBinDir()?.takeIf { it.isDirectory }?.let { add(listOf(it)) }
-        }
-
-        candidates.forEach { entries ->
-            val runtime = AcpNodeRuntime(
-                node = commandName("node"),
-                npm = commandName("npm"),
-                npx = commandName("npx"),
-                pathEntries = entries,
-                managed = false
-            )
+        candidates().forEach { searchDirs ->
+            val runtime = runtimeFromSearchDirs(searchDirs) ?: return@forEach
             if (smokeTest(runtime)) return runtime
         }
 
         return resolveFromNvmdWhich()
     }
+
+    private fun candidates(): List<List<File>> = buildList {
+        add(AcpProcessEnvironment.pathDirectories())
+        nvmdBinDir()?.takeIf { it.isDirectory }?.let { add(listOf(it)) }
+        nvmBinDir()?.takeIf { it.isDirectory }?.let { add(listOf(it)) }
+    }
+
+    internal fun runtimeFromSearchDirs(searchDirs: List<File>): AcpNodeRuntime? {
+        val npm = executableInDirs(searchDirs, "npm") ?: return null
+        val binDir = npm.parentFile
+        val searchWithBinDir = listOf(binDir) + searchDirs
+        val node = executableInDirs(searchWithBinDir, "node") ?: return null
+        val npx = executableInDirs(searchWithBinDir, "npx")
+        return AcpNodeRuntime(
+            node = node.absolutePath,
+            npm = npm.absolutePath,
+            npx = npx?.absolutePath ?: commandName("npx"),
+            pathEntries = listOf(binDir, node.parentFile).distinctBy { it.absolutePath.lowercase() },
+            managed = false
+        )
+    }
+
+    private fun executableInDirs(dirs: List<File>, base: String): File? =
+        dirs.firstNotNullOfOrNull { executableIn(it, base) }
 
     private fun resolveFromNvmdWhich(): AcpNodeRuntime? {
         val nvmdBin = nvmdBinDir()?.takeIf { it.isDirectory } ?: return null
@@ -113,7 +131,9 @@ internal object AcpNodeRuntimeResolver {
         val pathEntries = listOf(nvmdBin)
         val node = runWhich(nvmd.absolutePath, "node", pathEntries) ?: return null
         val npm = runWhich(nvmd.absolutePath, "npm", pathEntries) ?: return null
-        val npx = runWhich(nvmd.absolutePath, "npx", pathEntries) ?: commandName("npx")
+        val npx = runWhich(nvmd.absolutePath, "npx", pathEntries)
+            ?: executableIn(File(npm).parentFile, "npx")?.absolutePath
+            ?: commandName("npx")
         val runtime = AcpNodeRuntime(node, npm, npx, pathEntries, managed = false)
         return runtime.takeIf { smokeTest(it) }
     }
@@ -328,6 +348,24 @@ internal object AcpNodeRuntimeResolver {
     private fun nvmdBinDir(): File? {
         val home = System.getProperty("user.home")?.takeIf { it.isNotBlank() } ?: return null
         return File(File(home, ".nvmd"), "bin")
+    }
+
+    private fun nvmBinDir(): File? {
+        val home = System.getProperty("user.home")?.takeIf { it.isNotBlank() } ?: return null
+        return nvmBinDir(File(home, ".nvm"))
+    }
+
+    internal fun nvmBinDir(nvmRoot: File): File? {
+        if (!nvmRoot.isDirectory) return null
+        val versionsDir = File(nvmRoot, "versions/node")
+        if (!versionsDir.isDirectory) return null
+        val aliasDefault = runCatching { File(nvmRoot, "alias/default").readText() }.getOrNull()
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+        aliasDefault?.let { alias ->
+            File(versionsDir, alias).takeIf { it.isDirectory }?.let { return File(it, "bin") }
+        }
+        return latestVersionDir(versionsDir)?.let { File(it, "bin") }
     }
 
 }

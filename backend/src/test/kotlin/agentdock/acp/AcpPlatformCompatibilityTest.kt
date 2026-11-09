@@ -5,6 +5,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AcpPlatformCompatibilityTest {
@@ -140,7 +141,9 @@ class AcpPlatformCompatibilityTest {
 
         val command = buildAdapterLaunchCommand("/tmp/agent", adapter)
 
-        assertEquals("node", command.first())
+        val expectedNode = AcpNodeRuntimeResolver.resolveAvailable()?.node
+            ?: if (AcpExecutionMode.isWindowsHost()) "node.exe" else "node"
+        assertEquals(expectedNode, command.first())
     }
 
     @Test
@@ -240,6 +243,97 @@ class AcpPlatformCompatibilityTest {
         val env = AcpProcessEnvironment.enrichedEnvironment(source = mapOf("Path" to "base-path"))
 
         assertEquals("base-path", env["Path"])
+    }
+
+    @Test
+    fun `node runtime resolution returns absolute executables honoring directory order`() = withOsName("Linux") {
+        val firstBin = createTempDirectory("agentdock-node-first").toFile()
+        val laterBin = createTempDirectory("agentdock-node-later").toFile()
+        val firstNpm = File(firstBin, "npm").apply { writeText("#!/bin/sh") }
+        File(laterBin, "npm").apply { writeText("#!/bin/sh") }
+        val node = File(firstBin, "node").apply { writeText("#!/bin/sh") }
+        val npx = File(firstBin, "npx").apply { writeText("#!/bin/sh") }
+
+        val runtime = AcpNodeRuntimeResolver.runtimeFromSearchDirs(listOf(firstBin, laterBin))
+
+        assertEquals(firstNpm.absolutePath, runtime?.npm)
+        assertEquals(node.absolutePath, runtime?.node)
+        assertEquals(npx.absolutePath, runtime?.npx)
+        assertEquals(listOf(firstBin.absolutePath), runtime?.pathEntries?.map { it.absolutePath })
+    }
+
+    @Test
+    fun `node runtime resolution finds node and npx beside npm in its own directory`() = withOsName("Linux") {
+        val binDir = createTempDirectory("agentdock-node-bin").toFile()
+        val npm = File(binDir, "npm").apply { writeText("#!/bin/sh") }
+        val node = File(binDir, "node").apply { writeText("#!/bin/sh") }
+        val npx = File(binDir, "npx").apply { writeText("#!/bin/sh") }
+
+        val runtime = AcpNodeRuntimeResolver.runtimeFromSearchDirs(listOf(binDir))
+
+        assertEquals(npm.absolutePath, runtime?.npm)
+        assertEquals(node.absolutePath, runtime?.node)
+        assertEquals(npx.absolutePath, runtime?.npx)
+        assertEquals(listOf(binDir.absolutePath), runtime?.pathEntries?.map { it.absolutePath })
+    }
+
+    @Test
+    fun `node runtime resolution yields null when npm has no node sibling`() = withOsName("Linux") {
+        val binDir = createTempDirectory("agentdock-npm-only").toFile()
+        File(binDir, "npm").apply { writeText("#!/bin/sh") }
+
+        assertNull(AcpNodeRuntimeResolver.runtimeFromSearchDirs(listOf(binDir)))
+    }
+
+    @Test
+    fun `node runtime resolution falls back to a bare npx name when npx is missing`() = withOsName("Linux") {
+        val binDir = createTempDirectory("agentdock-no-npx").toFile()
+        File(binDir, "npm").apply { writeText("#!/bin/sh") }
+        File(binDir, "node").apply { writeText("#!/bin/sh") }
+
+        val runtime = AcpNodeRuntimeResolver.runtimeFromSearchDirs(listOf(binDir))
+
+        assertEquals("npx", runtime?.npx)
+    }
+
+    @Test
+    fun `nvm bin dir honors the default alias`() {
+        val nvmRoot = createTempDirectory("agentdock-nvm").toFile()
+        val defaultBin = File(nvmRoot, "versions/node/v20.1.0/bin").apply { mkdirs() }
+        File(nvmRoot, "versions/node/v26.13.0/bin").apply { mkdirs() }
+        File(nvmRoot, "alias/default").apply {
+            parentFile.mkdirs()
+            writeText("v20.1.0\n")
+        }
+
+        val binDir = AcpNodeRuntimeResolver.nvmBinDir(nvmRoot)
+
+        assertEquals(defaultBin.absolutePath, binDir?.absolutePath)
+    }
+
+    @Test
+    fun `nvm bin dir falls back to the highest installed version`() {
+        val nvmRoot = createTempDirectory("agentdock-nvm").toFile()
+        val latestBin = File(nvmRoot, "versions/node/v26.13.0/bin").apply { mkdirs() }
+        File(nvmRoot, "versions/node/v20.1.0/bin").apply { mkdirs() }
+
+        val binDir = AcpNodeRuntimeResolver.nvmBinDir(nvmRoot)
+
+        assertEquals(latestBin.absolutePath, binDir?.absolutePath)
+    }
+
+    @Test
+    fun `nvm bin dir ignores aliases that do not name an installed version`() {
+        val nvmRoot = createTempDirectory("agentdock-nvm").toFile()
+        val latestBin = File(nvmRoot, "versions/node/v26.13.0/bin").apply { mkdirs() }
+        File(nvmRoot, "alias/default").apply {
+            parentFile.mkdirs()
+            writeText("lts/iron\n")
+        }
+
+        val binDir = AcpNodeRuntimeResolver.nvmBinDir(nvmRoot)
+
+        assertEquals(latestBin.absolutePath, binDir?.absolutePath)
     }
 
     @Test

@@ -68,15 +68,19 @@ export function extractToolCallDiffEntries(
   }
 
   const rawInput = (json.rawInput && typeof json.rawInput === 'object' ? json.rawInput : fallbackRawInput) as Record<string, any> | undefined;
-  if (!rawInput || typeof rawInput.path !== 'string' || rawInput.path.length === 0 || rawInput.file_text === undefined) {
+  // MCP file tools use content (filesystem/create_file) or text
+  // (JetBrains/create_new_file), whereas native writes use file_text.
+  const path = rawInput?.path ?? rawInput?.pathInProject;
+  const text = rawInput?.file_text ?? rawInput?.content ?? rawInput?.text;
+  if (typeof path !== 'string' || path.length === 0 || typeof text !== 'string') {
     return [];
   }
 
   return [{
     type: 'diff',
-    path: rawInput.path,
+    path,
     oldText: null,
-    newText: typeof rawInput.file_text === 'string' ? rawInput.file_text : String(rawInput.file_text),
+    newText: text,
   }];
 }
 

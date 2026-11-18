@@ -9,35 +9,21 @@ import { SectionPopup } from './components/SectionPopup';
 import { getNavigationActions } from './components/tabbar/NavigationActions';
 import { useHistoryGroupNav } from './components/history/useHistoryGroupNav';
 import ConfirmationModal from './components/ConfirmationModal';
+import { StartupPlaceholder } from './components/StartupPlaceholder';
 import { useAppController } from './hooks/app/useAppController';
 import { useAppLayout } from './hooks/app/useAppLayout';
 import { useAppShortcuts } from './hooks/useShortcuts';
 import { useSidebarLayout } from './hooks/useSidebarLayout';
 import { ACPBridge } from './utils/bridge';
+import { migrateLocalStorageSettings } from './utils/migrateLocalStorageSettings';
 import type { GlobalSettings } from './types/chat';
 
 const SIDEBAR_ANIMATION_MS = 200;
-/** From this content width `app-wide:` widens side padding. */
 const WIDE_CONTENT_MIN_WIDTH_PX = 720;
 const SETTINGS_RETRY_MS = 2000;
 
-/** Earlier versions kept these two in localStorage, which a browser UI does not share with JCEF; they move to the settings once. */
-function migrateLocalStorageSettings(settings: GlobalSettings | undefined) {
-  const approvalMode = localStorage.getItem('chat-approval-mode');
-  const sendMode = localStorage.getItem('chat-send-mode');
-  if (!settings || (approvalMode === null && sendMode === null)) return;
-  localStorage.removeItem('chat-approval-mode');
-  localStorage.removeItem('chat-send-mode');
-  if (approvalMode !== 'auto' && sendMode !== 'ctrl-enter') return;
-  ACPBridge.saveGlobalSettings({
-    ...(approvalMode === 'auto' ? { approvalMode: 'auto' as const } : {}),
-    ...(sendMode === 'ctrl-enter' ? { sendMode: 'ctrl-enter' as const } : {}),
-  });
-}
-
 function App() {
   const { isWide, isIslandsTheme, viewportWidth } = useAppLayout();
-  /** Narrower windows leave no room for the section names in the section popup. */
   const compactSections = viewportWidth < 700;
   const [openInEditor, setOpenInEditor] = useState(
     () => ACPBridge.getGlobalSettingsSnapshot()?.settings?.openInEditor ?? true
@@ -267,7 +253,7 @@ function App() {
     }
   };
 
-  if (!settingsLoaded || !workspaceLoaded) return <div className="h-full bg-background" />;
+  if (!settingsLoaded || !workspaceLoaded) return <StartupPlaceholder />;
 
   return (
     <div

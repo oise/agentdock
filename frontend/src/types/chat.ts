@@ -289,6 +289,7 @@ export interface HistorySessionMeta {
   projectPath: string;
   title: string;
   filePath: string;
+  dataFilePath?: string;
   createdAt: number;
   updatedAt: number;
   deletable?: boolean;
@@ -525,7 +526,6 @@ export interface AudioTranscriptionFeatureState {
   installing: boolean;
   supported: boolean;
   installable: boolean;
-  detail?: string;
   installPath: string;
 }
 
@@ -698,8 +698,11 @@ declare global {
     __readUiZoom?: () => void;
     /** Answered with an `agent-dock-browser-address` event carrying the page's web server address, empty while it does not run. */
     __readBrowserAddress?: () => void;
-    /** Mirrors the open chats' dot on the plugin icon: `warning`, `unread`, or empty for none. */
-    __setAttentionBadge?: (level: AttentionLevel) => void;
+    /**
+     * Mirrors the open chats' state on the plugin icon: a dot for `warning` or `unread`, none for empty, and three
+     * dots while one is `processing`.
+     */
+    __setAttentionBadge?: (level: AttentionLevel, processing: boolean) => void;
 
     // Callbacks (Backend -> Frontend)
     __onAcpLog?: (payload: AcpLogEntryPayload) => void;
@@ -737,6 +740,8 @@ declare global {
     __onFileIconResult?: (result: { path: string; icon: string }) => void;
     __readLocalImage?: (path: string) => void;
     __onLocalImageResult?: (result: { path: string; dataUrl: string }) => void;
+    __readStoredImage?: (image: string) => void;
+    __onStoredImageResult?: (result: { image: string; data: string }) => void;
     __onThemeChanged?: () => void;
     __loadMcpServers?: () => void;
     __saveMcpServers?: (json: string) => void;

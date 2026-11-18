@@ -7,6 +7,31 @@ import java.nio.charset.StandardCharsets
  */
 object AssetLoader {
 
+    private var fontFaceCssCache: String? = null
+
+    fun generateFontFaceCss(resourceClass: Class<*>): String {
+        return fontFaceCssCache ?: run {
+            val regularFontBase64 = readBinaryResourceAsBase64(resourceClass, "/fonts/Inter-Regular.woff2")
+            val boldFontBase64 = readBinaryResourceAsBase64(resourceClass, "/fonts/Inter-Bold.woff2")
+            val css = """
+                @font-face {
+                    font-family: 'Inter';
+                    src: url(data:font/woff2;base64,$regularFontBase64) format('woff2');
+                    font-weight: 400;
+                    font-style: normal;
+                }
+                @font-face {
+                    font-family: 'Inter';
+                    src: url(data:font/woff2;base64,$boldFontBase64) format('woff2');
+                    font-weight: 700;
+                    font-style: normal;
+                }
+            """.trimIndent()
+            fontFaceCssCache = css
+            css
+        }
+    }
+
     fun loadAndInlineAssets(resourceClass: Class<*>): String {
         return try {
             val indexHtml = readResource(resourceClass, "/webview/index.html")
@@ -22,17 +47,20 @@ object AssetLoader {
             // Generate dynamic CSS from current theme
             val themeCss = IdeTheme.generateCssBlock()
 
+            val fontFaceCss = generateFontFaceCss(resourceClass)
+
             val pluginVersion = BuildConfig.PLUGIN_VERSION
 
-            // The web browser tab's icon, in the colour the IDE shows the tool window icon in.
-            val icon = readBinaryResourceAsBase64(
-                resourceClass,
-                if (IdeTheme.isDarkTheme()) "/icons/agent_dock_toolwindow_dark.svg" else "/icons/agent_dock_toolwindow.svg",
-            )
+            // The web browser tab's icon and the one it shows while a chat is processing, in the colour the IDE shows
+            // the tool window icon in.
+            val iconSuffix = if (IdeTheme.isDarkTheme()) "_dark.svg" else ".svg"
+            val icon = readBinaryResourceAsBase64(resourceClass, "/icons/agent_dock_toolwindow$iconSuffix")
+            val processingIcon = readBinaryResourceAsBase64(resourceClass, "/icons/agent_dock_toolwindow_processing$iconSuffix")
 
             val injection = """
-                <link rel="icon" href="data:image/svg+xml;base64,$icon">
+                <link rel="icon" href="data:image/svg+xml;base64,$icon" data-processing="data:image/svg+xml;base64,$processingIcon">
                 <style>
+                $fontFaceCss
                 $cssContent
                 </style>
                 <style id="ide-theme-style">
@@ -58,8 +86,9 @@ object AssetLoader {
     }
 
     private fun readBinaryResourceAsBase64(resourceClass: Class<*>, path: String): String {
-        val stream = resourceClass.getResourceAsStream(path)
+        val stream = resourceClass.getResourceAsStream(path) 
             ?: throw Exception("Binary resource not found: $path.")
-        return java.util.Base64.getEncoder().encodeToString(stream.use { it.readBytes() })
+        val bytes = stream.use { it.readBytes() }
+        return java.util.Base64.getEncoder().encodeToString(bytes)
     }
 }

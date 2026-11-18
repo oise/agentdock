@@ -8,6 +8,7 @@ import agentdock.acp.canListHistorySessions
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -349,16 +350,18 @@ internal object HistorySyncService {
         if (!conversationsDir.exists() || !conversationsDir.isDirectory) return
         val referencedIds = conversations.mapTo(hashSetOf()) { it.id }
         conversationsDir.listFiles()?.forEach { file ->
-            if (!file.isFile) return@forEach
             val name = file.name
             val conversationId = when {
+                file.isDirectory && name.endsWith(HistoryStorage.CONVERSATION_IMAGES_DIR_SUFFIX) ->
+                    name.removeSuffix(HistoryStorage.CONVERSATION_IMAGES_DIR_SUFFIX)
+                !file.isFile -> return@forEach
                 name.endsWith(".json") -> name.removeSuffix(".json")
                 name.endsWith(".transcript.txt") -> name.removeSuffix(".transcript.txt")
                 name.endsWith(".search.txt") -> name.removeSuffix(".search.txt")
                 else -> return@forEach
             }
             if (conversationId !in referencedIds) {
-                runCatching { file.delete() }
+                runCatching { file.deleteRecursively() }
             }
         }
     }
@@ -367,6 +370,9 @@ internal object HistorySyncService {
         projectPath: String,
         conversations: List<HistoryConversationIndexEntry>
     ): List<SessionMeta> {
+        // One listing instead of a file check per conversation.
+        val conversationsDir = HistoryStorage.projectConversationsDir(projectPath)
+        val conversationFileNames = conversationsDir.list().orEmpty().toHashSet()
         return conversations
             .filter { runCatching { HistoryStorage.requireSafeConversationId(it.id) }.isSuccess }
             .mapNotNull { conversation ->
@@ -388,6 +394,8 @@ internal object HistorySyncService {
                     projectPath = projectPath,
                     title = conversation.title.ifBlank { "Untitled" },
                     filePath = latestSession.sourceFilePath.orEmpty(),
+                    dataFilePath = "${conversation.id}.json".takeIf { it in conversationFileNames }
+                        ?.let { File(conversationsDir, it).path },
                     createdAt = latestSession.createdAt,
                     updatedAt = latestSession.updatedAt,
                     deletable = conversation.sessions.all { session ->

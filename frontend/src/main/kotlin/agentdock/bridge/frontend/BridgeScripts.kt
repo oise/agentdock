@@ -77,6 +77,7 @@ internal object BridgeScripts {
             window.__searchFiles = function(payload) { invoke('searchFiles', payload); };
             window.__requestFileIcon = function(path) { invoke('iconFile', JSON.stringify({ path: path })); };
             window.__readLocalImage = function(path) { invoke('readLocalImage', JSON.stringify({ path: path })); };
+            window.__readStoredImage = function(image) { invoke('readStoredImage', JSON.stringify({ image: image })); };
             window.__undoFile = function(payload) { invoke('undoFile', payload); };
             window.__undoAllFiles = function(payload) { invoke('undoAllFiles', payload); };
             window.__processFile = function(payload) { invoke('processFile', payload); };
@@ -131,7 +132,7 @@ internal object BridgeScripts {
             ${if (client == "browser") "" else "window.__requestHostRepaint = function(reason) { invoke('repaint', reason || ''); };"}
             window.__readUiVisibility = function() { invoke('readUiVisibility', ''); };
             ${if (client == "browser") "" else "window.__readUiZoom = function() { invoke('readUiZoom', ''); };"}
-            window.__setAttentionBadge = function(level) { invoke('setAttentionBadge', level || ''); };
+            window.__setAttentionBadge = function(level, processing) { invoke('setAttentionBadge', (level || '') + (processing ? ' processing' : '')); };
             window.__readBrowserAddress = function() { invoke('readBrowserAddress', ''); };
             window.__loadUiWorkspace = function() { invoke('loadUiWorkspace', ''); };
             window.__saveUiWorkspace = function(json) { invoke('saveUiWorkspace', json); };

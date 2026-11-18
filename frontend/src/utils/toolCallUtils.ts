@@ -68,15 +68,23 @@ export function extractToolCallDiffEntries(
   }
 
   const rawInput = (json.rawInput && typeof json.rawInput === 'object' ? json.rawInput : fallbackRawInput) as Record<string, any> | undefined;
-  if (!rawInput || typeof rawInput.path !== 'string' || rawInput.path.length === 0 || rawInput.file_text === undefined) {
+  // ACP adapters can wrap MCP tool arguments in a server/tool envelope.
+  const isIdeaCreate = rawInput?.tool === 'create_new_file';
+  const isFilesystemCreate = rawInput?.tool === 'create_file';
+  const args = isIdeaCreate || isFilesystemCreate ? rawInput?.arguments : rawInput;
+  const path = args?.path ?? args?.pathInProject;
+  const nativeText = args?.file_text;
+  const mcpText = args?.content ?? args?.text ?? (isIdeaCreate && args?.text === undefined ? '' : undefined);
+  const newText = nativeText !== undefined ? String(nativeText) : mcpText;
+  if (typeof path !== 'string' || path.length === 0 || typeof newText !== 'string') {
     return [];
   }
 
   return [{
     type: 'diff',
-    path: rawInput.path,
+    path,
     oldText: null,
-    newText: typeof rawInput.file_text === 'string' ? rawInput.file_text : String(rawInput.file_text),
+    newText,
   }];
 }
 
